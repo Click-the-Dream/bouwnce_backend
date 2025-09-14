@@ -7,7 +7,12 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16.5",
     "fastapi[standard]>=0.116.1",
+    "psycopg2-binary>=2.9.10",
     "pydantic-settings>=2.10.1",
+    "pymongo>=4.15.0",
+    "python-decouple>=3.8",
+    "redis>=6.4.0",
+    "sqlalchemy>=2.0.43",
 ]
 
 exclude= [
@@ -19,7 +24,8 @@ exclude= [
     ".env",
     "alembic.ini",
     "README.md",
-    ".env.sample"
+    ".env.sample",
+    "uv.lock"
 ]
 
 [dependency-groups]
@@ -73,10 +79,7 @@ exclude = '''
     | Alembic
     | README\.md
     | \.env\.sample
+    | uv\.lock
   )/
 )
 '''
-
-fixable = ["ALL"]
-
-unfixable = []

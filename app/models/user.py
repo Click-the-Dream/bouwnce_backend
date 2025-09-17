@@ -1,6 +1,15 @@
-from sqlalchemy import Column, String, Enum, Boolean
+import enum
+
+from sqlalchemy import Boolean, Column, Enum, String
 from sqlalchemy.orm import relationship
+
 from app.models import BaseModel
+
+
+class RoleEnum(enum.Enum):
+    USER = "user"
+    VENDER = "vendor"
+    ADMIN = "admin"
 
 
 class User(BaseModel):
@@ -12,13 +21,39 @@ class User(BaseModel):
     institution = Column(String, nullable=True)
     password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
-    role = Column(Enum("user", "admin", name="user_role_enum"), default="user")
-    
+    role = Column(Enum(RoleEnum, name="user_role_enum"), default="user")
+
     # One To One Relationship
-    buisiness_info = relationship("BusinessInfo", back_populates="user", cascade="all, delete-orphan", uselist=False)
-    contact_info = relationship("ContactInfo", back_populates="user", cascade="all, delete-orphan", uselist=False)
-    store_info = relationship("StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False)
-    payout = relationship("Payout", back_populates="user", cascade="all, delete-orphan", uselist=False)
-    shipment_info = relationship("ShipmentInfo", back_populates="user", cascade="all, delete-orphan", uselist=False)
-    store_info = relationship("StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False)
-    verification = relationship("Verification", back_populates="user", cascade="all, delete-orphan", uselist=False)
+    buisiness_info = relationship(
+        "BusinessInfo",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    contact_info = relationship(
+        "ContactInfo",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    store_info = relationship(
+        "StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+    payout = relationship(
+        "Payout", back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+    shipment_info = relationship(
+        "ShipmentInfo",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    store_info = relationship(
+        "StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+    verification = relationship(
+        "Verification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )

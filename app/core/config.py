@@ -1,6 +1,7 @@
 from decouple import config
 from pydantic import BaseModel
 
+
 class Config(BaseModel):
     # Common settings
     API_STR: str = config("API_STR", default="api/v1")
@@ -10,11 +11,7 @@ class Config(BaseModel):
     MONGODB_DATABASE_URL: str = config("MONGODB_DATABASE_URL")
     MONGODB_DB_NAME: str = config("MONGODB_DB_NAME")
 
-    REDIS_HOST: str = config("REDIS_HOST")
-    REDIS_PORT: int = config("REDIS_PORT")
-    REDIS_PASSWORD: str = config("REDIS_PASSWORD")
-    REDIS_DB: int = config("REDIS_DB")
-
+    REDIS_URL: str = config("REDIS_URL")
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")
 
@@ -25,6 +22,7 @@ class ProductionConfig(Config):
     SQLALCHEMY_MAX_OVERFLOW: int = config("SQLALCHEMY_MAX_OVERFLOW")
     SQLALCHEMY_FUTURE: bool = config("SQLALCHEMY_FUTURE")
     SQLALCHEMY_ECHO: bool = config("SQLALCHEMY_ECHO")
+
 
 class StagingConfig(Config):
     SQLALCHEMY_DATABASE_URL: str = config("SQLALCHEMY_DATABASE_STAG_URL")
@@ -44,7 +42,6 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_POOL_SIZE: int = config("SQLALCHEMY_POOL_SIZE")
     SQLALCHEMY_MAX_OVERFLOW: int = config("SQLALCHEMY_MAX_OVERFLOW")
     SQLALCHEMY_ECHO: bool = True
-
 
 
 # Environment map

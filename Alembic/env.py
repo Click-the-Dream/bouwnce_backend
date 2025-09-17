@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from Backend.app.db.postgres_db_conn import Base
+from app.db.postgres_db_conn import Base
 from app.core.config import config_options
 from app.models import *
 import asyncio
@@ -14,7 +14,7 @@ import asyncio
 # access to the values within the .ini file in use.
 
 env = os.getenv("FASTAPI_ENV", "development")
-
+print(f"Using environment: {env}")
 settings = config_options[env]
 config = context.config
 

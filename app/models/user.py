@@ -12,7 +12,7 @@ class User(BaseModel):
     institution = Column(String, nullable=True)
     password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
-    role = Column(Enum("user", "admin"), default="user")
+    role = Column(Enum("user", "admin", name="user_role_enum"), default="user")
     
     # One To One Relationship
     buisiness_info = relationship("BusinessInfo", back_populates="user", cascade="all, delete-orphan", uselist=False)

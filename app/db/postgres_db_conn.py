@@ -23,10 +23,10 @@ if DATABASE_URL is None:
 try:
     engine = create_async_engine(
         DATABASE_URL,
-        echo=settings.SQLALCHEMY_echo,
+        echo=settings.SQLALCHEMY_ECHO,
         future=settings.SQLALCHEMY_FUTURE,
-        pool_size=settings.SQLALCHEMY_POOL_SIZE,
-        max_overflow=settings.SQLALCHEMY_MAX_OVERFLOW,
+        pool_size=int(settings.SQLALCHEMY_POOL_SIZE),
+        max_overflow=int(settings.SQLALCHEMY_MAX_OVERFLOW),
     )
 except OperationalError as e:
     print("Error connecting to the database:", e)

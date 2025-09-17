@@ -1,6 +1,9 @@
-from sqlalchemy import Column, DateTime, UUID, Boolean
 from uuid import uuid4
+
+from sqlalchemy import UUID, Boolean, Column, DateTime
+
 from app.db.postgres_db_conn import Base
+
 
 class BaseModel(Base):
     __abstract__ = True

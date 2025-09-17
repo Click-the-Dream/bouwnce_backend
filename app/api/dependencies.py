@@ -1,5 +1,5 @@
 from app.db.mongo import mongo_session
-from Backend.app.db.postgres_db_conn import SessionLocal
+from app.db.postgres_db_conn import SessionLocal
 from app.db.redis import redis_client
 
 

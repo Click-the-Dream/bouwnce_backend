@@ -1,14 +1,15 @@
+import asyncio
 import os
 from logging.config import fileConfig
+
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from app.db.postgres_db_conn import Base
-from app.core.config import config_options
-from app.models import *
-import asyncio
 
+from app.core.config import config_options
+from app.db.postgres_db_conn import Base
+from app.models import *
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -17,7 +18,6 @@ env = os.getenv("FASTAPI_ENV", "development")
 print(f"Using environment: {env}")
 settings = config_options[env]
 config = context.config
-
 
 
 DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL
@@ -87,13 +87,15 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
+
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, 
-                      target_metadata=target_metadata,
-                      render_as_batch=True)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, render_as_batch=True
+    )
 
     with context.begin_transaction():
         context.run_migrations()
+
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode for async engine."""
@@ -110,6 +112,7 @@ async def run_async_migrations() -> None:
         print(f"Error occurred during migration: {e}")
     finally:
         await connectable.dispose()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

@@ -1,15 +1,12 @@
-import enum
+from datetime import UTC, datetime, timedelta
+from typing import Self
 
-from sqlalchemy import Boolean, Column, Enum, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, String, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 
+from app.core.security import genrate_verification_code
 from app.models import BaseModel
-
-
-class RoleEnum(enum.Enum):
-    USER = "user"
-    VENDER = "vendor"
-    ADMIN = "admin"
 
 
 class User(BaseModel):
@@ -19,9 +16,12 @@ class User(BaseModel):
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
     institution = Column(String, nullable=True)
-    password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
-    role = Column(Enum(RoleEnum, name="user_role_enum"), default="user")
+    role = Column(
+        Enum("user", "vendor", "admin", name="user_role_enum"), default="user"
+    )
+    otp = Column(String(6))
+    otp_time = Column(DateTime(timezone=True))
 
     # One To One Relationship
     buisiness_info = relationship(
@@ -57,3 +57,55 @@ class User(BaseModel):
         cascade="all, delete-orphan",
         uselist=False,
     )
+
+    def to_dict(self):
+        data_dict = super().to_dict()
+        if data_dict.get("otp_time", None):
+            data_dict["otp_time"] = data_dict["otp_time"].isoformat()
+
+        return data_dict
+
+    @classmethod
+    async def get_by_email(cls, email: str, db: AsyncSession) -> Self:
+
+        result = await db.execute(select(cls).where(cls.email == email))
+
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_username(cls, username: str, db: AsyncSession) -> Self:
+
+        result = await db.execute(select(cls).where(cls.username == username))
+
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_unique(
+        cls,
+        *,
+        db: AsyncSession,
+        email: str | None = None,
+        username: str | None = None,
+    ) -> Self:
+
+        if email and username:
+            query = select(cls).where(or_(cls.email == email, cls.username == username))
+        elif email:
+            query = select(cls).where(cls.email == email)
+        elif username:
+            query = select(cls).where(cls.username == username)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def generate_otp(self, db: AsyncSession) -> str:
+
+        otp = genrate_verification_code()
+
+        self.otp = otp
+        self.otp_time = datetime.now(UTC) + timedelta(minutes=30)
+
+        await db.flush()
+        await db.refresh(self)
+
+        return otp

@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+from fastapi import HTTPException
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -10,10 +11,15 @@ from app.core.config import settings
 pwd = CryptContext(schemes=["bcrypt"], deprecated=["auto"])
 
 
-def create_access_token(subject: str | Any, expires_delta: timedelta) -> str:
-    expiry_time = datetime.now(UTC) + expires_delta
+def create_access_token(
+    subject: str | Any, expires_delta: timedelta | None = None
+) -> str:
 
-    to_encode = {"exp": expiry_time, "sub": str(subject)}
+    to_encode = {"sub": str(subject)}
+    if expires_delta:
+        expiry_time = datetime.now(UTC) + expires_delta
+        to_encode["exp"] = expiry_time
+
     encoded_jwt = jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
@@ -26,8 +32,12 @@ def verify_token(token: str) -> str:
     try:
         subject = jwt.decode(token, settings.SECRET_KEY, algorithms=settings.ALGORITHM)
         return subject
-    except Exception as e:
-        raise e
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
 
 
 def hash_password(password: str) -> str:

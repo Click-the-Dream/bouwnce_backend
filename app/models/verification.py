@@ -22,7 +22,9 @@ class Verification(BaseModel):
     id_number = Column(String, nullable=False)
     picture = Column(String, nullable=True)
     status = Column(
-        Enum(StatusEnum, name="status_enum"), nullable=False, default="pending"
+        Enum("pending", "approved", "rejected", name="status_enum"),
+        nullable=False,
+        default="pending",
     )
 
     user = relationship("User", back_populates="verification")

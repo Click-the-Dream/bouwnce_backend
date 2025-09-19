@@ -1,12 +1,12 @@
+import smtplib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import emails
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
 from jinja2 import Template
 
 from app.core.config import settings
-from app.core.logging import logger
 
 
 @dataclass
@@ -15,39 +15,45 @@ class EmailData:
     subject: str
 
 
+conf = ConnectionConfig(
+    MAIL_USERNAME=settings.SMTP_USER,
+    MAIL_PASSWORD=settings.SMTP_PASSWORD,
+    MAIL_FROM=settings.EMAILS_FROM_EMAIL,
+    MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
+    MAIL_PORT=settings.SMTP_PORT,
+    MAIL_SERVER=settings.SMTP_HOST,
+    MAIL_SSL_TLS=False,
+    MAIL_STARTTLS=True,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True,
+)
+
+
 def render_email_templates(*, template_name: str, context: dict[str, Any]) -> str:
     template_str = (
-        Path(__file__).parent / "email_templates" / "build" / template_name
+        Path(__file__).parent.parent / "email_templates" / "build" / template_name
     ).read_text()
 
     html_content = Template(template_str).render(context)
     return html_content
 
 
-def send_email(*, email_to: str, subject: str = "", html_content: str = "") -> bool:
+async def send_email(
+    *, email_to: str, subject: str = "", html_content: str = ""
+) -> bool:
 
-    message = emails.Message(
-        subject=subject,
-        html=html_content,
-        mail_from=(settings.EMAILS_FROM_NAME, settings.EMAILS_FROM_EMAIL),
+    message = MessageSchema(
+        subject=subject, recipients=[email_to], body=html_content, subtype="html"
     )
-
-    smtp_options = {
-        "host": settings.SMTP_HOST,
-        "port": settings.SMTP_PORT,
-        "user": settings.SMTP_USER,
-        "password": settings.SMTP_PASSWORD,
-    }
-    if settings.SMTP_TLS:
-        smtp_options["tls"] = True
-    elif settings.SMTP_SSL:
-        smtp_options["ssl"] = True
-
+    fm = FastMail(conf)
     try:
-        message.send(to=email_to, smtp=smtp_options)
+        print("📧sending email to: ", email_to)
+        await fm.send_message(message)
+        print("✅email sent to: ", email_to)
         return True
-    except Exception as e:
-        logger.error("Failed sending email: ", e)
+    except smtplib.SMTPException as e:
+        print("❌email not sent to: ", email_to)
+        print("❌error: ", e)
         return False
 
 
@@ -68,7 +74,7 @@ def generate_login_verification_email(username: str, code: str) -> EmailData:
     subject = f"{project_name} - Verification code"
 
     html_content = render_email_templates(
-        template_name="login_verification_email",
+        template_name="login_verification_email.html",
         context={
             "user_name": username,
             "verification_code": code,

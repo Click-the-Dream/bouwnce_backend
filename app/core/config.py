@@ -47,13 +47,19 @@ class StagingConfig(Config):
 class DevelopmentConfig(Config):
     SQLALCHEMY_DATABASE_URL: str = config("SQLALCHEMY_DATABASE_DEV_URL")
     SQLALCHEMY_FUTURE: bool = config("SQLALCHEMY_FUTURE")
-    # REDIS_HOST: str = config("REDIS_DEV_HOST")
-    # REDIS_PORT: int = config("REDIS_DEV_PORT")
-    # REDIS_PASSWORD: str = config("REDIS_DEV_PASSWORD")
-    # REDIS_DB: int = config("REDIS_DEV_DB")
     SQLALCHEMY_POOL_SIZE: int = config("SQLALCHEMY_POOL_SIZE")
     SQLALCHEMY_MAX_OVERFLOW: int = config("SQLALCHEMY_MAX_OVERFLOW")
-    SQLALCHEMY_ECHO: bool = True
+    SQLALCHEMY_ECHO: bool = False
+
+
+environment = config("FASTAPI_ENV")
+
+if environment == "production":
+    settings = ProductionConfig()
+elif environment == "staging":
+    settings = StagingConfig()
+else:
+    settings = DevelopmentConfig()
 
 
 # Environment map

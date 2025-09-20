@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Self
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, func, select
+from sqlalchemy import Boolean, Column, DateTime, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,12 +57,12 @@ class BaseModel(Base):
         obj = result.scalar_one_or_none()
 
         if not obj:
-            raise Exception(f"{cls.__name__} not found")
+            raise ValueError(f"{cls.__name__} not found")
 
         obj.is_deleted = False
         obj.deleted_at = datetime.now(UTC)
-        await db.commit()
-        await db.refresh(obj)
+
+        await obj.save(db)
 
         return obj
 
@@ -73,10 +73,11 @@ class BaseModel(Base):
         obj = result.scalar_one_or_none()
 
         if not obj:
-            raise Exception(f"{cls.__name__} not found")
+            raise ValueError(f"{cls.__name__} not found")
 
         await db.delete(obj)
-        await db.commit()
+
+        await obj.save(db)
 
         return obj
 
@@ -92,6 +93,8 @@ class BaseModel(Base):
     @classmethod
     async def update_by_id(cls, id: str, data: dict, db: AsyncSession) -> Self:
         obj = cls.get_by_id(id, db)
+        if not obj:
+            raise ValueError(f"{cls.__name__} not found")
 
         exclude = ["id", "created_at"]
         for key, value in data.items():
@@ -109,26 +112,47 @@ class BaseModel(Base):
     ) -> list[Self]:
 
         query = select(cls)
+        or_condition = []
 
         for key, value in filter.items():
             if hasattr(cls, key):
                 column = getattr(cls, key)
-                if isinstance(column, str) and "%" in value:
-                    query = query.where(column.like(value))
+                if isinstance(value, str) and "%" in value:
+                    or_condition.append(column.ilike(value))
                 elif value is None:
-                    query = query.where(column.is_(None))
+                    or_condition.append(column.is_(None))
                 else:
-                    query = query.where(column == value)
+                    or_condition.append(column == value)
+
+        if or_condition:
+            print(*or_condition)
+            query = query.where(or_(*or_condition))
 
         offset = (page - 1) * page_size
 
-        count_query = query.with_only_columns(func.count())
+        count_query = query.with_only_columns(func.count()).order_by(None)
         query = query.offset(offset).limit(page_size)
 
         result = await db.execute(query)
         count_result = await db.execute(count_query)
 
-        objs = result.scalar().all()
-        count = count_result.scalar().all()
+        objs = result.scalars().all()
+        count = count_result.scalar()
 
         return {"data": objs, "total": count, "page": page, "page_size": page_size}
+
+    @classmethod
+    async def undelete_by_id(cls, id: str, db: AsyncSession) -> Self:
+
+        result = await db.execute(select(cls).where(cls.id == id))
+        obj = result.scalar_one_or_none()
+
+        if not obj:
+            raise ValueError(f"{cls.__name__} not found")
+
+        obj.is_deleted = False
+        obj.deleted_at = None
+
+        await obj.save(db)
+
+        return obj

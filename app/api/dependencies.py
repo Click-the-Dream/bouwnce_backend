@@ -49,6 +49,7 @@ async def get_current_user(
     token = auth.credentials
 
     is_blacklisted = redis_db.get(f"blacklist_{token}")
+
     if is_blacklisted:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -91,4 +92,22 @@ async def get_current_vendor(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The user doesn't have enough privileges",
+            headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+CurrentVendor = Annotated[User, Depends(get_current_vendor)]
+
+
+async def get_current_admin(
+    current_user: CurrentUser,
+) -> User | None:
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user doesn't have enough privileges",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+CurrentAdmin = Annotated[User, Depends(get_current_admin)]

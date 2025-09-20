@@ -20,7 +20,7 @@ class AuthService:
         user = await User.get_by_unique(
             db=db, email=user_data["email"], username=user_data["username"]
         )
-        if user:
+        if user or user.is_deleted:
             if user.email == user_data["email"]:
                 return response_builder(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -82,10 +82,7 @@ class AuthService:
                     message="Invalid or expired verification code",
                 )
 
-            user.otp = None
-            user.otp_time = None
-
-            await user.save(db)
+            await user.clear_otp(db)
 
             user_data = UserResponse(**user.to_dict())
             access_token = create_access_token(subject=user.id)

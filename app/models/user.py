@@ -109,3 +109,29 @@ class User(BaseModel):
         await db.refresh(self)
 
         return otp
+
+    async def clear_otp(self, db: AsyncSession) -> Self:
+
+        self.otp = None
+        self.otp_time = None
+
+        await self.save(db)
+
+    async def delete_me(self, db: AsyncSession) -> Self:
+
+        self.is_deleted = True
+        self.deleted_at = datetime.now(UTC)
+
+        await self.save(db)
+
+        return self
+
+    async def update_me(self, user_data: dict, db: AsyncSession) -> Self:
+
+        exclude = ["id", "created_at", "role"]
+        for key, value in user_data.items():
+            if hasattr(self, key) and key not in exclude:
+                setattr(self, key, value)
+
+        await self.save(db)
+        return self

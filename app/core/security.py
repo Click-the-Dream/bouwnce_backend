@@ -1,4 +1,5 @@
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -15,7 +16,8 @@ def create_access_token(
     subject: str | Any, expires_delta: timedelta | None = None
 ) -> str:
 
-    to_encode = {"sub": str(subject)}
+    now = datetime.now(UTC)
+    to_encode = {"sub": str(subject), "iat": now, "jti": str(uuid.uuid4())}
     if expires_delta:
         expiry_time = datetime.now(UTC) + expires_delta
         to_encode["exp"] = expiry_time

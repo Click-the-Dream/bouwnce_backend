@@ -37,3 +37,13 @@ class CodeVerification(BaseModel):
 
 class LoginUser(BaseModel):
     email: Annotated[EmailStr, Field(examples=["johndoe@example.com"])]
+
+
+class UpdateUser(BaseModel):
+    full_name: Annotated[str | None, Field(min_length=2, examples=["John Doe"])] = None
+    email: Annotated[EmailStr | None, Field(examples=["johndoe@example.com"])] = None
+    username: Annotated[str | None, Field(min_length=2, examples=["johnDoe"])] = None
+    institution: Annotated[
+        str | None, Field(min_length=2, examples=["Jonio University"])
+    ] = None
+    role: Annotated[RoleEnum | None, Field(description="Role of user")] = None

@@ -1,5 +1,6 @@
 from decouple import config
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+
 
 class Config(BaseModel):
     # Common settings
@@ -10,13 +11,21 @@ class Config(BaseModel):
     MONGODB_DATABASE_URL: str = config("MONGODB_DATABASE_URL")
     MONGODB_DB_NAME: str = config("MONGODB_DB_NAME")
 
-    REDIS_HOST: str = config("REDIS_HOST")
-    REDIS_PORT: int = config("REDIS_PORT")
-    REDIS_PASSWORD: str = config("REDIS_PASSWORD")
-    REDIS_DB: int = config("REDIS_DB")
-
+    REDIS_URL: str = config("REDIS_URL")
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")
+
+    ALGORITHM: str = config("ALGORITHM")
+
+    SMTP_TLS: bool = config("SMTP_TLS")
+    SMTP_SSL: bool = config("SMTP_SSL")
+    SMTP_PORT: int = config("SMTP_PORT")
+    SMTP_HOST: str | None = config("SMTP_HOST")
+    SMTP_USER: str | None = config("SMTP_USER")
+    SMTP_PASSWORD: str = config("SMTP_PASSWORD")
+    EMAILS_FROM_EMAIL: EmailStr = config("EMAILS_FROM_EMAIL")
+    EMAILS_FROM_NAME: str = config("EMAILS_FROM_NAME")
+    EmAIL_VERIFICATION_EXPIRE_MINUTES: int = config("EmAIL_VERIFICATION_EXPIRE_MINUTES")
 
 
 class ProductionConfig(Config):
@@ -25,6 +34,7 @@ class ProductionConfig(Config):
     SQLALCHEMY_MAX_OVERFLOW: int = config("SQLALCHEMY_MAX_OVERFLOW")
     SQLALCHEMY_FUTURE: bool = config("SQLALCHEMY_FUTURE")
     SQLALCHEMY_ECHO: bool = config("SQLALCHEMY_ECHO")
+
 
 class StagingConfig(Config):
     SQLALCHEMY_DATABASE_URL: str = config("SQLALCHEMY_DATABASE_STAG_URL")
@@ -37,14 +47,19 @@ class StagingConfig(Config):
 class DevelopmentConfig(Config):
     SQLALCHEMY_DATABASE_URL: str = config("SQLALCHEMY_DATABASE_DEV_URL")
     SQLALCHEMY_FUTURE: bool = config("SQLALCHEMY_FUTURE")
-    # REDIS_HOST: str = config("REDIS_DEV_HOST")
-    # REDIS_PORT: int = config("REDIS_DEV_PORT")
-    # REDIS_PASSWORD: str = config("REDIS_DEV_PASSWORD")
-    # REDIS_DB: int = config("REDIS_DEV_DB")
     SQLALCHEMY_POOL_SIZE: int = config("SQLALCHEMY_POOL_SIZE")
     SQLALCHEMY_MAX_OVERFLOW: int = config("SQLALCHEMY_MAX_OVERFLOW")
-    SQLALCHEMY_ECHO: bool = True
+    SQLALCHEMY_ECHO: bool = False
 
+
+environment = config("FASTAPI_ENV")
+
+if environment == "production":
+    settings = ProductionConfig()
+elif environment == "staging":
+    settings = StagingConfig()
+else:
+    settings = DevelopmentConfig()
 
 
 # Environment map

@@ -92,17 +92,17 @@ class BaseModel(Base):
 
     @classmethod
     async def update_by_id(cls, id: str, data: dict, db: AsyncSession) -> Self:
-        obj = cls.get_by_id(id, db)
+        obj = await cls.get_by_id(id, db)
         if not obj:
             raise ValueError(f"{cls.__name__} not found")
 
         exclude = ["id", "created_at"]
         for key, value in data.items():
             if hasattr(obj, key) and key not in exclude:
-                setattr(obj, value)
+                setattr(obj, key, value)
 
         await db.flush()
-        await db.refresh()
+        await db.refresh(obj)
 
         return obj
 
@@ -125,7 +125,6 @@ class BaseModel(Base):
                     or_condition.append(column == value)
 
         if or_condition:
-            print(*or_condition)
             query = query.where(or_(*or_condition))
 
         offset = (page - 1) * page_size

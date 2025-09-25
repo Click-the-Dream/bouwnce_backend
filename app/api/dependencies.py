@@ -7,7 +7,8 @@ from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_token
-from app.db.mongo import mongo_session
+
+# from app.db.mongo import mongo_session
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import redis_client
 from app.models.user import User
@@ -24,9 +25,9 @@ async def get_postgres_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-def get_mongo_db():
-    with mongo_session() as (database, session):
-        yield database, session
+# async def get_mongo_db():
+#     async with mongo_session() as (database, session):
+#         yield database, session
 
 
 def get_redis():
@@ -88,12 +89,14 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 async def get_current_vendor(
     current_user: CurrentUser,
 ) -> User | None:
+    print(current_user.role)
     if current_user.role != "vendor":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The user doesn't have enough privileges",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return current_user
 
 
 CurrentVendor = Annotated[User, Depends(get_current_vendor)]
@@ -108,6 +111,7 @@ async def get_current_admin(
             detail="The user doesn't have enough privileges",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return current_user
 
 
 CurrentAdmin = Annotated[User, Depends(get_current_admin)]

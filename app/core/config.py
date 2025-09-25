@@ -26,6 +26,9 @@ class Config(BaseModel):
     EMAILS_FROM_EMAIL: EmailStr = config("EMAILS_FROM_EMAIL")
     EMAILS_FROM_NAME: str = config("EMAILS_FROM_NAME")
     EmAIL_VERIFICATION_EXPIRE_MINUTES: int = config("EmAIL_VERIFICATION_EXPIRE_MINUTES")
+    CLOUDINARY_KEY: str = config("CLOUDINARY_KEY")
+    CLOUDINARY_SECRET: str = config("CLOUDINARY_SECRET")
+    CLOUDINARY_NAME: str = config("CLOUDINARY_NAME")
 
 
 class ProductionConfig(Config):

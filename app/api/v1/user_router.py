@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api.dependencies import CurrentAdmin, CurrentUser, dbSessionDep
 from app.schemas.user import UpdateUser, UserResponse
@@ -29,12 +29,14 @@ async def get_user_by_id(
 async def list_users(
     db: dbSessionDep,
     _: CurrentUser,
-    page: int = 1,
-    page_size: int = 10,
-    search: str | None = None,
+    page: int | None = Query(default=1, gt=0, description="The page number to fetch"),
+    per_page: int | None = Query(
+        default=10, gt=0, description="The number of products in a page"
+    ),
+    search: str | None = Query(default=None, description="Search query"),
 ) -> list[UserResponse]:
 
-    return await user_service.list_users(db, search, page, page_size)
+    return await user_service.list_users(db, search, page, per_page)
 
 
 @router.put("/me", summary="Update current user", response_model=UserResponse)

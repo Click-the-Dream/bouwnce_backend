@@ -1,9 +1,20 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.db.mongo import mongo_conn
+
+
+@asynccontextmanager
+async def fastapi_lifespan(app: FastAPI):
+    client = await mongo_conn()
+    yield
+    client.close()
+    print("Mongodb Client Closed successfully")
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -16,6 +27,7 @@ app = FastAPI(
     generate_unique_id_function=custom_generate_unique_id,
     version="1.0.0",
     description="APIs for the Bouwnce Backend",
+    lifespan=fastapi_lifespan,
 )
 
 app.add_middleware(

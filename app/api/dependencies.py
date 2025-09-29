@@ -86,8 +86,22 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+async def get_current_active_user(current_user: CurrentUser) -> User | None:
+
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return current_user
+
+
+CurrentActiveUser = Annotated[User, Depends(get_current_active_user)]
+
+
 async def get_current_vendor(
-    current_user: CurrentUser,
+    current_user: CurrentActiveUser,
 ) -> User | None:
     print(current_user.role)
     if current_user.role != "vendor":
@@ -103,7 +117,7 @@ CurrentVendor = Annotated[User, Depends(get_current_vendor)]
 
 
 async def get_current_admin(
-    current_user: CurrentUser,
+    current_user: CurrentActiveUser,
 ) -> User | None:
     if current_user.role != "admin":
         raise HTTPException(

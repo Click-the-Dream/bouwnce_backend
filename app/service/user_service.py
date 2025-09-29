@@ -96,6 +96,47 @@ class UserService:
                 message="Error occured when updating user data",
             )
 
+    async def deactivate_user(self, user: User, db: AsyncSession) -> UserResponse:
+        try:
+            user.is_active = False
+            await user.save()
+
+            user_response = UserResponse(**user.to_dict())
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="User account has be deactivated successfully",
+                data=user_response,
+            )
+        except Exception as e:
+            print("Error occured while deactivating user: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while deactivating user account",
+            )
+
+    async def activate_user(self, user: User, db: AsyncSession) -> UserResponse:
+        try:
+            user.is_active = True
+            await user.save()
+
+            user_response = UserResponse(**user.to_dict())
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="User account has been successfully activated",
+                data=user_response,
+            )
+        except Exception as e:
+            print("Error occured while activating user account: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while activating user account",
+            )
+
     async def delete_user_by_id(self, user_id: str, db: AsyncSession) -> UserResponse:
 
         try:

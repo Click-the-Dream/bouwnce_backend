@@ -3,6 +3,7 @@ from typing import Self
 from sqlalchemy import Column, ForeignKey, Integer, String, delete
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import relationship
 
 from app.models.basemodel import BaseModel
 
@@ -15,6 +16,10 @@ class Cart(BaseModel):
     )
     product_id = Column(String, nullable=False)
     quantity = Column(Integer, nullable=False)
+
+    user = relationship(
+        "User", back_populates="carts", cascade="all, delete-orphan", uselist=False
+    )
 
     @classmethod
     async def get_by_user_id(

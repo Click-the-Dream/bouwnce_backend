@@ -23,40 +23,22 @@ class User(BaseModel):
     otp = Column(String(6))
     otp_time = Column(DateTime(timezone=True))
 
-    # One To One Relationship
-    buisiness_info = relationship(
-        "BusinessInfo",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    contact_info = relationship(
-        "ContactInfo",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    store_info = relationship(
-        "StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
-    )
-    payout = relationship(
-        "Payout", back_populates="user", cascade="all, delete-orphan", uselist=False
-    )
-    shipment_info = relationship(
-        "ShipmentInfo",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    store_info = relationship(
-        "StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
-    )
+    stores = relationship("Store", back_populates="user", cascade="all, delete-orphan")
+
     verification = relationship(
         "Verification",
         back_populates="user",
         cascade="all, delete-orphan",
         uselist=False,
     )
+
+    carts = relationship("Cart", back_populates="user", cascade="all, delete-orphan")
+
+    payments = relationship(
+        "Payment", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
 
     def to_dict(self):
         data_dict = super().to_dict()

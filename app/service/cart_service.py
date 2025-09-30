@@ -14,14 +14,12 @@ class CartService:
     async def _formulate_response(self, cart: Cart) -> CartResponse:
         product = await product_domain.get_product_by_id(cart.product_id)
         product_response = ProductResponse(**product_domain.to_dict(product))
-        cart_response = CartResponse(
-            id=cart.id,
-            user_id=cart.user_id,
-            product=product_response,
-            quantity=cart.quantity,
-            created_at=cart.created_at,
-            updated_at=cart.updated_at,
-        )
+
+        cart_dict = cart.to_dict()
+        cart_dict["user_id"] = str(cart.user_id)
+        cart_dict["product"] = product_response
+        cart_response = CartResponse(**cart_dict)
+
         return cart_response
 
     async def create(self, cart_data: dict[str, Any], db: AsyncSession) -> CartResponse:
@@ -30,14 +28,12 @@ class CartService:
             new_cart = await Cart.create(cart_data, db)
 
             product_response = ProductResponse(**product_domain.to_dict(product))
-            cart_response = CartResponse(
-                id=new_cart.id,
-                user_id=new_cart.user_id,
-                product=product_response,
-                quantity=new_cart.quantity,
-                created_at=new_cart.created_at,
-                updated_at=new_cart.updated_at,
-            )
+
+            new_data_dict = new_cart.to_dict()
+            new_data_dict["product"] = product_response
+            new_data_dict["user_id"] = str(new_cart.user_id)
+            cart_response = CartResponse(**new_data_dict)
+
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -119,6 +115,10 @@ class CartService:
                 message="successfully retrieved cart details",
                 data=cart_response,
             )
+        except ValueError as ve:
+            return response_builder(
+                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
         except Exception as e:
             print("Error occurred while retrieving cart: ", str(e))
             return response_builder(
@@ -126,3 +126,88 @@ class CartService:
                 status="error",
                 message="Error occured while retrieving cart data",
             )
+
+    async def update(
+        self, user_id: str, cart_id: str, update_data: dict[str, Any], db: AsyncSession
+    ) -> CartResponse:
+        try:
+            cart = await Cart.get_by_id(cart_id, db)
+            if cart.user_id != user_id:
+                return response_builder(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    status="error",
+                    message="You can't update someone else cart",
+                )
+
+            updated_cart = await Cart.update_by_id(cart_id, update_data, db)
+            cart_response = await self._formulate_response(updated_cart)
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully updated cart data",
+                data=cart_response,
+            )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
+            )
+        except ValueError as ve:
+            return response_builder(
+                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except Exception as e:
+            print("Error occurred while updating cart data: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while updating cart",
+            )
+
+    async def delete(self, user_id: str, cart_id: str, db: AsyncSession):
+        try:
+            # This implementation can still be reduced to only a single query
+            cart = await Cart.get_by_id(cart_id, db)
+            if cart.user_id != user_id:
+                return response_builder(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    status="error",
+                    message="You cannot delete someone else cart",
+                )
+
+            await cart.delete(db)
+
+            return response_builder(
+                status_code=status.HTTP_200_OK, status="success", message="Deleted cart"
+            )
+        except ValueError as ve:
+            return response_builder(
+                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except Exception as e:
+            print("Error deleting cart by id: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured deleting cart",
+            )
+
+    async def delete_all_user_cart(self, user_id: str, db: AsyncSession):
+        try:
+            await Cart.delete_by_user_id(user_id, db)
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully deleted user carts",
+            )
+        except Exception as e:
+            print("Error occured while deleting user cart: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while deleting user cart",
+            )
+
+
+cart_service = CartService()

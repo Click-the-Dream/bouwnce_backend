@@ -27,3 +27,7 @@ class CartResponse(BaseModel):
     quantity: Annotated[int, Field(gt=0, examples=[2])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
+
+
+class UpdateCart(BaseModel):
+    quantity: Annotated[int, Field(examples=[20])]

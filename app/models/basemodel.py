@@ -48,7 +48,10 @@ class BaseModel(Base):
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
         result = await db.execute(select(cls).where(cls.id == id))
 
-        return result.scalar_one_or_none()
+        obj = result.scalar_one_or_none()
+        if not obj:
+            raise ValueError(f"{cls.__name__} with the specified ID not found")
+        return obj
 
     @classmethod
     async def delete_by_id(cls, id: str, db: AsyncSession) -> Self:
@@ -155,3 +158,9 @@ class BaseModel(Base):
         await obj.save(db)
 
         return obj
+
+    async def delete(self, db: AsyncSession):
+        await db.delete(self)
+        await db.flush()
+
+        return True

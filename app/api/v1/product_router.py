@@ -10,7 +10,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 
 ImageCreate = Annotated[list[UploadFile], File(...)]
-ImageUpdate = Annotated[list[UploadFile], File(default=None)]
+ImageUpdate = Annotated[list[UploadFile] | None, File(...)]
 
 
 @router.get(
@@ -156,7 +156,7 @@ async def get_product_by_id(id: str):
 async def update_product(
     id: str,
     current_vendor: CurrentVendor,
-    images: ImageUpdate,
+    images: ImageUpdate = None,
     name: Annotated[str | None, Form(min_length=2, examples=["Round Neck"])] = None,
     description: Annotated[
         str | None, Form(min_length=5, examples=["This is straight from New York"])

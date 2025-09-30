@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import PayoutInfo, User
 from app.utils.responses import response_builder
 from typing import Any
-
+from app.schemas import PayoutInfoResponse
 
 class PayoutInfoCRUDService:
 
@@ -26,11 +26,12 @@ class PayoutInfoCRUDService:
             )
         try:
             new_payout = await PayoutInfo.create(data, session)
+            data = PayoutInfoResponse(**new_payout.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Payout info created successfully.",
-                data=new_payout.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(
@@ -56,11 +57,13 @@ class PayoutInfoCRUDService:
                 status="error",
                 message="Payout info not found.",
             )
+        payout = payout[0]
+        data = PayoutInfoResponse(**payout.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Payout info retrieved successfully.",
-            data=payout.to_dict(),
+            data=data,
         )
     
     async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
@@ -82,11 +85,12 @@ class PayoutInfoCRUDService:
         payout = payout[0]
         try:
             updated_payout = await PayoutInfo.update_by_id(str(payout.id), data=data, db=session)
+            data = PayoutInfoResponse(**updated_payout.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Payout info updated successfully.",
-                data=updated_payout.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(

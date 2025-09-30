@@ -1,15 +1,7 @@
-import enum
-
 from sqlalchemy import UUID, Column, Enum, ForeignKey, String
 from sqlalchemy.orm import relationship
 
 from app.models import BaseModel
-
-
-class StatusEnum(enum.Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
 
 
 class Verification(BaseModel):

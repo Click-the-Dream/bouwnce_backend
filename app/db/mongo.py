@@ -1,30 +1,22 @@
-from contextlib import contextmanager
-
-from pymongo import MongoClient, errors
+from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import errors
 
 from app.core.config import settings
 
-client = MongoClient(settings.MONGODB_DATABASE_URL)
-
-try:
-    client.admin.command("ping")
-    print("✅ MongoDB database connected successfully")
-except errors.ConnectionFailure as e:
-    print("❌ Failed to connect to MongoDB")
-    print(f"Error: {e}")
-
+client = AsyncIOMotorClient(settings.MONGODB_DATABASE_URL)
 db = client.get_database(settings.MONGODB_DB_NAME)
 
 
-@contextmanager
-def mongo_session():
-    session = client.start_session()
+async def mongo_conn():
+    from app.models.products import Category, Product
+
     try:
-        session.start_transaction()
-        yield db, session
-        session.commit_transaction()
-    except Exception as e:
-        session.abort_transaction()
-        raise e
-    finally:
-        session.end_session()
+        await client.admin.command("ping")
+        print("✅ MongoDB database connected successfully")
+    except errors.ConnectionFailure as e:
+        print("❌ Failed to connect to MongoDB")
+        print(f"Error: {e}")
+
+    await init_beanie(database=db, document_models=[Product, Category])
+    return client

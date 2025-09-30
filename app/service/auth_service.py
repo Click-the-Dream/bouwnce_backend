@@ -20,7 +20,7 @@ class AuthService:
         user = await User.get_by_unique(
             db=db, email=user_data["email"], username=user_data["username"]
         )
-        if user or user.is_deleted:
+        if user:
             if user.email == user_data["email"]:
                 return response_builder(
                     status_code=status.HTTP_400_BAD_REQUEST,

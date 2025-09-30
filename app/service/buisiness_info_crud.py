@@ -5,6 +5,7 @@ from app.models import BusinessInfo
 from app.utils.responses import response_builder
 from app.models import User
 from typing import Any
+from schemas import BusinessInfoResponse
 
 class BusinessInfoCRUDService:
     
@@ -28,11 +29,12 @@ class BusinessInfoCRUDService:
             )
         try:
             new_business = await BusinessInfo.create(data, session)
+            data = BusinessInfoResponse(**new_business.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Business info created successfully.",
-                data=new_business.to_dict(),
+                data=data,
             )
 
         except Exception as e:
@@ -60,11 +62,12 @@ class BusinessInfoCRUDService:
                 message="Business info not found.",
             )
         business = business[0]
+        data = BusinessInfoResponse(**business.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Business info retrieved successfully.",
-            data=business.to_dict(),
+            data=data,
         )
 
     async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
@@ -89,11 +92,12 @@ class BusinessInfoCRUDService:
         business = business[0]
         try:
             updated_business = await BusinessInfo.update_by_id(str(business.id), data, session)
+            data = BusinessInfoResponse(**updated_business.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Business info updated successfully.",
-                data=updated_business.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(

@@ -23,6 +23,8 @@ class User(BaseModel):
     otp = Column(String(6))
     otp_time = Column(DateTime(timezone=True))
 
+    stores = relationship("Store", back_populates="user", cascade="all, delete-orphan")
+
     # One To One Relationship
     buisiness_info = relationship(
         "BusinessInfo",
@@ -57,6 +59,14 @@ class User(BaseModel):
         cascade="all, delete-orphan",
         uselist=False,
     )
+
+    carts = relationship("Cart", back_populates="user", cascade="all, delete-orphan")
+
+    payments = relationship(
+        "Payment", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
 
     def to_dict(self):
         data_dict = super().to_dict()

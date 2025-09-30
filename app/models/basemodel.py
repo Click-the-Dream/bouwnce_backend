@@ -47,7 +47,10 @@ class BaseModel(Base):
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
         result = await db.execute(select(cls).where(cls.id == id))
 
-        return result.scalar_one_or_none()
+        obj = result.scalar_one_or_none()
+        if not obj:
+            raise ValueError(f"{cls.__name__} with the specified ID not found")
+        return obj
 
     @classmethod
     async def delete_by_id(cls, id: str, db: AsyncSession) -> Self:
@@ -91,17 +94,17 @@ class BaseModel(Base):
 
     @classmethod
     async def update_by_id(cls, id: str, data: dict, db: AsyncSession) -> Self:
-        obj = cls.get_by_id(id, db)
+        obj = await cls.get_by_id(id, db)
         if not obj:
             raise ValueError(f"{cls.__name__} not found")
 
         exclude = ["id", "created_at"]
         for key, value in data.items():
             if hasattr(obj, key) and key not in exclude:
-                setattr(obj, value)
+                setattr(obj, key, value)
 
         await db.flush()
-        await db.refresh()
+        await db.refresh(obj)
 
         return obj
 
@@ -124,7 +127,6 @@ class BaseModel(Base):
                     or_condition.append(column == value)
 
         if or_condition:
-            print(*or_condition)
             query = query.where(or_(*or_condition))
 
         offset = (page - 1) * page_size
@@ -154,6 +156,12 @@ class BaseModel(Base):
 
         await obj.save(db)
         return obj
+
+    async def delete(self, db: AsyncSession):
+        await db.delete(self)
+        await db.flush()
+
+        return True
 
     @classmethod
     async def whoami(cls, id: str, user_type: str, db: AsyncSession):

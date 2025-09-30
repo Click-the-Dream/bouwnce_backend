@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import ShipmentInfo, User
 from app.utils.responses import response_builder
 from typing import Any
-
+from app.schemas import ShipmentsInfoResponse
 
 class ShipmentInfoCRUDService:
     
@@ -26,11 +26,12 @@ class ShipmentInfoCRUDService:
             )
         try:
             new_shipment = await ShipmentInfo.create(data, session)
+            data = ShipmentsInfoResponse(**new_shipment.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Shipment info created successfully.",
-                data=new_shipment.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(
@@ -56,11 +57,13 @@ class ShipmentInfoCRUDService:
                 status="error",
                 message="Shipment info not found.",
             )
+        shipment = shipment[0]
+        data = ShipmentsInfoResponse(**shipment.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Shipment info retrieved successfully.",
-            data=shipment.to_dict(),
+            data=data,
         )
     
     async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
@@ -81,11 +84,12 @@ class ShipmentInfoCRUDService:
         shipment = shipment[0]
         try:
             updated_shipment = await ShipmentInfo.update_by_id(str(shipment.id), data=data, db=session)
+            data = ShipmentsInfoResponse(**updated_shipment.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Shipment info updated successfully.",
-                data=updated_shipment.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(

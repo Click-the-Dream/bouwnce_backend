@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import ContactInfo, User
 from app.utils.responses import response_builder
 from typing import Any
-
+from app.schemas import ContactInfoResponse
 
 class ContactInfoCRUDService:
     
@@ -26,11 +26,12 @@ class ContactInfoCRUDService:
             )
         try:
             new_contact = await ContactInfo.create(data, session)
+            data = ContactInfoResponse(**new_contact.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Contact info created successfully.",
-                data=new_contact.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(
@@ -56,11 +57,13 @@ class ContactInfoCRUDService:
                 status="error",
                 message="Contact info not found.",
             )
+        contact = contact[0]
+        data = ContactInfoResponse(**contact.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Contact info retrieved successfully.",
-            data=contact.to_dict(),
+            data=data,
         )
     
     async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
@@ -82,11 +85,12 @@ class ContactInfoCRUDService:
         contact = contact[0]
         try:
             updated_contact = await ContactInfo.update_by_id(str(contact.id), data, session)
+            data = ContactInfoResponse(**updated_contact.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Contact info updated successfully.",
-                data=updated_contact.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(

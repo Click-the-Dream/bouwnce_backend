@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import StoreInfo, User
 from app.utils.responses import response_builder
 from typing import Any
+from app.schemas import StoreInfoResponse
+
 
 class StoreInfoCRUDService:
     
@@ -25,11 +27,12 @@ class StoreInfoCRUDService:
             )
         try:
             new_store = await StoreInfo.create(data, session)
+            data = StoreInfoResponse(**new_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Store info created successfully.",
-                data=new_store.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(
@@ -55,11 +58,13 @@ class StoreInfoCRUDService:
                 status="error",
                 message="Store info not found.",
             )
+        store = store[0]
+        data = StoreInfoResponse(**store.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Store info retrieved successfully.",
-            data=store.to_dict(),
+            data=data,
         )
 
     async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
@@ -81,11 +86,12 @@ class StoreInfoCRUDService:
         store = store[0]
         try:
             updated_store = await StoreInfo.update_by_id(str(store.id), data=data, db=session)
+            data = StoreInfoResponse(**updated_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Store info updated successfully.",
-                data=updated_store.to_dict(),
+                data=data,
             )
         except Exception as e:
             return response_builder(

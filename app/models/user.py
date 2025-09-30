@@ -40,7 +40,7 @@ class User(BaseModel):
         "StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
     )
     payout = relationship(
-        "Payout", back_populates="user", cascade="all, delete-orphan", uselist=False
+        "PayoutInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
     )
     shipment_info = relationship(
         "ShipmentInfo",

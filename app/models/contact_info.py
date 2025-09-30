@@ -10,6 +10,6 @@ class ContactInfo(BaseModel):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=True)
     email = Column(String, nullable=False)
-    phone = Column(String, nullable=False)
+    phone_number = Column(String, nullable=False)
     
     user = relationship("User", back_populates="contact_info")

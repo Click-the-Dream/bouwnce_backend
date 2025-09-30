@@ -25,7 +25,7 @@ class Config(BaseModel):
     SMTP_PASSWORD: str = config("SMTP_PASSWORD")
     EMAILS_FROM_EMAIL: EmailStr = config("EMAILS_FROM_EMAIL")
     EMAILS_FROM_NAME: str = config("EMAILS_FROM_NAME")
-    EmAIL_VERIFICATION_EXPIRE_MINUTES: int = config("EmAIL_VERIFICATION_EXPIRE_MINUTES")
+    EMAIL_VERIFICATION_EXPIRE_MINUTES: int = config("EMAIL_VERIFICATION_EXPIRE_MINUTES")
 
 
 class ProductionConfig(Config):

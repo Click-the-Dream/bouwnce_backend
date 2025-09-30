@@ -5,7 +5,6 @@ from uuid import uuid4
 from sqlalchemy import Boolean, Column, DateTime, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.db.postgres_db_conn import Base
 
 
@@ -154,5 +153,13 @@ class BaseModel(Base):
         obj.deleted_at = None
 
         await obj.save(db)
-
         return obj
+
+    @classmethod
+    async def whoami(cls, id: str, user_type: str, db: AsyncSession):
+        result = await db.execute(select(cls).where(cls.id == id))
+        obj = result.scalar_one_or_none()
+
+        if obj and obj.user_type == user_type:
+            return obj
+        return None 

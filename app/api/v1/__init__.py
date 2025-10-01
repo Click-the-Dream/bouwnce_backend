@@ -8,6 +8,7 @@ from app.api.v1 import buisiness_info_crud
 from app.api.v1 import contact_info_crud
 from app.api.v1 import payout_info_crud
 from app.api.v1 import store_info_crud
+from app.api.v1 import shipments_info_crud
 
 api_router = APIRouter()
 
@@ -21,3 +22,4 @@ api_router.include_router(buisiness_info_crud.router)
 api_router.include_router(contact_info_crud.router)
 api_router.include_router(payout_info_crud.router)
 api_router.include_router(store_info_crud.router)
+api_router.include_router(shipments_info_crud.router)

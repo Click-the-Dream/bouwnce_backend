@@ -5,7 +5,7 @@ from app.models import BusinessInfo
 from app.utils.responses import response_builder
 from app.models import User
 from typing import Any
-from schemas import BusinessInfoResponse
+from app.schemas import BusinessInfoResponse
 
 class BusinessInfoCRUDService:
     

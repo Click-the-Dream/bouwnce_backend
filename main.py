@@ -8,7 +8,6 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.db.mongo import mongo_conn
 
-
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
     client = await mongo_conn()

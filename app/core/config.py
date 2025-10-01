@@ -62,8 +62,8 @@ if environment == "production":
 elif environment == "staging":
     settings = StagingConfig()
 else:
+    print("Running in Development Environment")
     settings = DevelopmentConfig()
-
 
 # Environment map
 config_options = {

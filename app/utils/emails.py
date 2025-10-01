@@ -78,7 +78,7 @@ def generate_login_verification_email(username: str, code: str) -> EmailData:
         context={
             "user_name": username,
             "verification_code": code,
-            "valid_minutes": settings.EmAIL_VERIFICATION_EXPIRE_MINUTES,
+            "valid_minutes": settings.EMAIL_VERIFICATION_EXPIRE_MINUTES,
             "project_name": settings.PROJECT_NAME,
             "contact_link": f"mailto: {settings.EMAILS_FROM_EMAIL}",
         },

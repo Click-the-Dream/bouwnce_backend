@@ -25,34 +25,6 @@ class User(BaseModel):
 
     stores = relationship("Store", back_populates="user", cascade="all, delete-orphan")
 
-    # One To One Relationship
-    buisiness_info = relationship(
-        "BusinessInfo",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    contact_info = relationship(
-        "ContactInfo",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    store_info = relationship(
-        "StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
-    )
-    payout = relationship(
-        "PayoutInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
-    )
-    shipment_info = relationship(
-        "ShipmentInfo",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
-    store_info = relationship(
-        "StoreInfo", back_populates="user", cascade="all, delete-orphan", uselist=False
-    )
     verification = relationship(
         "Verification",
         back_populates="user",

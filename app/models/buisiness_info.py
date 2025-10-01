@@ -18,6 +18,3 @@ class BusinessInfo(BaseModel):
     btype = Column(String, nullable=False)
 
     store = relationship("Store", back_populates="buisiness_info")
-
-
-    user = relationship("User", back_populates="business_info")

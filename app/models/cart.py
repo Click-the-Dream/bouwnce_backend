@@ -18,7 +18,7 @@ class Cart(BaseModel):
     quantity = Column(Integer, nullable=False)
 
     user = relationship(
-        "User", back_populates="carts", cascade="all, delete-orphan", uselist=False
+        "User", back_populates="carts", uselist=False
     )
 
     @classmethod

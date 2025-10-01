@@ -12,7 +12,7 @@ class Order(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     payment_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("payments.id", ondelete="CASCADE"), nullable=False
     )
     total_amount = Column(Integer, nullable=False)
     status = Column(
@@ -20,12 +20,10 @@ class Order(BaseModel):
         default="pending",
     )
 
-    user = relationship(
-        "User", back_populates="orders", cascade="all, delete-orphan", uselist=False
-    )
+    user = relationship("User", back_populates="orders", uselist=False)
 
     payments = relationship(
-        "Payment", back_populates="order", cascade="all, delete-orphan"
+        "Payment", back_populates="order", cascade="all, delete-orphan", single_parent=True
     )
 
     suborders = relationship(

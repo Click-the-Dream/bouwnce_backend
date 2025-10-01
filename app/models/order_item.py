@@ -22,6 +22,5 @@ class OrderItem(BaseModel):
     suborder = relationship(
         "SubOrder",
         back_populates="order_items",
-        cascade="all, delete-orphan",
-        uselist=False,
+        uselist=False
     )

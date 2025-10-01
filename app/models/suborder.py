@@ -31,13 +31,13 @@ class SubOrder(BaseModel):
     otp = Column(String)
 
     order = relationship(
-        "Order", back_populates="suborders", cascade="all, delete-orphan", uselist=False
+        "Order", back_populates="suborders", uselist=False
     )
 
     store = relationship(
-        "Store", back_populates="suborders", cascade="all, delete-orphan", uselist=False
+        "Store", back_populates="suborders", uselist=False
     )
 
     order_items = relationship(
-        "OrderItem", back_populates="suborder", cascade="all, delete-orphan"
+        "OrderItem", back_populates="suborder", cascade="all, delete-orphan", single_parent=True
     )

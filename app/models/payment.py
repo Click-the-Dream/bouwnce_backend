@@ -11,6 +11,7 @@ class Payment(BaseModel):
     user_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+
     amount = Column(Integer, nullable=False)
     currency = Column(String, default="NGN", nullable=False)
     provider = Column(String, server_default="paystack", nullable=False)
@@ -27,10 +28,7 @@ class Payment(BaseModel):
         default="pending",
     )
 
-    user = relationship(
-        "User", back_populates="payments", cascade="all, delete-orphan", uselist=False
-    )
 
-    order = relationship(
-        "Order", back_populates="payments", cascade="all, delete-orphan", uselist=False
-    )
+    user = relationship("User", back_populates="payments", uselist=False)
+
+    order = relationship("Order", back_populates="payments", uselist=False)

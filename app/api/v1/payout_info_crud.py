@@ -5,7 +5,7 @@ from app.schemas import (
     PayoutInfoResponse,
 )
 from app.service import PayoutInfoCRUDService
-from app.db.postgres_db_conn import get_async_session
+from app.api.dependencies import dbSessionDep
 
 
 router = APIRouter(tags=["Payout Information"], prefix="/payout")
@@ -14,26 +14,26 @@ router = APIRouter(tags=["Payout Information"], prefix="/payout")
     "/", response_model=PayoutInfoResponse, status_code=status.HTTP_201_CREATED,
     summary="Create payout information"
 )
-async def create_payout_info(payout_data: PayoutInfoCreate, session=Depends(get_async_session)):
+async def create_payout_info(payout_data: PayoutInfoCreate, session: dbSessionDep):
     return await PayoutInfoCRUDService().create(session, payout_data.dict())
 
 @router.get(
     "/{user_id}", response_model=PayoutInfoResponse, status_code=status.HTTP_200_OK,
     summary="Get payout information by user ID"
 )
-async def get_payout_info(user_id: str, session=Depends(get_async_session)):
+async def get_payout_info(user_id: str, session: dbSessionDep):
     return await PayoutInfoCRUDService().get(session, user_id)
 
 @router.put(
     "/", response_model=PayoutInfoResponse, status_code=status.HTTP_200_OK,
     summary="Update payout information"
 )
-async def update_payout_info(payout_data: PayoutInfoUpdate, session=Depends(get_async_session)):
+async def update_payout_info(payout_data: PayoutInfoUpdate, session: dbSessionDep):
     return await PayoutInfoCRUDService().update(session, payout_data.dict())
 
 @router.delete(
     "/", response_model=dict, status_code=status.HTTP_200_OK,
     summary="Delete payout information"
 )
-async def delete_payout_info(user_id: str, session=Depends(get_async_session)):
+async def delete_payout_info(user_id: str, session: dbSessionDep):
     return await PayoutInfoCRUDService().delete(session, user_id)

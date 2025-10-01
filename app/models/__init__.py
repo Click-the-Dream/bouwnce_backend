@@ -6,7 +6,6 @@ from app.models.inventory import Inventory
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
-from app.models.payout import Payout
 from app.models.store_info import StoreInfo
 from app.models.payout_info import PayoutInfo
 from app.models.shipment_info import ShipmentInfo
@@ -21,7 +20,7 @@ __all__ = [
     "BusinessInfo",
     "Cart",
     "ContactInfo",
-    "Payout",
+    "PayoutInfo",
     "ShipmentInfo",
     "StoreInfo",
     "User",

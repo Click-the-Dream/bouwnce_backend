@@ -14,6 +14,5 @@ class ContactInfo(BaseModel):
     title = Column(String, nullable=True)
     email = Column(String, nullable=False)
     phone_number = Column(String, nullable=False)
+
     store = relationship("Store", back_populates="contact_info")
-    
-    user = relationship("User", back_populates="contact_info")

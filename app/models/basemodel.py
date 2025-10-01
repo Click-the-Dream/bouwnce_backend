@@ -165,9 +165,10 @@ class BaseModel(Base):
 
     @classmethod
     async def whoami(cls, id: str, user_type: str, db: AsyncSession):
-        result = await db.execute(select(cls).where(cls.id == id))
-        obj = result.scalar_one_or_none()
+        query = select(cls).where(cls.id == id, cls.role == user_type)
+        result = await db.execute(query)
+        user = result.scalar_one_or_none()
 
-        if obj and obj.user_type == user_type:
-            return obj
-        return None 
+        if user and user.role == user_type:
+            return user
+        return None

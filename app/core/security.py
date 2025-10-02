@@ -29,7 +29,7 @@ def create_access_token(
     return encoded_jwt
 
 
-def verify_token(token: str) -> str:
+def verify_token(token: str) -> dict[str, Any]:
 
     try:
         subject = jwt.decode(token, settings.SECRET_KEY, algorithms=settings.ALGORITHM)

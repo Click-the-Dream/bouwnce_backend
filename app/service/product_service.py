@@ -10,7 +10,10 @@ from app.utils.responses import response_builder
 
 class ProductService:
     async def create_product(
-        self, vendor_id: str, product_data: dict[str, Any], images: list[UploadFile]
+        self,
+        store_id: str,
+        product_data: dict[str, Any],
+        images: list[UploadFile],
     ) -> ProductResponse:
         try:
             if not images or len(images) == 0:
@@ -19,10 +22,10 @@ class ProductService:
                     status="error",
                     message="Product image is required to create a product",
                 )
+
             product_data["image_paths"] = await save_uploaded_file_temp(images)
 
-            product = await product_domain.create_product(product_data, vendor_id)
-
+            product = await product_domain.create_product(product_data, store_id)
             product_response = ProductResponse(**product_domain.to_dict(product))
 
             return response_builder(
@@ -49,7 +52,6 @@ class ProductService:
 
         try:
             product = await product_domain.get_product_by_id(product_id)
-            print(product)
             product_resposne = ProductResponse(**product_domain.to_dict(product))
 
             return response_builder(
@@ -74,9 +76,9 @@ class ProductService:
                 message="Error occured while fetching product",
             )
 
-    async def get_products_by_vendor(
+    async def get_products_by_store(
         self,
-        vendor_id: str,
+        store_id: str,
         name: str | None = None,
         category: str | None = None,
         page: int | None = 1,
@@ -90,8 +92,8 @@ class ProductService:
             if category:
                 filter["category"] = category
 
-            products_data = await product_domain.get_all_product_by_vendor(
-                vendor_id, filter=filter, page=page, per_page=per_page
+            products_data = await product_domain.get_all_product_by_store(
+                store_id, filter=filter, page=page, per_page=per_page
             )
             products = [
                 ProductResponse(**product_domain.to_dict(product))
@@ -165,17 +167,17 @@ class ProductService:
         self,
         update_data: dict[str, Any],
         product_id: str,
-        vendor_id: str,
+        store_id: str,
         images: list[UploadFile] | None = None,
     ) -> ProductResponse:
 
         try:
             product = await product_domain.get_product_by_id(product_id)
-            if product.vendor_id != vendor_id:
+            if product.store_id != store_id:
                 return response_builder(
                     status_code=status.HTTP_403_FORBIDDEN,
                     status="error",
-                    message="You can't update someone else product",
+                    message="Product doesn't belong to this store",
                 )
 
             product = await product_domain.update_product(update_data, product_id)
@@ -183,7 +185,7 @@ class ProductService:
             if images and len(images) > 0:
                 temp_paths = await save_uploaded_file_temp(images)
                 product = await product_domain.update_product_image(
-                    product_id, temp_paths, vendor_id
+                    product_id, temp_paths, store_id
                 )
 
             product_response = ProductResponse(**product_domain.to_dict(product))
@@ -209,14 +211,14 @@ class ProductService:
                 message="Error occurred while updating product",
             )
 
-    async def delete_products_by_id(self, product_id: str, vendor_id: str):
+    async def delete_products_by_id(self, product_id: str, store_id: str):
         try:
             product = await product_domain.get_product_by_id(product_id)
-            if product.vendor_id != vendor_id:
+            if product.store_id != store_id:
                 return response_builder(
                     status_code=status.HTTP_403_FORBIDDEN,
                     status="error",
-                    message="You cannot delete someone else product",
+                    message="Store cannot delete someone else product",
                 )
 
             is_deleted = await product_domain.delete_product(product_id)
@@ -248,9 +250,9 @@ class ProductService:
                 message="Error occured while deleting product",
             )
 
-    async def delete_all_vendor_products(self, vendor_id: str):
+    async def delete_all_store_products(self, store_id: str):
         try:
-            deleted_count = await product_domain.delete_all_vendor_products(vendor_id)
+            deleted_count = await product_domain.delete_all_store_products(store_id)
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -272,11 +274,12 @@ class ProductService:
             )
 
     async def delete_product_image(
-        self, product_id: str, image_public_id: str, vendor_id: str
+        self, product_id: str, image_public_id: str, store_id: str
     ) -> ProductResponse:
         try:
+
             product = await product_domain.get_product_by_id(product_id)
-            if product.vendor_id != vendor_id:
+            if product.store_id != store_id:
                 return response_builder(
                     status_code=status.HTTP_403_FORBIDDEN,
                     status="error",

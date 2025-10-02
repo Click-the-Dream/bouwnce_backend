@@ -11,6 +11,7 @@ from app.core.security import verify_token
 # from app.db.mongo import mongo_session
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import redis_client
+from app.models.store import Store
 from app.models.user import User
 
 oauth2_scheme = HTTPBearer()
@@ -129,3 +130,20 @@ async def get_current_admin(
 
 
 CurrentAdmin = Annotated[User, Depends(get_current_admin)]
+
+
+async def get_current_store(
+    current_vendor: CurrentVendor, db: dbSessionDep
+) -> User | None:
+    try:
+        store = await Store.get_by_user_id(str(current_vendor.id), db)
+        return store
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+
+
+CurrentStore = Annotated[Store, Depends(get_current_store)]

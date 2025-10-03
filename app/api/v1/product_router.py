@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
-from app.api.dependencies import CurrentAdmin, CurrentStore
+from app.api.dependencies import CurrentAdmin, CurrentStore, dbSessionDep
 from app.schemas.product import CategoryCreate, CategoryResponse, ProductResponse
 from app.service.product_service import product_service
 
@@ -59,6 +59,7 @@ async def create_product(
     stock: Annotated[int, Form(ge=0, examples=[20])],
     category: Annotated[str, Form(examples=["clothes"])],
     images: ImageCreate,
+    db: dbSessionDep,
 ):
 
     product_data = {
@@ -69,7 +70,7 @@ async def create_product(
         "category": category,
     }
     return await product_service.create_product(
-        store_id=str(current_store.id), product_data=product_data, images=images
+        store_id=str(current_store.id), product_data=product_data, images=images, db=db
     )
 
 

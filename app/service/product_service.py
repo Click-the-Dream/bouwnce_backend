@@ -1,7 +1,9 @@
 from typing import Any
 
 from fastapi import UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.inventory import Inventory
 from app.models.products import product_domain
 from app.schemas.product import CategoryResponse, ProductResponse
 from app.utils.cloudinary_utils import save_uploaded_file_temp
@@ -14,6 +16,7 @@ class ProductService:
         store_id: str,
         product_data: dict[str, Any],
         images: list[UploadFile],
+        db: AsyncSession,
     ) -> ProductResponse:
         try:
             if not images or len(images) == 0:
@@ -26,6 +29,15 @@ class ProductService:
             product_data["image_paths"] = await save_uploaded_file_temp(images)
 
             product = await product_domain.create_product(product_data, store_id)
+
+            # Create invontory row
+            inventory_data = {
+                "product_id": str(product.id),
+                "available": product.stock,
+                "reserved": 0,
+            }
+            await Inventory.create(inventory_data, db)
+
             product_response = ProductResponse(**product_domain.to_dict(product))
 
             return response_builder(

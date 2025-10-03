@@ -18,7 +18,7 @@ class ProductBase(BaseModel):
 
 class ProductResponse(ProductBase):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
-    vendor_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
+    store_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     status: Annotated[str, Field(examples=["draft"])]
     images: list[Images]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]

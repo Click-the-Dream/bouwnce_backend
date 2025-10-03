@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
-from app.api.dependencies import CurrentAdmin, CurrentVendor
+from app.api.dependencies import CurrentAdmin, CurrentStore
 from app.schemas.product import CategoryCreate, CategoryResponse, ProductResponse
 from app.service.product_service import product_service
 
@@ -45,12 +45,12 @@ async def delete_product_category(id: str, _: CurrentAdmin):
 
 @router.post(
     "/",
-    summary="Create a product for logged in vendor",
+    summary="Create a product for logged in vendor's store",
     status_code=status.HTTP_201_CREATED,
     response_model=ProductResponse,
 )
 async def create_product(
-    vendor: CurrentVendor,
+    current_store: CurrentStore,
     name: Annotated[str, Form(min_length=2, examples=["Round Neck"])],
     description: Annotated[
         str, Form(min_length=5, examples=["This is straight from New York"])
@@ -69,7 +69,7 @@ async def create_product(
         "category": category,
     }
     return await product_service.create_product(
-        vendor_id=str(vendor.id), product_data=product_data, images=images
+        store_id=str(current_store.id), product_data=product_data, images=images
     )
 
 
@@ -101,7 +101,7 @@ async def get_all_products(
     response_model=list[ProductResponse],
 )
 async def get_all_vendor_products(
-    current_vendor: CurrentVendor,
+    current_store: CurrentStore,
     name: str | None = Query(default=None, min_length=3, description="name of product"),
     category: str | None = Query(
         default=None, min_length=3, description="Category of product to search for"
@@ -111,8 +111,8 @@ async def get_all_vendor_products(
         default=10, gt=0, description="The number of products per page to fetch"
     ),
 ):
-    return await product_service.get_products_by_vendor(
-        vendor_id=str(current_vendor.id),
+    return await product_service.get_products_by_store(
+        store_id=str(current_store.id),
         name=name,
         category=category,
         page=page,
@@ -121,8 +121,8 @@ async def get_all_vendor_products(
 
 
 @router.get(
-    "/vendor/{id}",
-    summary="Get all products of a vendor",
+    "/store/{id}",
+    summary="Get all products of a store",
     status_code=status.HTTP_200_OK,
     response_model=list[ProductResponse],
 )
@@ -137,8 +137,8 @@ async def get_all_vendor_products_by_id(
         default=10, gt=0, description="The number of products per page to fetch"
     ),
 ):
-    return await product_service.get_products_by_vendor(
-        vendor_id=id, name=name, category=category, page=page, per_page=per_page
+    return await product_service.get_products_by_store(
+        store_id=id, name=name, category=category, page=page, per_page=per_page
     )
 
 
@@ -155,7 +155,7 @@ async def get_product_by_id(id: str):
 )
 async def update_product(
     id: str,
-    current_vendor: CurrentVendor,
+    current_store: CurrentStore,
     images: ImageUpdate = None,
     name: Annotated[str | None, Form(min_length=2, examples=["Round Neck"])] = None,
     description: Annotated[
@@ -180,7 +180,7 @@ async def update_product(
     return await product_service.update_products(
         update_data=product_dict,
         product_id=id,
-        vendor_id=str(current_vendor.id),
+        store_id=str(current_store.id),
         images=images,
     )
 
@@ -190,18 +190,19 @@ async def update_product(
     summary="Delete all the prouducts of a vendor",
     status_code=status.HTTP_200_OK,
 )
-async def delete_all_vendors_products(current_vendor: CurrentVendor):
-    return await product_service.delete_all_vendor_products(str(current_vendor.id))
+async def delete_all_store_products(current_store: CurrentStore):
+    return await product_service.delete_all_store_products(str(current_store.id))
 
 
 @router.delete(
-    "/{id}",
+    "/{product_id}",
     summary="Delete a product (Only owned vendor)",
     status_code=status.HTTP_200_OK,
 )
-async def delete_product(id: str, current_vendor: CurrentVendor):
+async def delete_product(product_id: str, current_store: CurrentStore):
     return await product_service.delete_products_by_id(
-        product_id=id, vendor_id=str(current_vendor.id)
+        product_id=product_id,
+        store_id=str(current_store.id),
     )
 
 
@@ -212,7 +213,7 @@ async def delete_product(id: str, current_vendor: CurrentVendor):
 )
 async def delete_product_image(
     product_id: str,
-    current_vendor: CurrentVendor,
+    current_store: CurrentStore,
     image_public_id: str = Query(
         examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13/i0hwxwlwbhfofmeumurh"]
     ),
@@ -220,5 +221,5 @@ async def delete_product_image(
     return await product_service.delete_product_image(
         product_id=product_id,
         image_public_id=image_public_id,
-        vendor_id=str(current_vendor.id),
+        store_id=str(current_store.id),
     )

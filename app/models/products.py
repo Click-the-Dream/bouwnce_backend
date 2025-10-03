@@ -21,7 +21,7 @@ class Category(BaseDocument):
 
 
 class Product(BaseDocument):
-    vendor_id: str
+    store_id: str
     name: Annotated[str, Field(min_length=3, max_length=50)]
     description: str | None
     amount: Annotated[int, Field(ge=0)]
@@ -55,7 +55,7 @@ class ProductDomain:
 
         return obj_dict
 
-    async def create_product(self, data: dict[str, Any], vendor_id: str) -> Product:
+    async def create_product(self, data: dict[str, Any], store_id: str) -> Product:
         try:
             product_category = data["category"]
             category = await self.get_category_name(product_category)
@@ -68,7 +68,7 @@ class ProductDomain:
 
             data["status"] = status
 
-            image_results = await upload_images(image_paths, vendor_id)
+            image_results = await upload_images(image_paths, store_id)
             images = [
                 Images(url=image["url"], public_id=image["public_id"])
                 for image in image_results
@@ -76,7 +76,7 @@ class ProductDomain:
             ]
 
             product = self.Product(
-                vendor_id=vendor_id,
+                store_id=store_id,
                 name=data["name"],
                 description=data["description"],
                 amount=int(data["amount"]),
@@ -138,9 +138,9 @@ class ProductDomain:
 
         return categories
 
-    async def get_all_product_by_vendor(
+    async def get_all_product_by_store(
         self,
-        vendor_id: str,
+        store_id: str,
         filter: dict[str, Any],
         page: int = 1,
         per_page: int = 10,
@@ -154,12 +154,15 @@ class ProductDomain:
                 query.append({key: regrex})
 
         if len(query) > 0:
-            filters = {"$and": [{"vendor_id": vendor_id}, {"$or": query}]}
+
+            filters = {"$and": [{"store_id": store_id}, {"$or": query}]}
             products_query = self.Product.find(filters).sort(-self.Product.updated_at)
+
         else:
-            products_query = self.Product.find(
-                self.Product.vendor_id == vendor_id
-            ).sort(-self.Product.updated_at)
+
+            products_query = self.Product.find(self.Product.store_id == store_id).sort(
+                -self.Product.updated_at
+            )
 
         count = await products_query.count()
         products = await products_query.skip(offset).limit(per_page).to_list()
@@ -244,14 +247,14 @@ class ProductDomain:
         raise ValueError(f"there is no image with {image_public_id} publid id")
 
     async def update_product_image(
-        self, product_id: str, image_paths: list[str], vendor_id
+        self, product_id: str, image_paths: list[str], store_id
     ) -> Product:
 
         product = await self.get_product_by_id(product_id)
         if not product:
             raise ValueError(f"Product with {product_id} not found")
 
-        image_result = await upload_images(image_paths, vendor_id)
+        image_result = await upload_images(image_paths, store_id)
         images = [
             Images(url=image["url"], public_id=image["public_id"])
             for image in image_result
@@ -282,15 +285,13 @@ class ProductDomain:
         await product.delete()
         return True
 
-    async def delete_all_vendor_products(self, vendor_id: str) -> bool:
+    async def delete_all_store_products(self, store_id: str) -> bool:
 
-        result = delete_folder(vendor_id)
+        result = delete_folder(store_id)
         if not result:
-            raise Exception(
-                f"Error delete products of vendor with vendor_id {vendor_id}"
-            )
+            raise Exception(f"Error delete products of vendor with store_id {store_id}")
 
-        result = await self.Product.find(self.Product.vendor_id == vendor_id).delete()
+        result = await self.Product.find(self.Product.store_id == store_id).delete()
 
         return result.deleted_count
 

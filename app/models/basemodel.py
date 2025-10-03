@@ -5,8 +5,10 @@ from uuid import uuid4
 from sqlalchemy import Boolean, Column, DateTime, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+from app import db
 from app.db.postgres_db_conn import Base
-
+from typing import Any, Optional
+from sqlalchemy.orm import selectinload
 
 class BaseModel(Base):
     __abstract__ = True
@@ -172,3 +174,45 @@ class BaseModel(Base):
         if user and user.role == user_type:
             return user
         return None
+    
+    async def filter_by(
+    self,
+    filter: dict[str, Any],
+    db: AsyncSession,
+    preload: Optional[list[str]] = None
+    ) -> list[Self]:
+        if preload is None:
+            preload = []
+
+        query = select(self.__class__)
+
+    
+        for relation in preload:
+            if hasattr(self.__class__, relation):
+                query = query.options(selectinload(getattr(self.__class__, relation)))
+
+
+        for key, value in filter.items():
+            if hasattr(self.__class__, key):
+                column = getattr(self.__class__, key)
+                if isinstance(value, str) and "%" in value:
+                    query = query.where(column.ilike(value))
+                elif value is None:
+                    query = query.where(column.is_(None))
+                else:
+                    query = query.where(column == value)
+
+        # execute query
+        result = await db.execute(query)
+        return result.scalars().all()
+    
+    async def update(self, session: AsyncSession, data: dict[str, Any]) -> Self:
+       
+        for key, value in data.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+        session.add(self)
+        await session.commit()
+        await session.refresh(self)
+        return self

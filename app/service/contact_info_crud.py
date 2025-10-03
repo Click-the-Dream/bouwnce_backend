@@ -1,7 +1,7 @@
 from fastapi.responses import JSONResponse
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import ContactInfo, User
+from app.models import ContactInfo, Store
 from app.utils.responses import response_builder
 from typing import Any
 from app.schemas import ContactInfoResponse
@@ -10,19 +10,20 @@ class ContactInfoCRUDService:
     
     async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
         
-        user = await User.whoami(id=data.get("user_id"), user_type="vendor", db=session)
-        if not user:
+        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["contact_info"])
+        if not store:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="User not found or is not a vendor.",
+                message="Store not found.",
             )
-        existing_contact = await ContactInfo.get_by_id(id=data.get("user_id"), db=session)
-        if existing_contact:
+        store = store[0]
+        contact = store.contact_info
+        if contact:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 status="error",
-                message="Contact info already exists for this user.",
+                message="Contact info already exists for this store.",
             )
         try:
             new_contact = await ContactInfo.create(data, session)
@@ -42,22 +43,21 @@ class ContactInfoCRUDService:
             )
     
     async def get(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
+        store = await Store.filter_by(id=user_id, db=session, preload=["contact_info"])
+        if not store:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="User not found or is not a vendor.",
+                message="Store not found.",
             )
-
-        contact = await ContactInfo.get_by_id(id=user_id, db=session)
+        store = store[0]
+        contact = store.contact_info
         if not contact:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
                 message="Contact info not found.",
             )
-        contact = contact[0]
         data = ContactInfoResponse(**contact.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
@@ -67,24 +67,23 @@ class ContactInfoCRUDService:
         )
     
     async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        user = await User.whoami(id=data.get("user_id"), user_type="vendor", db=session)
-        if not user:
+        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["contact_info"])
+        if not store:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="User not found or is not a vendor.",
+                message="Store not found.",
             )
-        
-        contact = await ContactInfo.get_by_id(id=data.get("user_id"), db=session)
+        store = store[0]
+        contact = store.contact_info
         if not contact:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
                 message="Contact info not found.",
             )
-        contact = contact[0]
         try:
-            updated_contact = await ContactInfo.update_by_id(str(contact.id), data, session)
+            updated_contact = await contact.update(data, session)
             data = ContactInfoResponse(**updated_contact.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -100,16 +99,9 @@ class ContactInfoCRUDService:
                 data=str(e),
             )
 
-    async def delete(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
-            )
-
-        contact = await ContactInfo.get_by_id(id=user_id, db=session)
+    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
+        
+        contact = await ContactInfo.filter_by(store_id=store_id, db=session)
         if not contact:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,

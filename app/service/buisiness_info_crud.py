@@ -1,32 +1,33 @@
 from fastapi.responses import JSONResponse
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import BusinessInfo
+from app.models import BusinessInfo, Store
 from app.utils.responses import response_builder
-from app.models import User
 from typing import Any
 from app.schemas import BusinessInfoResponse
 
 class BusinessInfoCRUDService:
     
     async def create(self, session: AsyncSession, data: dict) -> JSONResponse:
-        user_id = data.get("user_id")
+        store_id = data.get("store_id")
 
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
+        store = await Store.filter_by(id=store_id, db=session, preload=["business_info"])
+        if not store:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="User not found or is not a vendor.",
+                message="Store not found.",
             )
+        store = store[0]
 
-        existing_business = await BusinessInfo.get_by_id(user_id=user_id, session=session)
-        if existing_business:
+        business = store.business_info
+        if business:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 status="error",
-                message="Business info already exists for this user.",
+                message="Business info already exists for this store.",
             )
+        
         try:
             new_business = await BusinessInfo.create(data, session)
             data = BusinessInfoResponse(**new_business.to_dict())
@@ -44,24 +45,27 @@ class BusinessInfoCRUDService:
                 message="An error occurred while creating business info.",
                 data=str(e),
             )
-    
-    async def get(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
+
+    async def get(self, session: AsyncSession, store_id: str) -> JSONResponse:
+
+        store = await Store.filter_by(id=store_id, db=session, preload=["business_info"])
+        if not store:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="User not found or is not a vendor.",
+                message="Store not found.",
             )
 
-        business = await BusinessInfo.get_by_id(id=user_id, session=session)
+        store = store[0]
+
+        business = store.business_info
         if not business:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="Business info not found.",
+                message="Business info not found for this store.",
             )
-        business = business[0]
+        
         data = BusinessInfoResponse(**business.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
@@ -71,27 +75,28 @@ class BusinessInfoCRUDService:
         )
 
     async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        
-        user_id = data.get("user_id")
-        
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
+
+        store_id = data.get("store_id")
+
+        store = await Store.filter_by(id=store_id, db=session, preload=["business_info"])
+        if not store:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="User not found or is not a vendor.",
+                message="Store not found.",
             )
+        store = store[0]
 
-        business = await BusinessInfo.get_by_id(id=user_id, session=session)
+        business = store.business_info
         if not business:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="Business info not found.",
+                message="Business info not found for this store.",
             )
-        business = business[0]
+
         try:
-            updated_business = await BusinessInfo.update_by_id(str(business.id), data, session)
+            updated_business = await business.update(session, data)
             data = BusinessInfoResponse(**updated_business.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -106,17 +111,10 @@ class BusinessInfoCRUDService:
                 message="An error occurred while updating business info.",
                 data=str(e),
             )
-    
-    async def delete(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
-            )
 
-        business = await BusinessInfo.get_by_id(id=user_id, session=session)
+    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
+
+        business = await BusinessInfo.filter_by(store_id=store_id, db=session)
         if not business:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,

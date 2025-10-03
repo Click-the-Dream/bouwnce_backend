@@ -20,5 +20,4 @@ class Store(BaseModel):
     store_info = relationship("StoreInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")
     payout_info = relationship("PayoutInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")
     shipment_info = relationship("ShipmentInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")
-
     suborders = relationship("SubOrder", back_populates="store", cascade="all, delete-orphan")

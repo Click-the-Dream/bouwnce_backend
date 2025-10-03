@@ -1,41 +1,35 @@
 from app.schemas.business_info_crud import (
     BusinessInfoCreate,
     BusinessInfoUpdate,
-    BusinessInfoResponse,
-    BusinessInfoDelete,   
+    BusinessInfoResponse 
 )
 
 from app.schemas.contact_info_crud import (
     ContactInfoCreate,
     ContactInfoUpdate,
-    ContactInfoResponse,
-    ContactInfoDelete
+    ContactInfoResponse
 )
 
 from app.schemas.payout_info_crud import (
     PayoutInfoCreate,
     PayoutInfoUpdate,
-    PayoutInfoResponse,
-    PayoutInfoDelete
+    PayoutInfoResponse
 )
 
 from app.schemas.shipments_info_crud import (
     ShipmentsInfoCreate,
     ShipmentsInfoUpdate,
-    ShipmentsInfoResponse,
-    ShipmentsInfoDelete
+    ShipmentsInfoResponse
 )
 
 from app.schemas.store_info_crud import (
     StoreInfoCreate,
     StoreInfoUpdate,
-    StoreInfoResponse,
-    StoreInfoDelete
+    StoreInfoResponse
 )
 
 from app.schemas.store_crud import (
     StoreCreate,
     StoreUpdate,
-    StoreResponse,
-    StoreDelete
+    StoreResponse
 )

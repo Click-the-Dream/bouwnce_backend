@@ -22,7 +22,7 @@ async def create_payout_info(payout_data: PayoutInfoCreate, session: dbSessionDe
     summary="Get payout information by user ID"
 )
 async def get_payout_info(current_store: CurrentStore):
-    return await PayoutInfoCRUDService().get(session, user_id, current_store)
+    return await PayoutInfoCRUDService().get( current_store)
 
 @router.put(
     "/", response_model=PayoutInfoResponse, status_code=status.HTTP_200_OK,

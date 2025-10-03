@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, status
 from app.schemas import (
     PayoutInfoCreate,
     PayoutInfoUpdate,

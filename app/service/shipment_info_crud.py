@@ -8,16 +8,9 @@ from app.schemas import ShipmentsInfoResponse
 
 class ShipmentInfoCRUDService:
     
-    async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        
-        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["shipment_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+    async def create(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+
+        store = current_store[0]
         shipment = store.shipment_info
         if shipment:
             return response_builder(
@@ -41,17 +34,10 @@ class ShipmentInfoCRUDService:
                 message="An error occurred while creating shipment info.",
                 data=str(e),
             )
-    
-    async def get(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        
-        store = await Store.filter_by(id=user_id, db=session, preload=["shipment_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+
+    async def get(self, current_store) -> JSONResponse:
+
+        store = current_store[0]
         shipment = store.shipment_info
         if not shipment:
             return response_builder(
@@ -59,6 +45,7 @@ class ShipmentInfoCRUDService:
                 status="error",
                 message="Shipment info not found.",
             )
+
         data = ShipmentsInfoResponse(**shipment.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
@@ -66,17 +53,10 @@ class ShipmentInfoCRUDService:
             message="Shipment info retrieved successfully.",
             data=data,
         )
-    
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
 
-        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["shipment_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+    async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+
+        store = current_store[0]
         shipment = store.shipment_info
         if not shipment:
             return response_builder(
@@ -100,7 +80,7 @@ class ShipmentInfoCRUDService:
                 message="An error occurred while updating shipment info.",
                 data=str(e),
             )
-    
+
     async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
 
         shipment = await ShipmentInfo.filter_by(store_id=store_id, db=session)

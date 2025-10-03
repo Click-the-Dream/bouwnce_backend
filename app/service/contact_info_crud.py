@@ -7,17 +7,10 @@ from typing import Any
 from app.schemas import ContactInfoResponse
 
 class ContactInfoCRUDService:
-    
-    async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        
-        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["contact_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+
+    async def create(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+
+        store = current_store[0]
         contact = store.contact_info
         if contact:
             return response_builder(
@@ -41,16 +34,10 @@ class ContactInfoCRUDService:
                 message="An error occurred while creating contact info.",
                 data=str(e),
             )
+
+    async def get(self, current_store) -> JSONResponse:
+        store = current_store[0]
     
-    async def get(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        store = await Store.filter_by(id=user_id, db=session, preload=["contact_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
         contact = store.contact_info
         if not contact:
             return response_builder(
@@ -66,16 +53,10 @@ class ContactInfoCRUDService:
             data=data,
         )
     
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["contact_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+    async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+        store = current_store[0]
         contact = store.contact_info
+   
         if not contact:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,

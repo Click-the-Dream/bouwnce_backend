@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, status
 from app.schemas import (
     StoreInfoCreate,
     StoreInfoUpdate,
@@ -7,8 +7,6 @@ from app.schemas import (
 from app.service import StoreInfoCRUDService
 from app.api.dependencies import dbSessionDep, CurrentStore
 from typing import Any
-from app.db.postgres_db_conn import get_async_session
-
 
 router = APIRouter(tags=["Store Information"], prefix="/store")
 
@@ -17,7 +15,7 @@ router = APIRouter(tags=["Store Information"], prefix="/store")
     summary="Create store information"
 )
 async def create_store_info(store_data: StoreInfoCreate, session: dbSessionDep, current_store: CurrentStore):
-    return await StoreInfoCRUDService().create(session, store_data.dict(), current_store)
+    return await StoreInfoCRUDService().create(session, store_data.dict())
 
 @router.get(
     "/{user_id}", response_model=StoreInfoResponse, status_code=status.HTTP_200_OK,
@@ -31,10 +29,10 @@ async def get_store_info(current_store: CurrentStore):
     summary="Update store information"
 )
 async def update_store_info(store_data: StoreInfoUpdate, session: dbSessionDep, current_store: CurrentStore):
-    return await StoreInfoCRUDService().update(session, store_data.dict(), current_store)
+    return await StoreInfoCRUDService().update(session, store_data.dict(), current_store)   
 
 @router.delete(
-    "/", response_model=dict, status_code=status.HTTP_200_OK,
+    "/", response_model=dict[str, Any], status_code=status.HTTP_200_OK,
     summary="Delete store information"
 )
 async def delete_store_info(user_id: str, session: dbSessionDep):

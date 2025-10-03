@@ -9,16 +9,9 @@ from app.schemas import StoreInfoResponse
 
 class StoreInfoCRUDService:
     
-    async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        
-        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["store_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+    async def create(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+
+        store = current_store[0]
         store_info = store.store_info
         if store_info:
             return response_builder(
@@ -44,17 +37,17 @@ class StoreInfoCRUDService:
                 data=str(e),
             )
 
-    async def get(self, session: AsyncSession, store_id: str) -> JSONResponse:
+    async def get(self, current_store) -> JSONResponse:
 
-        store = await Store.filter_by(id=store_id, db=session, preload=["store_info"])
-        if not store:
+        store = current_store[0]
+        store_info = store.store_info
+        if not store_info:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="Store not found.",
+                message="Store info not found.",
             )
-        store = store[0]
-        data = StoreInfoResponse(**store.to_dict())
+        data = StoreInfoResponse(**store_info.to_dict())
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
@@ -62,17 +55,11 @@ class StoreInfoCRUDService:
             data=data,
         )
 
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
+    async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
 
-        store = await StoreInfo.filter_by(id=data.get("store_id"), db=session, preload=["store_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store info not found.",
-            )
-        store = store[0]
+        store = current_store[0]
         store_info = store.store_info
+
         if not store_info:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,

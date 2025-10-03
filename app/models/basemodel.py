@@ -206,13 +206,13 @@ class BaseModel(Base):
         result = await db.execute(query)
         return result.scalars().all()
     
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> Self:
+    async def update(self, db: AsyncSession, data: dict[str, Any]) -> Self:
        
         for key, value in data.items():
             if hasattr(self, key):
                 setattr(self, key, value)
 
-        session.add(self)
-        await session.commit()
-        await session.refresh(self)
+        db.add(self)
+        await db.commit()
+        await db.refresh(self)
         return self

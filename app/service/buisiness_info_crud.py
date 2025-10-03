@@ -7,19 +7,10 @@ from typing import Any
 from app.schemas import BusinessInfoResponse
 
 class BusinessInfoCRUDService:
-    
-    async def create(self, session: AsyncSession, data: dict) -> JSONResponse:
-        store_id = data.get("store_id")
 
-        store = await Store.filter_by(id=store_id, db=session, preload=["business_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
-
+    async def create(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+       
+        store = current_store[0]
         business = store.business_info
         if business:
             return response_builder(
@@ -46,17 +37,9 @@ class BusinessInfoCRUDService:
                 data=str(e),
             )
 
-    async def get(self, session: AsyncSession, store_id: str) -> JSONResponse:
+    async def get(self, current_store) -> JSONResponse:
 
-        store = await Store.filter_by(id=store_id, db=session, preload=["business_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-
-        store = store[0]
+        store = current_store[0]
 
         business = store.business_info
         if not business:
@@ -74,18 +57,9 @@ class BusinessInfoCRUDService:
             data=data,
         )
 
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
+    async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
 
-        store_id = data.get("store_id")
-
-        store = await Store.filter_by(id=store_id, db=session, preload=["business_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+        store = current_store[0]
 
         business = store.business_info
         if not business:

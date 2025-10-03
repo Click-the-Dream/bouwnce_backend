@@ -8,16 +8,9 @@ from app.schemas import PayoutInfoResponse
 
 class PayoutInfoCRUDService:
 
-    async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
+    async def create(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
 
-        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["payout_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+        store = current_store[0]
         payout = store.payout_info
         if payout:
             return response_builder(
@@ -41,17 +34,10 @@ class PayoutInfoCRUDService:
                 message="An error occurred while creating payout info.",
                 data=str(e),
             )
-    
-    async def get(self, session: AsyncSession, store_id: str) -> JSONResponse:
 
-        store = await Store.filter_by(id=store_id, db=session, preload=["payout_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+    async def get(self, current_store) -> JSONResponse:
+
+        store = current_store[0]
         payout = store.payout_info
         if not payout:
             return response_builder(
@@ -66,17 +52,10 @@ class PayoutInfoCRUDService:
             message="Payout info retrieved successfully.",
             data=data,
         )
-    
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        
-        store = await Store.filter_by(id=data.get("store_id"), db=session, preload=["payout_info"])
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
-        store = store[0]
+
+    async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+
+        store = current_store[0]
         payout = store.payout_info
         if not payout:
             return response_builder(
@@ -100,10 +79,10 @@ class PayoutInfoCRUDService:
                 message="An error occurred while updating payout info.",
                 data=str(e),
             )
-    
+
     async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
-        
-        payout = await PayoutInfo.filter_by(id=store_id, db=session)
+
+        payout = await PayoutInfo.filter_by(store_id=store_id, db=session)
         if not payout:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -112,9 +91,9 @@ class PayoutInfoCRUDService:
             )
         payout = payout[0]
         try:
-            await PayoutInfo.delete_by_id(id=payout.id, db=session)
+            await PayoutInfo.delete_by_id(payout.id, session)
             return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
+                status_code=status.HTTP_200_OK,
                 status="success",
                 message="Payout info deleted successfully.",
             )

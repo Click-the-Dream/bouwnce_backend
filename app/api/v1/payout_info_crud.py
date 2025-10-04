@@ -35,5 +35,5 @@ async def update_payout_info(payout_data: PayoutInfoUpdate, session: dbSessionDe
     "/", response_model=dict, status_code=status.HTTP_200_OK,
     summary="Delete payout information"
 )
-async def delete_payout_info(user_id: str, session: dbSessionDep):
-    return await PayoutInfoCRUDService().delete(session, user_id)
+async def delete_payout_info(session: dbSessionDep, current_store: CurrentStore):
+    return await PayoutInfoCRUDService().delete(session, current_store)

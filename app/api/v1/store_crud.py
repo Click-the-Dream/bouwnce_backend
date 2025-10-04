@@ -1,39 +1,39 @@
 from fastapi import APIRouter, status
 from app.schemas import (
-    StoreInfoCreate,
-    StoreInfoUpdate,
-    StoreInfoResponse
+    StoreCreate,
+    StoreUpdate,
+    StoreResponse
 )
-from app.service import StoreInfoCRUDService
-from app.api.dependencies import dbSessionDep, CurrentStore
+from app.service import StoreCRUDService
+from app.api.dependencies import dbSessionDep, CurrentUser, CurrentStore
 from typing import Any
 
-router = APIRouter(tags=["Store Information"], prefix="/store")
+router = APIRouter(tags=["Store"], prefix="/store")
 
-@router.post(
-    "/", response_model=StoreInfoResponse, status_code=status.HTTP_201_CREATED, 
+@router.post(    
+    "/", response_model=StoreResponse, status_code=status.HTTP_201_CREATED,
     summary="Create store information"
 )
-async def create_store_info(store_data: StoreInfoCreate, session: dbSessionDep, current_store: CurrentStore):
-    return await StoreInfoCRUDService().create(session, store_data.dict())
+async def create_store(store_data: StoreCreate, session: dbSessionDep, current_user: CurrentUser):
+    return await StoreCRUDService().create(session, store_data.dict(), current_user)
 
 @router.get(
-    "/{user_id}", response_model=StoreInfoResponse, status_code=status.HTTP_200_OK,
-    summary="Get store information by user ID"
+    "/{user_id}", response_model=StoreResponse, status_code=status.HTTP_200_OK,
+    summary="Get store rmation by user ID"
 )
-async def get_store_info(current_store: CurrentStore):
-    return await StoreInfoCRUDService().get(current_store)
+async def get_store(current_store: CurrentStore):
+    return await StoreCRUDService().get(current_store)
 
 @router.put(
-    "/", response_model=StoreInfoResponse, status_code=status.HTTP_200_OK,
-    summary="Update store information"
+    "/", response_model=StoreResponse, status_code=status.HTTP_200_OK,
+    summary="Update store rmation"
 )
-async def update_store_info(store_data: StoreInfoUpdate, session: dbSessionDep, current_store: CurrentStore):
-    return await StoreInfoCRUDService().update(session, store_data.dict(), current_store)   
+async def update_store(store_data: StoreUpdate, session: dbSessionDep, current_store: CurrentStore):
+    return await StoreCRUDService().update(session, store_data.dict(), current_store)   
 
 @router.delete(
     "/", response_model=dict[str, Any], status_code=status.HTTP_200_OK,
-    summary="Delete store information"
+    summary="Delete store rmation"
 )
-async def delete_store_info(user_id: str, session: dbSessionDep):
-    return await StoreInfoCRUDService().delete(session, user_id)
+async def delete_store(session: dbSessionDep, current_store: CurrentStore):
+    return await StoreCRUDService().delete(session, current_store)

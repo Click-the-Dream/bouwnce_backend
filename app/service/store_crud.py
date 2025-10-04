@@ -9,9 +9,10 @@ from app.schemas import StoreResponse
 
 class StoreCRUDService:
 
-    async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-
+    async def create(self, session: AsyncSession, data: dict[str, Any], user) -> JSONResponse:
+        
         try:
+            data["user_id"] = user.id
             new_store = await Store.create(data, session)
             data = StoreResponse(**new_store.to_dict())
             return response_builder(
@@ -31,18 +32,18 @@ class StoreCRUDService:
 
     async def get(self, current_store) -> JSONResponse:
 
-        store = current_store[0]
-        data = StoreResponse(**store.to_dict())
+        data = StoreResponse(**current_store.to_dict())
+
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Store retrieved successfully.",
             data=data,
         )
-
+    
     async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
 
-        store = current_store[0]
+        store = current_store
         if not store:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -50,7 +51,7 @@ class StoreCRUDService:
                 message="Store not found.",
             )
         try:
-            updated_store = await Store.update(db=session, data=data)
+            updated_store = await store.update(db=session, data=data)
             data = StoreResponse(**updated_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -66,18 +67,11 @@ class StoreCRUDService:
                 message="An error occurred while updating the store.",
                 data=str(e),
             )
-    
-    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
-        
-        store = await Store.get_by_id(id=store_id, db=session)
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store not found.",
-            )
+
+    async def delete(self, session: AsyncSession, current_store) -> JSONResponse:
+
         try:
-            deleted_store = await Store.delete_by_id(id=store_id, db=session)
+            deleted_store = await Store.delete_permanently_by_id(id=str(current_store.id), db=session)
             data = StoreResponse(**deleted_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,

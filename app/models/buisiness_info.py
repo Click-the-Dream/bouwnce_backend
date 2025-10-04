@@ -14,7 +14,6 @@ class BusinessInfo(BaseModel):
     address = Column(String, nullable=False)
     phone_number = Column(String, nullable=False)
     email = Column(String, nullable=False)
-    phone = Column(String, nullable=False)
     btype = Column(String, nullable=False)
 
-    store = relationship("Store", back_populates="buisiness_info")
+    store = relationship("Store", back_populates="business_info")

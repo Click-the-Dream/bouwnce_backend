@@ -20,3 +20,6 @@ class StoreInfoUpdate(BaseModel):
     store_logo: Annotated[str | None, Field(min_length=5, examples=["https://example.com/logo.png"])] = None
     store_banner: Annotated[str | None, Field(min_length=5, examples=["https://example.com/banner.png"])] = None
     store_description: Annotated[str | None, Field(min_length=10, examples=["This is a great store."])] = None
+
+class StoreInfoDelete(BaseModel):
+    id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]

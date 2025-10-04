@@ -13,6 +13,7 @@ class StoreInfoCRUDService:
 
         store = current_store[0]
         store_info = store.store_info
+        data["store_id"] = store.id
         if store_info:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -22,7 +23,9 @@ class StoreInfoCRUDService:
 
         try:
             new_store = await StoreInfo.create(data, session)
-            data = StoreInfoResponse(**new_store.to_dict())
+            new_store = new_store.to_dict()
+            new_store["user_id"] = str(store.user_id)
+            data = StoreInfoResponse(**new_store)
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -47,7 +50,9 @@ class StoreInfoCRUDService:
                 status="error",
                 message="Store info not found.",
             )
-        data = StoreInfoResponse(**store_info.to_dict())
+        store_info = store_info.to_dict()
+        store_info["user_id"] = str(store.user_id)
+        data = StoreInfoResponse(**store_info)
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
@@ -67,8 +72,10 @@ class StoreInfoCRUDService:
                 message="Store info not found for this store.",
             )
         try:
-            updated_store = await store_info.update(data, session)
-            data = StoreInfoResponse(**updated_store.to_dict())
+            updated_store = await store_info.update(session, data)
+            updated_store = updated_store.to_dict()
+            updated_store["user_id"] = str(store.user_id)
+            data = StoreInfoResponse(**updated_store)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -83,20 +90,20 @@ class StoreInfoCRUDService:
                 data=str(e),
             )
 
-    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
-        
-        store = await Store.filter_by(id=store_id, db=session)
-        if not store:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Store info not found.",
-            )
-        store = store[0]
+    async def delete(self, session: AsyncSession, store) -> JSONResponse:
+
         try:
-            await StoreInfo.delete_by_id(id=store.id, db=session)
+            store = store[0]
+            store_info = store.store_info
+            if not store_info:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Store info not found for this store.",
+                )
+            await StoreInfo.delete_permanently_by_id(id=store_info.id, db=session)
             return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
+                status_code=status.HTTP_200_OK,
                 status="success",
                 message="Store info deleted successfully.",
             )

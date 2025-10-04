@@ -12,6 +12,7 @@ class ShipmentInfoCRUDService:
 
         store = current_store[0]
         shipment = store.shipment_info
+        data["store_id"] = store.id
         if shipment:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -20,7 +21,10 @@ class ShipmentInfoCRUDService:
             )
         try:
             new_shipment = await ShipmentInfo.create(data, session)
-            data = ShipmentsInfoResponse(**new_shipment.to_dict())
+            new_shipment = new_shipment.to_dict()
+            new_shipment["user_id"] = str(store.user_id)
+            data = ShipmentsInfoResponse(**new_shipment)
+
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -46,7 +50,9 @@ class ShipmentInfoCRUDService:
                 message="Shipment info not found.",
             )
 
-        data = ShipmentsInfoResponse(**shipment.to_dict())
+        shipment = shipment.to_dict()
+        shipment["user_id"] = str(store.user_id)
+        data = ShipmentsInfoResponse(**shipment)
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
@@ -65,8 +71,10 @@ class ShipmentInfoCRUDService:
                 message="Shipment info not found.",
             )
         try:
-            updated_shipment = await shipment.update(data, session)
-            data = ShipmentsInfoResponse(**updated_shipment.to_dict())
+            updated_shipment = await shipment.update(session, data)
+            updated_shipment = updated_shipment.to_dict()
+            updated_shipment["user_id"] = str(store.user_id)
+            data = ShipmentsInfoResponse(**updated_shipment)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -81,20 +89,20 @@ class ShipmentInfoCRUDService:
                 data=str(e),
             )
 
-    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
+    async def delete(self, session: AsyncSession, store) -> JSONResponse:
 
-        shipment = await ShipmentInfo.filter_by(store_id=store_id, db=session)
+        store = store[0]
+        shipment = store.shipment_info
         if not shipment:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
                 message="Shipment info not found.",
             )
-        shipment = shipment[0]
         try:
-            await ShipmentInfo.delete_by_id(id=shipment.id, db=session)
+            await ShipmentInfo.delete_permanently_by_id(id=shipment.id, db=session)
             return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
+                status_code=status.HTTP_200_OK,
                 status="success",
                 message="Shipment info deleted successfully.",
             )

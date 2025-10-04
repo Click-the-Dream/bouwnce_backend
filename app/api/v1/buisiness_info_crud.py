@@ -34,5 +34,5 @@ async def update_business_info(business_data: BusinessInfoUpdate, session: dbSes
     "/", response_model=dict, status_code=status.HTTP_200_OK,
     summary="Delete business information"
 )
-async def delete_business_info(user_id: str, session: dbSessionDep):
-    return await BusinessInfoCRUDService().delete(session, user_id)
+async def delete_business_info(session: dbSessionDep, current_store: CurrentStore):
+    return await BusinessInfoCRUDService().delete(session, current_store)

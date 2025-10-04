@@ -37,5 +37,5 @@ async def update_shipment_info(shipment_data: ShipmentsInfoUpdate, session: dbSe
     "/", response_model=dict[str, Any], status_code=status.HTTP_200_OK,
     summary="Delete shipment information"
 )
-async def delete_shipment_info(user_id: str, session: dbSessionDep):
-    return await ShipmentInfoCRUDService().delete(session, user_id)
+async def delete_shipment_info(session: dbSessionDep, current_store: CurrentStore):
+    return await ShipmentInfoCRUDService().delete(session, current_store)

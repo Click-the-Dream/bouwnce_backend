@@ -36,5 +36,5 @@ async def update_contact_info(contact_data: ContactInfoUpdate, session: dbSessio
     "/", response_model=dict[str, Any], status_code=status.HTTP_200_OK,
     summary="Delete contact information"
 )
-async def delete_contact_info(user_id: str, session: dbSessionDep):
-    return await ContactInfoCRUDService().delete(session, user_id)  
+async def delete_contact_info(session: dbSessionDep, current_store: CurrentStore):
+    return await ContactInfoCRUDService().delete(session, current_store)

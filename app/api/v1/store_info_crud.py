@@ -10,7 +10,7 @@ from typing import Any
 from app.db.postgres_db_conn import get_async_session
 
 
-router = APIRouter(tags=["Store Information"], prefix="/store")
+router = APIRouter(tags=["Store Information"], prefix="/store_info")
 
 @router.post(
     "/", response_model=StoreInfoResponse, status_code=status.HTTP_201_CREATED, 
@@ -37,5 +37,5 @@ async def update_store_info(store_data: StoreInfoUpdate, session: dbSessionDep, 
     "/", response_model=dict, status_code=status.HTTP_200_OK,
     summary="Delete store information"
 )
-async def delete_store_info(user_id: str, session: dbSessionDep):
-    return await StoreInfoCRUDService().delete(session, user_id)
+async def delete_store_info(session: dbSessionDep, current_store: CurrentStore):
+    return await StoreInfoCRUDService().delete(session, current_store)

@@ -7,8 +7,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from app import db
 from app.db.postgres_db_conn import Base
-from typing import Any, Optional
+from typing import Any, Optional, TypeVar, Type
 from sqlalchemy.orm import selectinload
+from uuid import UUID as UUID_Type
+
+T = TypeVar("T", bound="BaseModel")  
 
 class BaseModel(Base):
     __abstract__ = True
@@ -25,13 +28,13 @@ class BaseModel(Base):
         del obj_dict["_sa_instance_state"]
         del obj_dict["is_deleted"]
         del obj_dict["deleted_at"]
-        obj_dict["id"] = str(self.id)
-        if self.created_at:
-            obj_dict["created_at"] = self.created_at.isoformat()
-        if self.updated_at:
-            obj_dict["updated_at"] = self.updated_at.isoformat()
-        if self.deleted_at:
-            obj_dict["deleted_at"] = self.deleted_at.isoformat()
+
+        for key, value in obj_dict.items():
+            if isinstance(value, (UUID_Type,)):
+                obj_dict[key] = str(value)
+
+            if isinstance(value, datetime):
+                obj_dict[key] = value.isoformat()
 
         return obj_dict
 
@@ -81,7 +84,7 @@ class BaseModel(Base):
 
         await db.delete(obj)
 
-        await obj.save(db)
+        await db.commit()
 
         return obj
 
@@ -174,27 +177,30 @@ class BaseModel(Base):
         if user and user.role == user_type:
             return user
         return None
-    
+   
+    @classmethod
     async def filter_by(
-    self,
-    filter: dict[str, Any],
-    db: AsyncSession,
-    preload: Optional[list[str]] = None
-    ) -> list[Self]:
+        cls: Type[T],
+        filter: dict[str, Any],
+        db: AsyncSession,
+        preload: Optional[list[str] | bool] = None
+    ) -> list[T]:
         if preload is None:
             preload = []
+        
+        # if preload=True, load all relationships
+        if preload is True:
+            preload = [relation.key for relation in cls.__mapper__.relationships]
 
-        query = select(self.__class__)
+        query = select(cls)
 
-    
         for relation in preload:
-            if hasattr(self.__class__, relation):
-                query = query.options(selectinload(getattr(self.__class__, relation)))
-
+            if hasattr(cls, relation):
+                query = query.options(selectinload(getattr(cls, relation)))
 
         for key, value in filter.items():
-            if hasattr(self.__class__, key):
-                column = getattr(self.__class__, key)
+            if hasattr(cls, key):
+                column = getattr(cls, key)
                 if isinstance(value, str) and "%" in value:
                     query = query.where(column.ilike(value))
                 elif value is None:
@@ -202,7 +208,6 @@ class BaseModel(Base):
                 else:
                     query = query.where(column == value)
 
-        # execute query
         result = await db.execute(query)
         return result.scalars().all()
     

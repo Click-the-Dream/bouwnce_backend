@@ -12,6 +12,7 @@ class PayoutInfoCRUDService:
 
         store = current_store[0]
         payout = store.payout_info
+        data['store_id'] = store.id
         if payout:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -20,7 +21,9 @@ class PayoutInfoCRUDService:
             )
         try:
             new_payout = await PayoutInfo.create(data, session)
-            data = PayoutInfoResponse(**new_payout.to_dict())
+            new_payout = new_payout.to_dict()
+            new_payout["user_id"] = str(store.user_id)
+            data = PayoutInfoResponse(**new_payout)
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -45,7 +48,9 @@ class PayoutInfoCRUDService:
                 status="error",
                 message="Payout info not found.",
             )
-        data = PayoutInfoResponse(**payout.to_dict())
+        payout = payout.to_dict()
+        payout["user_id"] = str(store.user_id)
+        data = PayoutInfoResponse(**payout)
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
@@ -64,8 +69,10 @@ class PayoutInfoCRUDService:
                 message="Payout info not found.",
             )
         try:
-            updated_payout = await payout.update(data, session)
-            data = PayoutInfoResponse(**updated_payout.to_dict())
+            updated_payout = await payout.update(session, data)
+            updated_payout = updated_payout.to_dict()
+            updated_payout["user_id"] = str(store.user_id)
+            data = PayoutInfoResponse(**updated_payout)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -80,18 +87,18 @@ class PayoutInfoCRUDService:
                 data=str(e),
             )
 
-    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
+    async def delete(self, session: AsyncSession, store) -> JSONResponse:
 
-        payout = await PayoutInfo.filter_by(store_id=store_id, db=session)
+        store = store[0]
+        payout = store.payout_info
         if not payout:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="Payout info not found.",
+                message="Payout info not found for this store.",
             )
-        payout = payout[0]
         try:
-            await PayoutInfo.delete_by_id(payout.id, session)
+            await PayoutInfo.delete_permanently_by_id(payout.id, session)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",

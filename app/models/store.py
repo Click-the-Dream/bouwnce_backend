@@ -18,7 +18,7 @@ class Store(BaseModel):
 
     user = relationship("User", back_populates="stores", uselist=False)
 
-    buisiness_info = relationship("BusinessInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")
+    business_info = relationship("BusinessInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")
     contact_info = relationship("ContactInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")
     store_info = relationship("StoreInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")
     payout_info = relationship("PayoutInfo", back_populates="store", uselist=False, cascade="all, delete-orphan")

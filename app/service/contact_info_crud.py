@@ -12,6 +12,7 @@ class ContactInfoCRUDService:
 
         store = current_store[0]
         contact = store.contact_info
+        data['store_id'] = store.id
         if contact:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -20,7 +21,9 @@ class ContactInfoCRUDService:
             )
         try:
             new_contact = await ContactInfo.create(data, session)
-            data = ContactInfoResponse(**new_contact.to_dict())
+            new_contact = new_contact.to_dict()
+            new_contact["user_id"] = str(store.user_id)
+            data = ContactInfoResponse(**new_contact)
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -36,8 +39,8 @@ class ContactInfoCRUDService:
             )
 
     async def get(self, current_store) -> JSONResponse:
+        
         store = current_store[0]
-    
         contact = store.contact_info
         if not contact:
             return response_builder(
@@ -45,7 +48,9 @@ class ContactInfoCRUDService:
                 status="error",
                 message="Contact info not found.",
             )
-        data = ContactInfoResponse(**contact.to_dict())
+        contact = contact.to_dict()
+        contact["user_id"] = str(store.user_id)
+        data = ContactInfoResponse(**contact)
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
@@ -54,6 +59,7 @@ class ContactInfoCRUDService:
         )
     
     async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
+
         store = current_store[0]
         contact = store.contact_info
    
@@ -64,8 +70,10 @@ class ContactInfoCRUDService:
                 message="Contact info not found.",
             )
         try:
-            updated_contact = await contact.update(data, session)
-            data = ContactInfoResponse(**updated_contact.to_dict())
+            updated_contact = await contact.update(session, data)
+            updated_contact = updated_contact.to_dict()
+            updated_contact["user_id"] = str(store.user_id)
+            data = ContactInfoResponse(**updated_contact)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -80,18 +88,18 @@ class ContactInfoCRUDService:
                 data=str(e),
             )
 
-    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
-        
-        contact = await ContactInfo.filter_by(store_id=store_id, db=session)
+    async def delete(self, session: AsyncSession, store) -> JSONResponse:
+
+        store = store[0]
+        contact = store.contact_info
         if not contact:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="Contact info not found.",
+                message="Contact info not found for this store.",
             )
-        contact = contact[0]
         try:
-            await ContactInfo.delete_by_id(str(contact.id), session)
+            await ContactInfo.delete_permanently_by_id(str(contact.id), session)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",

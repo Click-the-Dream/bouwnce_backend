@@ -22,3 +22,6 @@ class ShipmentsInfoUpdate(BaseModel):
     delivery_method: Annotated[str | None, Field(min_length=2, examples=["Standard", "Express"])] = None
     delivery_fee: Annotated[str | None, Field(min_length=1, examples=["5.00", "10.00"])] = None
     delivery_time: Annotated[str | None, Field(min_length=2, examples=["3-5 business days", "1-2 business days"])] = None
+
+class ShipmentsInfoDelete(BaseModel):
+    id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]

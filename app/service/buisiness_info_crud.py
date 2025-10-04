@@ -9,9 +9,10 @@ from app.schemas import BusinessInfoResponse
 class BusinessInfoCRUDService:
 
     async def create(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
-       
+
         store = current_store[0]
         business = store.business_info
+        data['store_id'] = store.id
         if business:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -21,7 +22,9 @@ class BusinessInfoCRUDService:
         
         try:
             new_business = await BusinessInfo.create(data, session)
-            data = BusinessInfoResponse(**new_business.to_dict())
+            new_business = new_business.to_dict()
+            new_business["user_id"] = str(store.user_id)
+            data = BusinessInfoResponse(**new_business)
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -40,7 +43,6 @@ class BusinessInfoCRUDService:
     async def get(self, current_store) -> JSONResponse:
 
         store = current_store[0]
-
         business = store.business_info
         if not business:
             return response_builder(
@@ -48,8 +50,9 @@ class BusinessInfoCRUDService:
                 status="error",
                 message="Business info not found for this store.",
             )
-        
-        data = BusinessInfoResponse(**business.to_dict())
+        data = business.to_dict()
+        data["user_id"] = str(store.user_id)
+        data = BusinessInfoResponse(**data)
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
@@ -60,7 +63,6 @@ class BusinessInfoCRUDService:
     async def update(self, session: AsyncSession, data: dict[str, Any], current_store) -> JSONResponse:
 
         store = current_store[0]
-
         business = store.business_info
         if not business:
             return response_builder(
@@ -71,7 +73,9 @@ class BusinessInfoCRUDService:
 
         try:
             updated_business = await business.update(session, data)
-            data = BusinessInfoResponse(**updated_business.to_dict())
+            updated_business = updated_business.to_dict()
+            updated_business["user_id"] = str(store.user_id)
+            data = BusinessInfoResponse(**updated_business)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -86,18 +90,18 @@ class BusinessInfoCRUDService:
                 data=str(e),
             )
 
-    async def delete(self, session: AsyncSession, store_id: str) -> JSONResponse:
+    async def delete(self, session: AsyncSession, store) -> JSONResponse:
 
-        business = await BusinessInfo.filter_by(store_id=store_id, db=session)
+        store = store[0]
+        business = store.business_info
         if not business:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND,
                 status="error",
-                message="Business info not found.",
+                message="Business info not found for this store.",
             )
-        business = business[0]
         try:
-            await BusinessInfo.delete_by_id(business.id, session)
+            await BusinessInfo.delete_permanently_by_id(business.id, session)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",

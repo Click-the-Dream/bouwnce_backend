@@ -20,3 +20,6 @@ class PayoutInfoUpdate(BaseModel):
     account_name: Annotated[str | None, Field(min_length=2, examples=["John Doe"])] = None
     account_number: Annotated[str | None, Field(min_length=5, examples=["123456789"])] = None
     bank_name: Annotated[str | None, Field(min_length=2, examples=["Bank of World"])] = None
+
+class PayoutInfoDelete(BaseModel):
+    id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]

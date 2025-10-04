@@ -136,7 +136,7 @@ async def get_current_store(
     current_vendor: CurrentVendor, db: dbSessionDep
 ) -> User | None:
     try:
-        store = await Store.get_by_user_id(str(current_vendor.id), db)
+        store = await Store.filter_by(filter={"user_id": current_vendor.id}, db=db, preload=True)
         return store
     except ValueError as ve:
         raise HTTPException(

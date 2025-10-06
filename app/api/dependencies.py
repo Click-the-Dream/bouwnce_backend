@@ -136,8 +136,21 @@ async def get_current_store(
     current_vendor: CurrentVendor, db: dbSessionDep
 ) -> User | None:
     try:
-        store = await Store.filter_by(filter={"user_id": current_vendor.id}, db=db, preload=True)
-        return store
+        store = await Store.filter_by(
+            filter={"user_id": current_vendor.id},
+            db=db,
+            preload=[
+                "business_info",
+                "contact_info",
+                "payout_info",
+                "shipment_info",
+                "store_info",
+            ],
+        )
+        if len(store) == 0:
+            raise ValueError("User doesn't have a store")
+
+        return store[0]
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

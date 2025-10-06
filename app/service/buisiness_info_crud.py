@@ -21,10 +21,12 @@ class BusinessInfoCRUDService:
                 db=db,
                 preload=["business_info"],
             )
+
             if len(store) == 0:
                 store = await Store.create(
                     data={"user_id": current_vendor.id, "name": data["name"]}, db=db
                 )
+                await store.save(db, attribute_names=["business_info"])
             else:
                 store = store[0]
 

@@ -42,8 +42,6 @@ class User(BaseModel):
 
     def to_dict(self):
         data_dict = super().to_dict()
-        if data_dict.get("otp_time", None):
-            data_dict["otp_time"] = data_dict["otp_time"].isoformat()
 
         return data_dict
 

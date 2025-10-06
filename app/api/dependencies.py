@@ -104,7 +104,6 @@ CurrentActiveUser = Annotated[User, Depends(get_current_active_user)]
 async def get_current_vendor(
     current_user: CurrentActiveUser,
 ) -> User | None:
-    print(current_user.role)
     if current_user.role != "vendor":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

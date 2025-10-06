@@ -8,7 +8,7 @@ from app.schemas.verification import (
 )
 from app.service.verification_service import verification_service
 
-router = APIRouter(prefix="/users/verification", tags=["User"])
+router = APIRouter(prefix="/verification", tags=["User"])
 
 
 @router.post(

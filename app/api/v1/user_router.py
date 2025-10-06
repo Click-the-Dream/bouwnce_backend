@@ -9,7 +9,7 @@ from app.api.dependencies import (
 from app.schemas.user import UpdateUser, UserResponse
 from app.service.user_service import user_service
 
-router = APIRouter(prefix="/users", tags=["User"])
+router = APIRouter(prefix="", tags=["User"])
 
 
 @router.get("/me", summary="Get current user", response_model=UserResponse)

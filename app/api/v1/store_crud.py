@@ -11,7 +11,7 @@ from app.schemas import (
 )
 from app.service import store_service
 
-router = APIRouter(tags=["Store"], prefix="/store")
+router = APIRouter(tags=["Store"], prefix="")
 
 
 @router.post(

@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.dependencies import CurrentStore, CurrentUser, dbSessionDep
 from app.schemas import (
@@ -27,23 +27,42 @@ async def create_store(
 
 
 @router.get(
-    "/{user_id}",
+    "/",
     response_model=StoreResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get store rmation by user ID",
+    summary="Get all Available with search filters (name)",
 )
-async def get_store(current_store: CurrentStore):
-    return await store_service.get(current_store)
+async def get_stores(
+    db: dbSessionDep,
+    name: str | None = Query(default=None, description="Search Query"),
+    page: int | None = Query(default=1, description="The page to fetch"),
+    page_sze: int | None = Query(
+        default=10, description="The number of stores per page"
+    ),
+):
+    return await store_service.get_stores(
+        db=db, name=name, page=page, page_size=page_sze
+    )
 
 
 @router.get(
-    "/",
+    "/my-store",
     response_model=StoreFullDetailsResponse,
     status_code=status.HTTP_200_OK,
     summary="Fetch Current Store full details including (business_info, payment_info, etc)",
 )
 async def get_store_full_details(current_store: CurrentStore):
     return await store_service.get_full_details(current_store)
+
+
+@router.get(
+    "/{vendor_id}",
+    response_model=StoreResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get store rmation by user ID",
+)
+async def get_store_by_id(vendor_id: str, db: dbSessionDep):
+    return await store_service.get_vendor_store(vendor_id, db)
 
 
 @router.put(

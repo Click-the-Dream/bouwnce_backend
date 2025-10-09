@@ -60,6 +60,27 @@ class StoreCRUDService:
                 message="Error occured while fetching store",
             )
 
+    async def get_vendor_store(self, vendor_id: str, db: AsyncSession):
+        try:
+            stores = await Store.get_by({"user_id": vendor_id}, db)
+            store_response = [
+                StoreResponse(**store.to_dict()) for store in stores["data"]
+            ]
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully fetch all stores of a vendor",
+                data=store_response,
+            )
+        except Exception as e:
+            print("Error occured while fetching vendor store: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while fetching vendor store",
+            )
+
     async def get_full_details(self, current_store: Store) -> JSONResponse:
         try:
             store_full_response = StoreFullDetailsResponse(
@@ -108,6 +129,42 @@ class StoreCRUDService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="Error occured while fetching store full details",
+            )
+
+    async def get_stores(
+        self,
+        db: AsyncSession,
+        name: str | None = None,
+        page: int | None = 1,
+        page_size: int | None = 10,
+    ):
+        try:
+            filter = {}
+            if name:
+                filter["name"] = f"%{name}%"
+
+            stores = await Store.get_by(filter, db, page, page_size)
+            store_response = [
+                StoreResponse(**store.to_dict()) for store in stores["data"]
+            ]
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully retrived paginated stores",
+                data={
+                    "stores": store_response,
+                    "total": stores["total"],
+                    "page": stores["page"],
+                    "page_size": stores["page_size"],
+                },
+            )
+        except Exception as e:
+            print("Error occured while fetching all stores data: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error fetching stores",
             )
 
     async def update(

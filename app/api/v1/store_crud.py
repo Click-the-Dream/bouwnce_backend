@@ -43,7 +43,7 @@ async def get_store(current_store: CurrentStore):
     summary="Fetch Current Store full details including (business_info, payment_info, etc)",
 )
 async def get_store_full_details(current_store: CurrentStore):
-    return store_service.get_full_details(current_store)
+    return await store_service.get_full_details(current_store)
 
 
 @router.put(

@@ -62,9 +62,16 @@ class StoreCRUDService:
 
     async def get_full_details(self, current_store: Store) -> JSONResponse:
         try:
-            store_full_response = StoreFullDetailsResponse(**current_store.to_dict())
+            store_full_response = StoreFullDetailsResponse(
+                id=str(current_store.id),
+                user_id=str(current_store.user_id),
+                name=current_store.name,
+                created_at=current_store.created_at.isoformat(),
+                updated_at=current_store.updated_at.isoformat(),
+            )
 
             if current_store.business_info:
+                print(current_store.business_info.to_dict())
                 store_full_response.business_info = BusinessInfoResponse(
                     **current_store.business_info.to_dict()
                 )

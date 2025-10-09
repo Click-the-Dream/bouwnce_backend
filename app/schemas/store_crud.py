@@ -17,6 +17,7 @@ class StoreResponse(BaseModel):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     user_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     name: Annotated[str, Field(min_length=2, examples=["My Awesome Store"])]
+    is_active: Annotated[bool, Field(examples=["true"])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
 

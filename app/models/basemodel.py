@@ -3,7 +3,7 @@ from typing import Any, Self, TypeVar
 from uuid import UUID as UUID_Type
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, func, or_, select
+from sqlalchemy import Boolean, Column, DateTime, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -136,7 +136,9 @@ class BaseModel(Base):
                 else:
                     or_condition.append(column == value)
 
-        if or_condition:
+        if or_condition and hasattr(cls, "is_active"):
+            query = query.filter(and_(cls.is_active.is_(True), or_(*or_condition)))
+        elif or_condition:
             query = query.where(or_(*or_condition))
 
         offset = (page - 1) * page_size
@@ -149,7 +151,6 @@ class BaseModel(Base):
 
         objs = result.scalars().all()
         count = count_result.scalar()
-
         return {"data": objs, "total": count, "page": page, "page_size": page_size}
 
     @classmethod

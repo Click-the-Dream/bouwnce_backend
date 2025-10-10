@@ -55,7 +55,12 @@ class BaseModel(Base):
 
     @classmethod
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
-        result = await db.execute(select(cls).where(cls.id == id))
+        if hasattr(cls, "is_active"):
+            result = await db.execute(
+                select(cls).where(and_(cls.is_active.is_(True), cls.id == id))
+            )
+        else:
+            result = await db.execute(select(cls).where(cls.id == id))
 
         obj = result.scalar_one_or_none()
         if not obj:

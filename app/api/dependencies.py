@@ -159,3 +159,16 @@ async def get_current_store(
 
 
 CurrentStore = Annotated[Store, Depends(get_current_store)]
+
+
+async def get_current_active_store(current_store: CurrentStore):
+    if not current_store.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Store is not active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return current_store
+
+
+CurrentActiveStore = Annotated[Store, Depends(get_current_active_store)]

@@ -2,7 +2,12 @@ from typing import Any
 
 from fastapi import APIRouter, Query, status
 
-from app.api.dependencies import CurrentStore, CurrentUser, dbSessionDep
+from app.api.dependencies import (
+    CurrentActiveStore,
+    CurrentStore,
+    CurrentUser,
+    dbSessionDep,
+)
 from app.schemas import (
     StoreCreate,
     StoreFullDetailsResponse,
@@ -72,7 +77,7 @@ async def get_store_by_id(vendor_id: str, db: dbSessionDep):
     summary="Update store rmation",
 )
 async def update_store(
-    store_data: StoreUpdate, session: dbSessionDep, current_store: CurrentStore
+    store_data: StoreUpdate, session: dbSessionDep, current_store: CurrentActiveStore
 ):
     return await store_service.update(
         session, store_data.model_dump(exclude_unset=True), current_store
@@ -85,7 +90,7 @@ async def update_store(
     status_code=status.HTTP_200_OK,
     summary="Deactivate Store account",
 )
-async def deactivate_store(current_store: CurrentStore, db: dbSessionDep):
+async def deactivate_store(current_store: CurrentActiveStore, db: dbSessionDep):
     return await store_service.deactivate(db, current_store)
 
 
@@ -95,7 +100,7 @@ async def deactivate_store(current_store: CurrentStore, db: dbSessionDep):
     status_code=status.HTTP_200_OK,
     summary="Activate Store account",
 )
-async def activate_store(current_store: CurrentStore, db: dbSessionDep):
+async def activate_store(current_store: CurrentActiveStore, db: dbSessionDep):
     return await store_service.activate(db, current_store)
 
 
@@ -105,5 +110,5 @@ async def activate_store(current_store: CurrentStore, db: dbSessionDep):
     status_code=status.HTTP_200_OK,
     summary="Delete store rmation",
 )
-async def delete_store(session: dbSessionDep, current_store: CurrentStore):
+async def delete_store(session: dbSessionDep, current_store: CurrentActiveStore):
     return await store_service.delete(session, current_store)

@@ -87,6 +87,7 @@ class StoreCRUDService:
                 id=str(current_store.id),
                 user_id=str(current_store.user_id),
                 name=current_store.name,
+                is_active=current_store.is_active,
                 created_at=current_store.created_at.isoformat(),
                 updated_at=current_store.updated_at.isoformat(),
             )

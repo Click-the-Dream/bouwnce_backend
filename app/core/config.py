@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 class Config(BaseModel):
     # Common settings
     API_STR: str = config("API_STR", default="api/v1")
-    PORT: int = config("PORT", 8000)
+    PORT: int = config("PORT", 8000, cast=int)
 
     SQLALCHEMY_DATABASE_URL: str
 
@@ -18,9 +18,9 @@ class Config(BaseModel):
 
     ALGORITHM: str = config("ALGORITHM")
 
-    SMTP_TLS: bool = config("SMTP_TLS")
-    SMTP_SSL: bool = config("SMTP_SSL")
-    SMTP_PORT: int = config("SMTP_PORT")
+    SMTP_TLS: bool = config("SMTP_TLS", cast=bool)
+    SMTP_SSL: bool = config("SMTP_SSL", cast=bool)
+    SMTP_PORT: int = config("SMTP_PORT", cast=int)
     SMTP_HOST: str | None = config("SMTP_HOST")
     SMTP_USER: str | None = config("SMTP_USER")
     SMTP_PASSWORD: str = config("SMTP_PASSWORD")

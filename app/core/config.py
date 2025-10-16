@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr
 class Config(BaseModel):
     # Common settings
     API_STR: str = config("API_STR", default="api/v1")
+    PORT: int = config("PORT", 8000)
 
     SQLALCHEMY_DATABASE_URL: str
 

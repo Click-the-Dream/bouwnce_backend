@@ -9,8 +9,6 @@ from jinja2 import Template
 
 from app.core.config import settings
 
-resend.api_key = settings.RESEND_API_KEY
-
 
 @dataclass
 class EmailData:
@@ -18,18 +16,22 @@ class EmailData:
     subject: str
 
 
-conf = ConnectionConfig(
-    MAIL_USERNAME=settings.SMTP_USER,
-    MAIL_PASSWORD=settings.SMTP_PASSWORD,
-    MAIL_FROM=settings.EMAILS_FROM_EMAIL,
-    MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
-    MAIL_PORT=settings.SMTP_PORT,
-    MAIL_SERVER=settings.SMTP_HOST,
-    MAIL_SSL_TLS=settings.SMTP_TLS,
-    MAIL_STARTTLS=settings.SMTP_SSL,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True,
-)
+# Setting up email service depeinding on the environment
+if settings.NAME == "staging":
+    resend.api_key = settings.RESEND_API_KEY
+elif settings.NAME == "dev":
+    conf = ConnectionConfig(
+        MAIL_USERNAME=settings.SMTP_USER,
+        MAIL_PASSWORD=settings.SMTP_PASSWORD,
+        MAIL_FROM=settings.EMAILS_FROM_EMAIL,
+        MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
+        MAIL_PORT=settings.SMTP_PORT,
+        MAIL_SERVER=settings.SMTP_HOST,
+        MAIL_SSL_TLS=settings.SMTP_TLS,
+        MAIL_STARTTLS=settings.SMTP_SSL,
+        USE_CREDENTIALS=True,
+        VALIDATE_CERTS=True,
+    )
 
 
 def render_email_templates(*, template_name: str, context: dict[str, Any]) -> str:
@@ -64,7 +66,7 @@ async def send_email_using_resend(
         return False
 
 
-async def send_email(
+async def send_email_using_smtp(
     *, email_to: str, subject: str = "", html_content: str = ""
 ) -> bool:
 
@@ -81,6 +83,21 @@ async def send_email(
         print("❌email not sent to: ", email_to)
         print("❌error: ", e)
         return False
+
+
+# Dynamically send email using different service depending on the environment
+async def send_email(
+    *, email_to: str, subject: str = "", html_content: str = ""
+) -> bool:
+
+    if settings.NAME == "staging":
+        return await send_email_using_resend(
+            email_to=email_to, subject=subject, html_content=html_content
+        )
+    elif settings.NAME == "dev":
+        return await send_email_using_smtp(
+            email_to=email_to, subject=subject, html_content=html_content
+        )
 
 
 def generate_test_email(email_to: str) -> EmailData:

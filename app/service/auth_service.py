@@ -9,11 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import create_access_token
 from app.models.user import User
 from app.schemas.user import UserResponse
-from app.utils.emails import (
-    generate_login_verification_email,
-    send_email,
-    send_email_using_resend,
-)
+from app.utils.emails import generate_login_verification_email, send_email
 from app.utils.responses import response_builder
 
 
@@ -45,7 +41,7 @@ class AuthService:
 
             email_data = generate_login_verification_email(new_user.username, otp)
             background_tasks.add_task(
-                send_email_using_resend,
+                send_email,
                 email_to=new_user.email,
                 subject=email_data.subject,
                 html_content=email_data.html_content,

@@ -3,10 +3,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import resend
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
 from jinja2 import Template
 
 from app.core.config import settings
+
+resend.api_key = settings.RESEND_API_KEY
 
 
 @dataclass
@@ -36,6 +39,29 @@ def render_email_templates(*, template_name: str, context: dict[str, Any]) -> st
 
     html_content = Template(template_str).render(context)
     return html_content
+
+
+async def send_email_using_resend(
+    *, email_to: str, subject: str = "", html_content: str = ""
+) -> resend.Emails.SendResponse | bool:
+
+    params: resend.Emails.SendParams = {
+        "from": f"{settings.PROJECT_NAME} {settings.RESEND_EMAIL}",
+        "to": email_to,
+        "subject": subject,
+        "html": html_content,
+    }
+
+    try:
+        print("📧sending email to: ", email_to)
+        email = resend.Emails.send(params)
+        print("✅email sent to: ", email_to)
+        print(email)
+        return email
+    except Exception as e:
+        print("❌email not sent to: ", email_to)
+        print("❌error: ", e)
+        return False
 
 
 async def send_email(

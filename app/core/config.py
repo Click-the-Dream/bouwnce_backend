@@ -12,6 +12,8 @@ class Config(BaseModel):
     MONGODB_DATABASE_URL: str = config("MONGODB_DATABASE_URL")
     MONGODB_DB_NAME: str = config("MONGODB_DB_NAME")
 
+    RESEND_API_KEY: str = config("RESEND_API_KEY")
+    RESEND_EMAIL: str = config("RESEND_EMAIL")
     REDIS_URL: str = config("REDIS_URL")
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")

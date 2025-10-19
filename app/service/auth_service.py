@@ -9,11 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import create_access_token
 from app.models.user import User
 from app.schemas.user import UserResponse
-from app.utils.emails import (
-    generate_login_verification_email,
-    send_email,
-    send_email_using_resend,
-)
+from app.utils.emails import generate_login_verification_email, send_email
 from app.utils.responses import response_builder
 
 
@@ -45,13 +41,16 @@ class AuthService:
 
             email_data = generate_login_verification_email(new_user.username, otp)
             background_tasks.add_task(
-                send_email_using_resend,
+                send_email,
                 email_to=new_user.email,
                 subject=email_data.subject,
                 html_content=email_data.html_content,
             )
 
             user_data = UserResponse(**new_user.to_dict())
+
+            # Temporarily for before email service works perfectly
+            user_data.otp = otp
 
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
@@ -129,6 +128,9 @@ class AuthService:
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="A verification code is sent to the specified email",
+                data={
+                    "otp": otp  # Temporarily for before email service works perfectly
+                },
             )
         except Exception as e:
             print("❌Error occured logging in user: ", str(e))

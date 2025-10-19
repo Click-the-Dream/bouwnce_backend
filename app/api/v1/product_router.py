@@ -186,6 +186,18 @@ async def update_product(
     )
 
 
+@router.patch(
+    "/{id}/toggle-state",
+    summary="toggle product state",
+    status_code=status.HTTP_200_OK,
+    response_model=ProductResponse,
+)
+async def toggle_product_state(id: str, current_store: CurrentStore):
+    return await product_service.toggle_current_store_product_state(
+        current_store.id, id
+    )
+
+
 @router.delete(
     "/me",
     summary="Delete all the prouducts of a vendor",

@@ -27,8 +27,9 @@ class Product(BaseDocument):
     amount: Annotated[int, Field(ge=0)]
     stock: Annotated[int, Field(ge=0)]
     category: str
-    status: str
+    state: str
     images: list[Images]
+    status: str
 
     class Settings:
         name = "products"
@@ -64,9 +65,10 @@ class ProductDomain:
                 raise ValueError("Invalid category name")
 
             image_paths = data["image_paths"]
-            status = "draft"
+            state = "draft"
+            status = "active"
 
-            data["status"] = status
+            data["state"] = state
 
             image_results = await upload_images(image_paths, store_id)
             images = [
@@ -82,6 +84,7 @@ class ProductDomain:
                 amount=int(data["amount"]),
                 stock=int(data["stock"]),
                 category=category.name,
+                state=state,
                 status=status,
                 images=images,
             )
@@ -222,6 +225,21 @@ class ProductDomain:
         await product.save()
 
         return product
+
+    async def deactivate_stores_products(self, store_id: str):
+
+        products = await self.Product.find({"store_id": store_id}).update_many(
+            {"$set": {"status": "inactive"}}
+        )
+
+        return bool(products)
+
+    async def activate_stores_prouducts(self, store_id: str):
+        products = await self.Product.find({"store_id": store_id}).update_many(
+            {"$set": {"status": "active"}}
+        )
+
+        return bool(products)
 
     async def delete_product_image(
         self, product_id: str, image_public_id: str

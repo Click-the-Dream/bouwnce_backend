@@ -22,6 +22,7 @@ class Config(BaseModel):
     CLOUDINARY_SECRET: str = config("CLOUDINARY_SECRET")
     CLOUDINARY_NAME: str = config("CLOUDINARY_NAME")
     EMAIL_VERIFICATION_EXPIRE_MINUTES: int = config("EMAIL_VERIFICATION_EXPIRE_MINUTES")
+    PROJECT_EMAIL: str = config("PROJECT_EMAIL")
 
 
 class ProductionConfig(Config):

@@ -123,7 +123,7 @@ def generate_login_verification_email(username: str, code: str) -> EmailData:
             "verification_code": code,
             "valid_minutes": settings.EMAIL_VERIFICATION_EXPIRE_MINUTES,
             "project_name": settings.PROJECT_NAME,
-            "contact_link": f"mailto: {settings.EMAILS_FROM_EMAIL}",
+            "contact_link": f"mailto: {settings.PROJECT_EMAIL}",
         },
     )
     return EmailData(html_content=html_content, subject=subject)

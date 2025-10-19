@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Store, User
+from app.models.products import product_domain
 from app.schemas import (
     BusinessInfoResponse,
     ContactInfoResponse,
@@ -223,6 +224,10 @@ class StoreCRUDService:
 
         try:
             store.is_active = False
+
+            # Deactive all stores products
+            await product_domain.deactivate_stores_products(str(store.id))
+
             await store.save(db)
             store_response = StoreResponse(**store.to_dict())
 
@@ -244,6 +249,10 @@ class StoreCRUDService:
 
         try:
             store.is_active = True
+
+            # Activate all stores products
+            await product_domain.activate_stores_prouducts(str(store.id))
+
             await store.save(db)
             store_response = StoreResponse(**store.to_dict())
             return response_builder(

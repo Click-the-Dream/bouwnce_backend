@@ -64,6 +64,14 @@ class ProductService:
 
         try:
             product = await product_domain.get_product_by_id(product_id)
+
+            if product.state != "live" or product.status != "active":
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="product with specified ID not found",
+                )
+
             product_resposne = ProductResponse(**product_domain.to_dict(product))
 
             return response_builder(
@@ -97,7 +105,8 @@ class ProductService:
         per_page: int | None = 10,
     ) -> list[ProductResponse]:
         try:
-            filter = {}
+            filter = {"state": "live", "status": "active"}
+
             if name:
                 filter["name"] = name
 
@@ -138,7 +147,7 @@ class ProductService:
         page: int | None = 1,
         per_page: int | None = 10,
     ) -> list[ProductResponse]:
-        filter_dict = {}
+        filter_dict = {"state": "live", "status": "active"}
 
         if product_name:
             filter_dict["name"] = product_name
@@ -221,6 +230,46 @@ class ProductService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="Error occurred while updating product",
+            )
+
+    async def toggle_current_store_product_state(
+        self, store_id: str, product_id: str
+    ) -> ProductResponse:
+        try:
+            product = await product_domain.get_product_by_id(product_id)
+            if product.store_id != store_id:
+                return response_builder(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    status="error",
+                    message="Product doesn't below the this store",
+                )
+
+            state = product.state
+            product.state = "active" if product.state == "draft" else "draft"
+
+            if state == "active":
+                message = "successfully toggle product state from active to draft"
+            else:
+                message = "successfully toggle product state from draft to active"
+
+            await product.save()
+            return response_builder(
+                status_code=status.HTTP_200_OK, status="error", message=message
+            )
+        except ValueError as ve:
+            return response_builder(
+                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
+            )
+        except Exception as e:
+            print("Error occured while toggling product state: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while toggling product state",
             )
 
     async def delete_products_by_id(self, product_id: str, store_id: str):

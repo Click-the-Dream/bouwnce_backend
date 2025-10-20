@@ -112,7 +112,7 @@ class RateLimiter:
             credentials: SecurityDep | None = None,
         ):
             ip = self._get_client_ip(request)
-            ip_key = f"rl:ip:{ip}:{ip_seconds}"
+            ip_key = f"rl:ip:{ip}:{ip_seconds}:{request.url.path.replace('/', '_')}"
 
             ip_limit, ip_count = self.is_rate_limited(ip_key, ip_times, ip_seconds)
 
@@ -143,7 +143,7 @@ class RateLimiter:
                     pass
 
             if user_id:
-                user_key = f"rl:user:{user_id}:{user_seconds}"
+                user_key = f"rl:user:{user_id}:{user_seconds}:{request.url.path.replace('/', '_')}"
 
                 user_limit, user_count = self.is_rate_limited(
                     user_key, user_times, user_seconds

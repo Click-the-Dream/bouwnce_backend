@@ -33,3 +33,17 @@ from app.schemas.store_crud import (
     StoreUpdate,
     StoreResponse
 )
+
+from app.schemas.vendor_dashboard import (
+    OverviewDashboardResponse,
+    RecentOrder,
+    TopProduct,
+    WithdrawalHistory,
+    WalletDashboardResponse,
+    VendorOrderItem,
+    PaginatedOrders,
+    VendorOrdersDashboardResponse,
+    VendorCustomerItem,
+    PaginatedCustomers,
+    VendorCustomersDashboardResponse
+)

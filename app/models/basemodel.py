@@ -10,6 +10,7 @@ from app.db.postgres_db_conn import Base
 from typing import Any, Optional, TypeVar, Type
 from sqlalchemy.orm import selectinload
 from uuid import UUID as UUID_Type
+from sqlalchemy.sql import text
 
 T = TypeVar("T", bound="BaseModel")  
 
@@ -115,37 +116,69 @@ class BaseModel(Base):
 
     @classmethod
     async def get_by(
-        cls, filter: dict, db: AsyncSession, page: int = 1, page_size: int = 10
-    ) -> list[Self]:
+        cls,
+        db: AsyncSession,
+        filter: dict | None = None,
+        page: int = 1,
+        page_size: int = 10,
+        order_by: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict:
 
         query = select(cls)
         or_condition = []
 
-        for key, value in filter.items():
-            if hasattr(cls, key):
-                column = getattr(cls, key)
-                if isinstance(value, str) and "%" in value:
-                    or_condition.append(column.ilike(value))
-                elif value is None:
-                    or_condition.append(column.is_(None))
-                else:
-                    or_condition.append(column == value)
+        if filter:
+            for key, value in filter.items():
+                if hasattr(cls, key):
+                    column = getattr(cls, key)
+                    if isinstance(value, str) and "%" in value:
+                        or_condition.append(column.ilike(value))
+                    elif value is None:
+                        or_condition.append(column.is_(None))
+                    else:
+                        or_condition.append(column == value)
 
         if or_condition:
             query = query.where(or_(*or_condition))
 
-        offset = (page - 1) * page_size
+        if hasattr(cls, "created_at"):
+            if date_from:
+                query = query.where(getattr(cls, "created_at") >= text(f"'{date_from}'"))
+            if date_to:
+                query = query.where(getattr(cls, "created_at") <= text(f"'{date_to}'"))
 
-        count_query = query.with_only_columns(func.count()).order_by(None)
+        if order_by:
+            descending = order_by.startswith("-")
+            order_field = order_by.lstrip("-")
+            if hasattr(cls, order_field):
+                col = getattr(cls, order_field)
+                query = query.order_by(col.desc() if descending else col.asc())
+
+        offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
 
-        result = await db.execute(query)
+
+        count_query = query.with_only_columns(func.count()).order_by(None)
         count_result = await db.execute(count_query)
+        total = count_result.scalar() or 0
 
+
+        result = await db.execute(query)
         objs = result.scalars().all()
-        count = count_result.scalar()
 
-        return {"data": objs, "total": count, "page": page, "page_size": page_size}
+
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+        return {
+            "data": objs,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
 
     @classmethod
     async def undelete_by_id(cls, id: str, db: AsyncSession) -> Self:

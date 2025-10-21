@@ -1,7 +1,7 @@
 from fastapi.responses import JSONResponse
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import Store, User
+from app.models import Store, Wallet, WalletTransaction
 from app.utils.responses import response_builder
 from typing import Any
 from app.schemas import StoreResponse
@@ -14,6 +14,8 @@ class StoreCRUDService:
         try:
             data["user_id"] = user.id
             new_store = await Store.create(data, session)
+            wallet = await Wallet.create({"user_id": user.id}, session)
+            await WalletTransaction.create({"wallet_id": wallet.id}, session)
             data = StoreResponse(**new_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,

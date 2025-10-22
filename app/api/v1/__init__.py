@@ -12,6 +12,7 @@ from app.api.v1 import (
     store_info_crud,
     user_router,
     verification_router,
+    vendor_dashboard,
 )
 
 user_api_router = APIRouter(prefix="/users")
@@ -30,6 +31,8 @@ store_router.include_router(store_info_crud.router)
 store_router.include_router(shipments_info_crud.router)
 store_router.include_router(store_crud.router)
 
+vendor_dashboard_router = APIRouter(prefix="/vendor/dashboard")
+vendor_dashboard_router.include_router(vendor_dashboard.router)
 
 api_router = APIRouter()
 

@@ -10,7 +10,7 @@ from app.schemas import (
 from app.service import VendorDashBoardService
 from app.api.dependencies import dbSessionDep, CurrentStore
 
-router = APIRouter(tags=["Dashboard Information"], prefix="/dashboard")
+router = APIRouter(tags=["Dashboard Information"])
 
 @router.get(
     "/overview", 

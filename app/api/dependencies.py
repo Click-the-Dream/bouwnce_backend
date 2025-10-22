@@ -104,7 +104,6 @@ CurrentActiveUser = Annotated[User, Depends(get_current_active_user)]
 async def get_current_vendor(
     current_user: CurrentActiveUser,
 ) -> User | None:
-    print(current_user.role)
     if current_user.role != "vendor":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -136,8 +135,21 @@ async def get_current_store(
     current_vendor: CurrentVendor, db: dbSessionDep
 ) -> User | None:
     try:
-        store = await Store.filter_by(filter={"user_id": current_vendor.id}, db=db, preload=True)
-        return store
+        store = await Store.filter_by(
+            filter={"user_id": current_vendor.id},
+            db=db,
+            preload=[
+                "business_info",
+                "contact_info",
+                "payout_info",
+                "shipment_info",
+                "store_info",
+            ],
+        )
+        if len(store) == 0:
+            raise ValueError("User doesn't have a store")
+
+        return store[0]
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -147,3 +159,16 @@ async def get_current_store(
 
 
 CurrentStore = Annotated[Store, Depends(get_current_store)]
+
+
+async def get_current_active_store(current_store: CurrentStore):
+    if not current_store.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Store is not active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return current_store
+
+
+CurrentActiveStore = Annotated[Store, Depends(get_current_active_store)]

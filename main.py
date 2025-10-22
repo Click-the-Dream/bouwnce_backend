@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.db.mongo import mongo_conn
+
 
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
@@ -38,3 +40,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_STR)
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=settings.PORT)

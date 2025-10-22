@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import resend
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
 from jinja2 import Template
 
@@ -15,18 +16,22 @@ class EmailData:
     subject: str
 
 
-conf = ConnectionConfig(
-    MAIL_USERNAME=settings.SMTP_USER,
-    MAIL_PASSWORD=settings.SMTP_PASSWORD,
-    MAIL_FROM=settings.EMAILS_FROM_EMAIL,
-    MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
-    MAIL_PORT=settings.SMTP_PORT,
-    MAIL_SERVER=settings.SMTP_HOST,
-    MAIL_SSL_TLS=False,
-    MAIL_STARTTLS=True,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True,
-)
+# Setting up email service depeinding on the environment
+if settings.NAME == "staging":
+    resend.api_key = settings.RESEND_API_KEY
+elif settings.NAME == "dev":
+    conf = ConnectionConfig(
+        MAIL_USERNAME=settings.SMTP_USER,
+        MAIL_PASSWORD=settings.SMTP_PASSWORD,
+        MAIL_FROM=settings.EMAILS_FROM_EMAIL,
+        MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
+        MAIL_PORT=settings.SMTP_PORT,
+        MAIL_SERVER=settings.SMTP_HOST,
+        MAIL_SSL_TLS=settings.SMTP_TLS,
+        MAIL_STARTTLS=settings.SMTP_SSL,
+        USE_CREDENTIALS=True,
+        VALIDATE_CERTS=True,
+    )
 
 
 def render_email_templates(*, template_name: str, context: dict[str, Any]) -> str:
@@ -38,7 +43,31 @@ def render_email_templates(*, template_name: str, context: dict[str, Any]) -> st
     return html_content
 
 
-async def send_email(
+async def send_email_using_resend(
+    *, email_to: str, subject: str = "", html_content: str = ""
+) -> resend.Emails.SendResponse | bool:
+
+    print(f"{settings.PROJECT_NAME} <{settings.RESEND_EMAIL}>")
+    params: resend.Emails.SendParams = {
+        "from": f"{settings.PROJECT_NAME} <{settings.RESEND_EMAIL}>",
+        "to": email_to,
+        "subject": subject,
+        "html": html_content,
+    }
+
+    try:
+        print("📧sending email to: ", email_to)
+        email = resend.Emails.send(params)
+        print("✅email sent to: ", email_to)
+        print(email)
+        return email
+    except Exception as e:
+        print("❌email not sent to: ", email_to)
+        print("❌error: ", e)
+        return False
+
+
+async def send_email_using_smtp(
     *, email_to: str, subject: str = "", html_content: str = ""
 ) -> bool:
 
@@ -55,6 +84,21 @@ async def send_email(
         print("❌email not sent to: ", email_to)
         print("❌error: ", e)
         return False
+
+
+# Dynamically send email using different service depending on the environment
+async def send_email(
+    *, email_to: str, subject: str = "", html_content: str = ""
+) -> bool:
+
+    if settings.NAME == "staging":
+        return await send_email_using_resend(
+            email_to=email_to, subject=subject, html_content=html_content
+        )
+    elif settings.NAME == "dev":
+        return await send_email_using_smtp(
+            email_to=email_to, subject=subject, html_content=html_content
+        )
 
 
 def generate_test_email(email_to: str) -> EmailData:
@@ -80,7 +124,7 @@ def generate_login_verification_email(username: str, code: str) -> EmailData:
             "verification_code": code,
             "valid_minutes": settings.EMAIL_VERIFICATION_EXPIRE_MINUTES,
             "project_name": settings.PROJECT_NAME,
-            "contact_link": f"mailto: {settings.EMAILS_FROM_EMAIL}",
+            "contact_link": f"mailto: {settings.PROJECT_EMAIL}",
         },
     )
     return EmailData(html_content=html_content, subject=subject)

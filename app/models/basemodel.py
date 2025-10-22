@@ -1,18 +1,19 @@
 from datetime import UTC, datetime
-from typing import Self
+from typing import Any, Self, TypeVar
+from uuid import UUID as UUID_Type
 from uuid import uuid4
-
-from sqlalchemy import Boolean, Column, DateTime, func, or_, select
+from sqlalchemy import Boolean, Column, DateTime, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from app import db
+from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import text
 from app.db.postgres_db_conn import Base
 from typing import Any, Optional, TypeVar, Type
 from sqlalchemy.orm import selectinload
 from uuid import UUID as UUID_Type
-from sqlalchemy.sql import text
 
-T = TypeVar("T", bound="BaseModel")  
+T = TypeVar("T", bound="BaseModel")
+
 
 class BaseModel(Base):
     __abstract__ = True
@@ -39,19 +40,29 @@ class BaseModel(Base):
 
         return obj_dict
 
-    async def save(self, db: AsyncSession) -> Self:
+    async def save(
+        self, db: AsyncSession, attribute_names: list[str] | None = None
+    ) -> Self:
 
         self.updated_at = datetime.now(UTC)
 
         db.add(self)
         await db.flush()
-        await db.refresh(self)
+        if attribute_names:
+            await db.refresh(self, attribute_names=attribute_names)
+        else:
+            await db.refresh(self)
 
         return self
 
     @classmethod
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
-        result = await db.execute(select(cls).where(cls.id == id))
+        if hasattr(cls, "is_active"):
+            result = await db.execute(
+                select(cls).where(and_(cls.is_active.is_(True), cls.id == id))
+            )
+        else:
+            result = await db.execute(select(cls).where(cls.id == id))
 
         obj = result.scalar_one_or_none()
         if not obj:
@@ -140,7 +151,9 @@ class BaseModel(Base):
                     else:
                         or_condition.append(column == value)
 
-        if or_condition:
+        if or_condition and hasattr(cls, "is_active"):
+            query = query.filter(and_(cls.is_active.is_(True), or_(*or_condition)))
+        elif or_condition:
             query = query.where(or_(*or_condition))
 
         if hasattr(cls, "created_at"):
@@ -167,18 +180,9 @@ class BaseModel(Base):
 
         result = await db.execute(query)
         objs = result.scalars().all()
+        count = count_result.scalar()
 
-
-        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
-
-        return {
-            "data": objs,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-        }
-
+        return {"data": objs, "total": count, "page": page, "page_size": page_size}
 
     @classmethod
     async def undelete_by_id(cls, id: str, db: AsyncSession) -> Self:
@@ -210,17 +214,17 @@ class BaseModel(Base):
         if user and user.role == user_type:
             return user
         return None
-   
+
     @classmethod
     async def filter_by(
-        cls: Type[T],
+        cls: type[T],
         filter: dict[str, Any],
         db: AsyncSession,
-        preload: Optional[list[str] | bool] = None
+        preload: list[str] | bool | None = None,
     ) -> list[T]:
         if preload is None:
             preload = []
-        
+
         # if preload=True, load all relationships
         if preload is True:
             preload = [relation.key for relation in cls.__mapper__.relationships]
@@ -243,9 +247,9 @@ class BaseModel(Base):
 
         result = await db.execute(query)
         return result.scalars().all()
-    
+
     async def update(self, db: AsyncSession, data: dict[str, Any]) -> Self:
-       
+
         for key, value in data.items():
             if hasattr(self, key):
                 setattr(self, key, value)

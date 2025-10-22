@@ -26,6 +26,7 @@ class UserResponse(UserBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     is_active: Annotated[bool, Field(examples=[True])]
     role: Annotated[str, Field(examples=["user"])]
+    otp: Annotated[str | None, Field(examples=["123456"])] = None
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
 

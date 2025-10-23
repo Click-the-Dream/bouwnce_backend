@@ -1,6 +1,5 @@
-from typing_extensions import Annotated
 from fastapi.responses import JSONResponse
-from fastapi import APIRouter, Depends, status, Query
+from fastapi import APIRouter, status, Query
 from app.schemas import (
     OverviewDashboardResponse,
     WalletDashboardResponse,

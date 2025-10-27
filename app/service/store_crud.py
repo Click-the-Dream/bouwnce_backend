@@ -28,7 +28,8 @@ class StoreCRUDService:
         try:
             data["user_id"] = user.id
             new_store = await Store.create(data, db)
-            new_store = await Store.create(data, db)
+            user.is_store_owner = True
+            await user.save(db)
             wallet = await Wallet.create({"user_id": user.id}, db)
             await WalletTransaction.create({"wallet_id": wallet.id}, db)
             data = StoreResponse(**new_store.to_dict())

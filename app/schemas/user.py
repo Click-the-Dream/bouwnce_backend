@@ -1,6 +1,5 @@
 from enum import Enum
 from typing import Annotated
-
 from pydantic import BaseModel, EmailStr, Field
 
 

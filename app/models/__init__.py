@@ -1,5 +1,4 @@
 from app.models.basemodel import BaseModel
-from app.models.buisiness_info import BusinessInfo
 from app.models.cart import Cart
 from app.models.contact_info import ContactInfo
 from app.models.inventory import Inventory
@@ -19,7 +18,6 @@ from app.models.wallet_transaction import WalletTransaction
 
 __all__ = [
     "BaseModel",
-    "BusinessInfo",
     "Cart",
     "ContactInfo",
     "PayoutInfo",

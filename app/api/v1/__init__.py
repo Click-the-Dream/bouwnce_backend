@@ -2,7 +2,6 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     auth_router,
-    buisiness_info_crud,
     cart_router,
     contact_info_crud,
     payout_info_crud,
@@ -24,7 +23,6 @@ user_api_router.include_router(verification_router.router)
 
 store_router = APIRouter(prefix="/store")
 
-store_router.include_router(buisiness_info_crud.router)
 store_router.include_router(contact_info_crud.router)
 store_router.include_router(payout_info_crud.router)
 store_router.include_router(store_info_crud.router)

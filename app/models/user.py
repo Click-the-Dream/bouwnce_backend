@@ -22,7 +22,7 @@ class User(BaseModel):
     )
     otp = Column(String(6))
     otp_time = Column(DateTime(timezone=True))
-
+    is_store_owner = Column(Boolean, default=False)
     stores = relationship("Store", back_populates="user", cascade="all, delete-orphan")
 
     verification = relationship(

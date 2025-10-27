@@ -96,13 +96,6 @@ class StoreCRUDService:
                 created_at=current_store.created_at.isoformat(),
                 updated_at=current_store.updated_at.isoformat(),
             )
-
-            if current_store.business_info:
-                print(current_store.business_info.to_dict())
-                store_full_response.business_info = BusinessInfoResponse(
-                    **current_store.business_info.to_dict()
-                )
-
             if current_store.contact_info:
                 store_full_response.contact_info = ContactInfoResponse(
                     **current_store.contact_info.to_dict()

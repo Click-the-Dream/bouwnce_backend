@@ -2,7 +2,6 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from app.schemas.business_info_crud import BusinessInfoResponse
 from app.schemas.contact_info_crud import ContactInfoResponse
 from app.schemas.payout_info_crud import PayoutInfoResponse
 from app.schemas.shipments_info_crud import ShipmentsInfoResponse

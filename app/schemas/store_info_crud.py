@@ -4,8 +4,9 @@ from typing import Annotated
 
 class StoreInfoBase(BaseModel):
     store_logo: Annotated[str, Field(min_length=5, examples=["https://example.com/logo.png"])]
-    store_banner: Annotated[str | None, Field(min_length=5, examples=["https://example.com/banner.png"])] = None
-    store_description: Annotated[str, Field(min_length=10, examples=["This is a great store."])]
+    address: Annotated[str, Field(min_length=5, examples=["123 Main St, Anytown, USA"])]
+    phone_number: Annotated[str, Field(min_length=10, examples=["(123) 456-7890"])]
+    email: Annotated[str, Field(min_length=5, examples=["info@example.com"])]
     
 class StoreInfoCreate(StoreInfoBase):
     pass
@@ -18,8 +19,6 @@ class StoreInfoResponse(StoreInfoBase):
 
 class StoreInfoUpdate(BaseModel):
     store_logo: Annotated[str | None, Field(min_length=5, examples=["https://example.com/logo.png"])] = None
-    store_banner: Annotated[str | None, Field(min_length=5, examples=["https://example.com/banner.png"])] = None
-    store_description: Annotated[str | None, Field(min_length=10, examples=["This is a great store."])] = None
-
-class StoreInfoDelete(BaseModel):
-    id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
+    address: Annotated[str | None, Field(min_length=5, examples=["123 Main St, Anytown, USA"])] = None
+    phone_number: Annotated[str | None, Field(min_length=10, examples=["(123) 456-7890"])] = None
+    email: Annotated[str | None, Field(min_length=5, examples=["info@example.com"])] = None

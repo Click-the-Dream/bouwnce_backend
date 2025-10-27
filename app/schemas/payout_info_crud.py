@@ -8,6 +8,7 @@ class PayoutInfoBase(BaseModel):
     bank_name: Annotated[str, Field(min_length=2, examples=["Bank of World"])]
     security_question: Annotated[str, Field(min_length=5, examples=["What is your pet's name?"])]
     security_answer: Annotated[str, Field(min_length=2, examples=["Fluffy"])]
+    withdrawal_pin: Annotated[str, Field(min_length=6, max_length=6, examples=["123456"])]
     
 class PayoutInfoCreate(PayoutInfoBase):
    pass
@@ -24,3 +25,4 @@ class PayoutInfoUpdate(BaseModel):
     bank_name: Annotated[str | None, Field(min_length=2, examples=["Bank of World"])] = None
     security_question: Annotated[str | None, Field(min_length=5, examples=["What is your pet's name?"])] = None
     security_answer: Annotated[str | None, Field(min_length=2, examples=["Fluffy"])] = None
+    withdrawal_pin: Annotated[str | None, Field(min_length=6, max_length=6, examples=["123456"])] = None

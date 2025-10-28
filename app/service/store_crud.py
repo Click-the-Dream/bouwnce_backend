@@ -15,6 +15,7 @@ from app.schemas import (
     StoreInfoResponse,
     StoreResponse,
 )
+from app.models import Store, Wallet, WalletTransaction
 from app.utils.responses import response_builder
 
 
@@ -27,6 +28,10 @@ class StoreCRUDService:
         try:
             data["user_id"] = user.id
             new_store = await Store.create(data, db)
+            user.is_store_owner = True
+            await user.save(db)
+            wallet = await Wallet.create({"user_id": user.id}, db)
+            await WalletTransaction.create({"wallet_id": wallet.id}, db)
             data = StoreResponse(**new_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
@@ -92,13 +97,6 @@ class StoreCRUDService:
                 created_at=current_store.created_at.isoformat(),
                 updated_at=current_store.updated_at.isoformat(),
             )
-
-            if current_store.business_info:
-                print(current_store.business_info.to_dict())
-                store_full_response.business_info = BusinessInfoResponse(
-                    **current_store.business_info.to_dict()
-                )
-
             if current_store.contact_info:
                 store_full_response.contact_info = ContactInfoResponse(
                     **current_store.contact_info.to_dict()

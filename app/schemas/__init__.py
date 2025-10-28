@@ -22,8 +22,23 @@ from app.schemas.store_crud import (
     StoreCreate,
     StoreFullDetailsResponse,
     StoreResponse,
-    StoreUpdate,
+    StoreUpdate
 )
+
+from app.schemas.vendor_dashboard import (
+    OverviewDashboardResponse,
+    RecentOrder,
+    TopProduct,
+    WithdrawalHistory,
+    WalletDashboardResponse,
+    VendorOrderItem,
+    PaginatedOrders,
+    VendorOrdersDashboardResponse,
+    VendorCustomerItem,
+    PaginatedCustomers,
+    VendorCustomersDashboardResponse
+)
+
 from app.schemas.store_info_crud import (
     StoreInfoCreate,
     StoreInfoResponse,
@@ -50,4 +65,15 @@ __all__ = [
     "StoreInfoCreate",
     "StoreInfoResponse",
     "StoreInfoUpdate",
+    "OverviewDashboardResponse",
+    "RecentOrder",
+    "TopProduct",
+    "WithdrawalHistory",
+    "WalletDashboardResponse",
+    "VendorOrderItem",
+    "PaginatedOrders",
+    "VendorOrdersDashboardResponse",
+    "VendorCustomerItem",
+    "PaginatedCustomers",
+    "VendorCustomersDashboardResponse"
 ]

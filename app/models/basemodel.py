@@ -2,13 +2,15 @@ from datetime import UTC, datetime
 from typing import Any, Self, TypeVar
 from uuid import UUID as UUID_Type
 from uuid import uuid4
-
 from sqlalchemy import Boolean, Column, DateTime, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
+from sqlalchemy.sql import text
 from app.db.postgres_db_conn import Base
+from typing import Any, Optional, TypeVar, Type
+from sqlalchemy.orm import selectinload
+from uuid import UUID as UUID_Type
 
 T = TypeVar("T", bound="BaseModel")
 
@@ -125,37 +127,61 @@ class BaseModel(Base):
 
     @classmethod
     async def get_by(
-        cls, filter: dict, db: AsyncSession, page: int = 1, page_size: int = 10
-    ) -> list[Self]:
+        cls,
+        db: AsyncSession,
+        filter: dict | None = None,
+        page: int = 1,
+        page_size: int = 10,
+        order_by: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict:
 
         query = select(cls)
         or_condition = []
 
-        for key, value in filter.items():
-            if hasattr(cls, key):
-                column = getattr(cls, key)
-                if isinstance(value, str) and "%" in value:
-                    or_condition.append(column.ilike(value))
-                elif value is None:
-                    or_condition.append(column.is_(None))
-                else:
-                    or_condition.append(column == value)
+        if filter:
+            for key, value in filter.items():
+                if hasattr(cls, key):
+                    column = getattr(cls, key)
+                    if isinstance(value, str) and "%" in value:
+                        or_condition.append(column.ilike(value))
+                    elif value is None:
+                        or_condition.append(column.is_(None))
+                    else:
+                        or_condition.append(column == value)
 
         if or_condition and hasattr(cls, "is_active"):
             query = query.filter(and_(cls.is_active.is_(True), or_(*or_condition)))
         elif or_condition:
             query = query.where(or_(*or_condition))
 
-        offset = (page - 1) * page_size
+        if hasattr(cls, "created_at"):
+            if date_from:
+                query = query.where(getattr(cls, "created_at") >= text(f"'{date_from}'"))
+            if date_to:
+                query = query.where(getattr(cls, "created_at") <= text(f"'{date_to}'"))
 
-        count_query = query.with_only_columns(func.count()).order_by(None)
+        if order_by:
+            descending = order_by.startswith("-")
+            order_field = order_by.lstrip("-")
+            if hasattr(cls, order_field):
+                col = getattr(cls, order_field)
+                query = query.order_by(col.desc() if descending else col.asc())
+
+        offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
 
-        result = await db.execute(query)
-        count_result = await db.execute(count_query)
 
+        count_query = query.with_only_columns(func.count()).order_by(None)
+        count_result = await db.execute(count_query)
+        total = count_result.scalar() or 0
+
+
+        result = await db.execute(query)
         objs = result.scalars().all()
         count = count_result.scalar()
+
         return {"data": objs, "total": count, "page": page, "page_size": page_size}
 
     @classmethod

@@ -1,5 +1,4 @@
 from app.models.basemodel import BaseModel
-from app.models.buisiness_info import BusinessInfo
 from app.models.cart import Cart
 from app.models.contact_info import ContactInfo
 from app.models.inventory import Inventory
@@ -14,10 +13,11 @@ from app.models.store_info import StoreInfo
 from app.models.suborder import SubOrder
 from app.models.user import User
 from app.models.verification import Verification
+from app.models.wallet import Wallet
+from app.models.wallet_transaction import WalletTransaction
 
 __all__ = [
     "BaseModel",
-    "BusinessInfo",
     "Cart",
     "ContactInfo",
     "PayoutInfo",
@@ -31,4 +31,6 @@ __all__ = [
     "OrderItem",
     "Payment",
     "Inventory",
+    "Wallet",
+    "WalletTransaction",
 ]

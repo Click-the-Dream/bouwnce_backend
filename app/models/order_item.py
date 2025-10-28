@@ -1,5 +1,6 @@
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 
 from app.models.basemodel import BaseModel
@@ -19,8 +20,10 @@ class OrderItem(BaseModel):
     unit_price = Column(Integer, default=0, nullable=False)
     line_price = Column(Integer, default=0, nullable=False)
 
-    suborder = relationship(
-        "SubOrder",
-        back_populates="order_items",
-        uselist=False
-    )
+    suborder = relationship("SubOrder", back_populates="order_items", uselist=False)
+
+    @classmethod
+    async def get_by_suborder_ids(cls, db: AsyncSession, suborder_ids: list[str]):
+        result = await db.execute(select(cls).where(cls.suborder_id.in_(suborder_ids)))
+
+        return result.scalars().all()

@@ -176,6 +176,16 @@ class ProductDomain:
             "per_page": per_page,
         }
 
+    async def get_products_by_ids(self, product_ids: list[str]) -> list[Product]:
+
+        try:
+            product_ids = [PydanticObjectId(id) for id in product_ids]
+        except Exception as e:
+            raise TypeError(str(e)) from None
+
+        products = await self.Product.find(self.Product.id.in_(product_ids)).to_list()
+        return products
+
     async def get_products_by(
         self,
         filter: dict[str, Any],

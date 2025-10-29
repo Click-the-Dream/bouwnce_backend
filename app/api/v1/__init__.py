@@ -8,10 +8,9 @@ from app.api.v1 import (
     product_router,
     shipments_info_crud,
     store_crud,
-    store_info_crud,
     user_router,
-    verification_router,
     vendor_dashboard,
+    verification_router,
 )
 from app.core.rate_limiter import rate_limiter
 
@@ -35,7 +34,6 @@ store_router = APIRouter(prefix="/store")
 
 store_router.include_router(contact_info_crud.router)
 store_router.include_router(payout_info_crud.router)
-store_router.include_router(store_info_crud.router)
 store_router.include_router(shipments_info_crud.router)
 store_router.include_router(store_crud.router)
 

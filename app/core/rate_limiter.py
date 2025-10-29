@@ -2,7 +2,7 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
@@ -11,7 +11,7 @@ from app.db.redis import redis_client
 
 security = HTTPBearer(auto_error=False)
 
-SecurityDep = Annotated[HTTPAuthorizationCredentials, Depends(security)]
+SecurityDep = Annotated[HTTPAuthorizationCredentials, Security(security)]
 
 
 class RateLimiter:
@@ -109,7 +109,7 @@ class RateLimiter:
 
         def _dependency(
             request: Request,
-            credentials: SecurityDep | None = None,
+            credentials: SecurityDep,
         ):
             ip = self._get_client_ip(request)
             ip_key = f"rl:ip:{ip}:{ip_seconds}:{request.url.path.replace('/', '_')}"

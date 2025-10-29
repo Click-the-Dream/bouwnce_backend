@@ -11,7 +11,7 @@ class WalletTransaction(BaseModel):
     wallet_id = Column(
         UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False
     )
-    amount = Column(Float, nullable=False)
+    amount = Column(Float, nullable=False, default=0)
     transaction_type = Column(
         Enum("deposit", "withdrawal", "transfer", name="transaction_type_enum"),
         nullable=False,

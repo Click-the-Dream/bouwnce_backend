@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.inventory import Inventory
 from app.models.products import product_domain
 from app.schemas.product import CategoryResponse, ProductResponse
-from app.utils.cloudinary_utils import save_uploaded_file_temp
+from app.utils.cloudinary_utils import cleanup_temp_files, save_uploaded_file_temp
 from app.utils.responses import response_builder
 
 
@@ -29,6 +29,8 @@ class ProductService:
             product_data["image_paths"] = await save_uploaded_file_temp(images)
 
             product = await product_domain.create_product(product_data, store_id)
+
+            await cleanup_temp_files(product_data["image_paths"])
 
             # Create invontory row
             inventory_data = {
@@ -208,6 +210,7 @@ class ProductService:
                 product = await product_domain.update_product_image(
                     product_id, temp_paths, store_id
                 )
+                await cleanup_temp_files(temp_paths)
 
             product_response = ProductResponse(**product_domain.to_dict(product))
             return response_builder(

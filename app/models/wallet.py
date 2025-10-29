@@ -16,7 +16,7 @@ class Wallet(BaseModel):
     pending_balance = Column(Float, default=0.0)
     withdrawable_balance = Column(Float, default=0.0)
 
-    user = relationship("User", back_populates="wallet")
+    store = relationship("Store", back_populates="wallets", uselist=False)
     transactions = relationship(
         "WalletTransaction",
         back_populates="wallet",

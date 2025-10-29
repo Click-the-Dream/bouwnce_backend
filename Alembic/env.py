@@ -18,6 +18,7 @@ env = os.getenv("FASTAPI_ENV", "development")
 
 print(f"Using environment: {env}")
 settings = config_options[env]
+print(settings.SQLALCHEMY_DATABASE_URL)
 config = context.config
 
 

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Self
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, String, or_, select
+from sqlalchemy import Boolean, Column, DateTime, Enum, String, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 
@@ -22,7 +22,7 @@ class User(BaseModel):
     )
     otp = Column(String(6))
     otp_time = Column(DateTime(timezone=True))
-    is_store_owner = Column(Boolean, default=False)
+    is_store_owner = Column(Boolean, server_default=text("false"), nullable=False)
     stores = relationship("Store", back_populates="user", cascade="all, delete-orphan")
 
     verification = relationship(

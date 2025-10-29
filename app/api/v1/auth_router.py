@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 
 from app.api.dependencies import (
     CurrentUser,
@@ -8,6 +8,7 @@ from app.api.dependencies import (
     dbSessionDep,
     redisSessionDep,
 )
+from app.core.rate_limiter import rate_limiter
 from app.schemas.user import CodeVerification, LoginUser, UserCreate, UserResponse
 from app.service.auth_service import auth_service
 
@@ -15,7 +16,12 @@ router = APIRouter(tags=["Authentication"], prefix="/auth")
 
 
 @router.post(
-    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(rate_limiter.rate_limit_dependency(ip_times=10, ip_seconds=60))
+    ],
 )
 async def register_user(
     user_data: UserCreate, background_taks: BackgroundTasks, db: dbSessionDep
@@ -29,7 +35,12 @@ async def register_user(
 
 
 @router.post(
-    "/verify-code", status_code=status.HTTP_200_OK, response_model=UserResponse
+    "/verify-code",
+    status_code=status.HTTP_200_OK,
+    response_model=UserResponse,
+    dependencies=[
+        Depends(rate_limiter.rate_limit_dependency(ip_times=5, ip_seconds=60))
+    ],
 )
 async def verify_code(
     code_data: CodeVerification,
@@ -38,7 +49,14 @@ async def verify_code(
     return await auth_service.verify_code(code_data.model_dump(), db)
 
 
-@router.post("/login", status_code=status.HTTP_200_OK, response_model=dict[str, Any])
+@router.post(
+    "/resend-otp",
+    status_code=status.HTTP_200_OK,
+    response_model=dict[str, Any],
+    dependencies=[
+        Depends(rate_limiter.rate_limit_dependency(ip_times=3, ip_seconds=60))
+    ],
+)
 async def login_user(
     login_data: LoginUser,
     background_tasks: BackgroundTasks,

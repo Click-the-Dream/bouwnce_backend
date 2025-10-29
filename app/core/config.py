@@ -24,6 +24,10 @@ class Config(BaseModel):
     EMAIL_VERIFICATION_EXPIRE_MINUTES: int = config("EMAIL_VERIFICATION_EXPIRE_MINUTES")
     PROJECT_EMAIL: str = config("PROJECT_EMAIL")
 
+    TRUST_X_FORWARDED_FOR: bool = config(
+        "TRUST_X_FORWARDED_FOR", default=True, cast=bool
+    )
+
 
 class ProductionConfig(Config):
     NAME: str = "production"

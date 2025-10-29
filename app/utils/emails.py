@@ -47,7 +47,6 @@ async def send_email_using_resend(
     *, email_to: str, subject: str = "", html_content: str = ""
 ) -> resend.Emails.SendResponse | bool:
 
-    print(f"{settings.PROJECT_NAME} <{settings.RESEND_EMAIL}>")
     params: resend.Emails.SendParams = {
         "from": f"{settings.PROJECT_NAME} <{settings.RESEND_EMAIL}>",
         "to": email_to,

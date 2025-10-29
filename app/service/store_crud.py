@@ -1,21 +1,24 @@
 from typing import Any
 
-from fastapi import status
+from fastapi import UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Store, User
+from app.models import Store, User, Wallet
 from app.models.products import product_domain
 from app.schemas import (
-    BusinessInfoResponse,
     ContactInfoResponse,
     PayoutInfoResponse,
     ShipmentsInfoResponse,
     StoreFullDetailsResponse,
-    StoreInfoResponse,
     StoreResponse,
 )
-from app.models import Store, Wallet, WalletTransaction
+from app.utils.cloudinary_utils import (
+    cleanup_temp_files,
+    delete_images,
+    save_uploaded_file_temp,
+    upload_image,
+)
 from app.utils.responses import response_builder
 
 
@@ -26,12 +29,23 @@ class StoreCRUDService:
     ) -> JSONResponse:
 
         try:
+            store = await Store.get_by_name(data["name"].lower(), db)
+            if store:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Store with name already exist",
+                )
+
             data["user_id"] = user.id
+            data["name"] = data["name"].lower()
             new_store = await Store.create(data, db)
+
             user.is_store_owner = True
             await user.save(db)
-            wallet = await Wallet.create({"user_id": user.id}, db)
-            await WalletTransaction.create({"wallet_id": wallet.id}, db)
+
+            await Wallet.create({"store_id": new_store.id}, db)
+
             data = StoreResponse(**new_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
@@ -89,14 +103,7 @@ class StoreCRUDService:
 
     async def get_full_details(self, current_store: Store) -> JSONResponse:
         try:
-            store_full_response = StoreFullDetailsResponse(
-                id=str(current_store.id),
-                user_id=str(current_store.user_id),
-                name=current_store.name,
-                is_active=current_store.is_active,
-                created_at=current_store.created_at.isoformat(),
-                updated_at=current_store.updated_at.isoformat(),
-            )
+            store_full_response = StoreFullDetailsResponse(**current_store.to_dict())
             if current_store.contact_info:
                 store_full_response.contact_info = ContactInfoResponse(
                     **current_store.contact_info.to_dict()
@@ -110,11 +117,6 @@ class StoreCRUDService:
             if current_store.shipment_info:
                 store_full_response.shipment_info = ShipmentsInfoResponse(
                     **current_store.shipment_info.to_dict()
-                )
-
-            if current_store.store_info:
-                store_full_response.store_info = StoreInfoResponse(
-                    **current_store.store_info.to_dict()
                 )
 
             return response_builder(
@@ -194,6 +196,119 @@ class StoreCRUDService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="An error occurred while updating the store.",
+            )
+
+    async def update_store_branding(
+        self,
+        store: Store,
+        db: AsyncSession,
+        store_description: str | None = None,
+        store_logo: UploadFile | None = None,
+        store_banner: UploadFile | None = None,
+    ) -> JSONResponse:
+        try:
+            data = {}
+            if store_description:
+                data["store_description"] = store_description
+
+            if store_logo:
+                try:
+                    path = await save_uploaded_file_temp([store_logo])
+                    image_result = await upload_image(path[0], str(store.id))
+                    data["store_logo"] = image_result
+
+                    # # If store has a logo already, delete it after updating is sucessful
+                    if store.store_logo:
+                        previous_image_id = store.store_logo["public_id"]
+                        delete_images([previous_image_id])
+
+                except Exception as e:
+                    raise Exception("Something went wrong: ", str(e)) from None
+                finally:
+                    await cleanup_temp_files(path)
+
+            if store_banner:
+                try:
+                    path = await save_uploaded_file_temp([store_banner])
+                    image_result = await upload_image(path[0], str(store.id))
+                    data["store_banner"] = image_result
+
+                    # If store has banner already, delete it after updating is successfull
+                    if store_banner:
+                        previous_image_id = store.store_banner["public_id"]
+                        delete_images([previous_image_id])
+                except Exception as e:
+                    raise Exception("Something went wrong: ", str(e)) from None
+                finally:
+                    await cleanup_temp_files(path)
+
+            await store.update(db, data)
+
+            store_response = StoreResponse(**store.to_dict())
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully update Store branding",
+                data=store_response,
+            )
+        except Exception as e:
+            print("Error update store branding: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Internal Server Error",
+            )
+
+    async def delete_brand_images(
+        self,
+        db: AsyncSession,
+        store: Store,
+        store_logo: bool | None = None,
+        store_banner: bool | None = None,
+    ):
+        try:
+            public_ids = []
+
+            if store_logo is not None and store.store_logo:
+                public_ids.append(store.store_logo["public_id"])
+
+            if store_banner is not None and store.store_banner:
+                public_ids.append(store.store_banner["public_id"])
+
+            if public_ids:
+                is_deleted = delete_images(public_ids)
+                if is_deleted:
+                    if store_logo:
+                        store.store_logo = None
+
+                    if store_banner:
+                        store.store_banner = None
+
+                    store.save(db)
+                    return response_builder(
+                        status_code=status.HTTP_200_OK,
+                        status="success",
+                        message="Store branding image successfully deleted",
+                    )
+                else:
+                    return response_builder(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        status="error",
+                        message="Unable to delete store brand images",
+                    )
+
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                status="error",
+                message="Nothing to delete",
+            )
+
+        except Exception as e:
+            print("Error delete store brand images: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Internal server error",
             )
 
     async def delete(self, db: AsyncSession, current_store: Store) -> JSONResponse:

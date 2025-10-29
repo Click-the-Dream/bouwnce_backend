@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.v1 import (
     auth_router,
@@ -8,13 +8,22 @@ from app.api.v1 import (
     product_router,
     shipments_info_crud,
     store_crud,
-    store_info_crud,
     user_router,
-    verification_router,
     vendor_dashboard,
+    verification_router,
 )
+from app.core.rate_limiter import rate_limiter
 
-user_api_router = APIRouter(prefix="/users")
+user_api_router = APIRouter(
+    prefix="/users",
+    dependencies=[
+        Depends(
+            rate_limiter.rate_limit_dependency(
+                ip_times=30, ip_seconds=60, user_times=100, user_seconds=60
+            )
+        )
+    ],
+)
 
 user_api_router.include_router(cart_router.router)
 user_api_router.include_router(user_router.router)
@@ -25,7 +34,6 @@ store_router = APIRouter(prefix="/store")
 
 store_router.include_router(contact_info_crud.router)
 store_router.include_router(payout_info_crud.router)
-store_router.include_router(store_info_crud.router)
 store_router.include_router(shipments_info_crud.router)
 store_router.include_router(store_crud.router)
 

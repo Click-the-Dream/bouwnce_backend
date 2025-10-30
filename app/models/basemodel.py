@@ -2,15 +2,14 @@ from datetime import UTC, datetime
 from typing import Any, Self, TypeVar
 from uuid import UUID as UUID_Type
 from uuid import uuid4
+
 from sqlalchemy import Boolean, Column, DateTime, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import text
+
 from app.db.postgres_db_conn import Base
-from typing import Any, Optional, TypeVar, Type
-from sqlalchemy.orm import selectinload
-from uuid import UUID as UUID_Type
 
 T = TypeVar("T", bound="BaseModel")
 
@@ -158,9 +157,9 @@ class BaseModel(Base):
 
         if hasattr(cls, "created_at"):
             if date_from:
-                query = query.where(getattr(cls, "created_at") >= text(f"'{date_from}'"))
+                query = query.where(cls.created_at >= text(f"'{date_from}'"))
             if date_to:
-                query = query.where(getattr(cls, "created_at") <= text(f"'{date_to}'"))
+                query = query.where(cls.created_at <= text(f"'{date_to}'"))
 
         if order_by:
             descending = order_by.startswith("-")
@@ -172,15 +171,12 @@ class BaseModel(Base):
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
 
-
         count_query = query.with_only_columns(func.count()).order_by(None)
         count_result = await db.execute(count_query)
-        total = count_result.scalar() or 0
-
 
         result = await db.execute(query)
         objs = result.scalars().all()
-        count = count_result.scalar()
+        count = count_result.scalar() or 0
 
         return {"data": objs, "total": count, "page": page, "page_size": page_size}
 

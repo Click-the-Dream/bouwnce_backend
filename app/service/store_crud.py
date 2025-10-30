@@ -19,6 +19,7 @@ from app.utils.cloudinary_utils import (
     save_uploaded_file_temp,
     upload_image,
 )
+from app.utils.helper import is_valid_uuid
 from app.utils.responses import response_builder
 
 
@@ -82,7 +83,14 @@ class StoreCRUDService:
 
     async def get_vendor_store(self, vendor_id: str, db: AsyncSession):
         try:
-            stores = await Store.get_by({"user_id": vendor_id}, db)
+            if not is_valid_uuid(vendor_id):
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Invalid vendor id",
+                )
+
+            stores = await Store.get_by(filter={"user_id": vendor_id}, db=db)
             store_response = [
                 StoreResponse(**store.to_dict()) for store in stores["data"]
             ]
@@ -248,7 +256,7 @@ class StoreCRUDService:
                     data["store_banner"] = image_result
 
                     # If store has banner already, delete it after updating is successfull
-                    if store_banner:
+                    if store.store_banner:
                         previous_image_id = store.store_banner["public_id"]
                         delete_images([previous_image_id])
                 except Exception as e:
@@ -256,7 +264,7 @@ class StoreCRUDService:
                 finally:
                     await cleanup_temp_files(path)
 
-            await store.update(db, data)
+            await store.update(db=db, data=data)
 
             store_response = StoreResponse(**store.to_dict())
             return response_builder(

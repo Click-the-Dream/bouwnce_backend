@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import text
 
 from app.db.postgres_db_conn import Base
+from app.utils.helper import is_valid_uuid
 
 T = TypeVar("T", bound="BaseModel")
 
@@ -56,6 +57,9 @@ class BaseModel(Base):
 
     @classmethod
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
+        if not is_valid_uuid(id):
+            raise TypeError("id not a valid uuid")
+
         if hasattr(cls, "is_active"):
             result = await db.execute(
                 select(cls).where(and_(cls.is_active.is_(True), cls.id == id))

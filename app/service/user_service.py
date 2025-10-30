@@ -39,6 +39,14 @@ class UserService:
                 message="Successfully fetched user data",
                 data=data,
             )
+        except ValueError as ve:
+            return response_builder(
+                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
+            )
         except Exception as e:
             print("Error occured fetching user by ID: ", str(e))
             return response_builder(
@@ -65,6 +73,11 @@ class UserService:
         except ValueError as ve:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
             )
         except Exception as e:
             print("Error occured updating user: ", str(e))
@@ -154,6 +167,10 @@ class UserService:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
             )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
+            )
         except Exception as e:
             print("Error occured deleting user: ", str(e))
             return response_builder(
@@ -199,6 +216,10 @@ class UserService:
         except ValueError as ve:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
             )
         except Exception as e:
             print("Error occured undeleting user: ", str(e))

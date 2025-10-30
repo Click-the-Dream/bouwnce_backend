@@ -119,6 +119,10 @@ class CartService:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
             )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
+            )
         except Exception as e:
             print("Error occurred while retrieving cart: ", str(e))
             return response_builder(
@@ -183,6 +187,10 @@ class CartService:
         except ValueError as ve:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
             )
         except Exception as e:
             print("Error deleting cart by id: ", str(e))

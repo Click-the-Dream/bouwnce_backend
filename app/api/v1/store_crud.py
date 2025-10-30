@@ -95,8 +95,8 @@ async def update_store(
 async def update_store_brand(
     db: dbSessionDep,
     current_store: CurrentActiveStore,
-    store_logo: ImageUpdate,
-    store_banner: ImageUpdate,
+    store_logo: ImageUpdate = None,
+    store_banner: ImageUpdate = None,
     store_description: Annotated[
         str | None, Form(min_length=10, examples=["The best Cloth store"])
     ] = None,

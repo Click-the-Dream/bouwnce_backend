@@ -1,13 +1,10 @@
 from typing import Any
-
 from fastapi import status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models import Store, User
+from app.models import Store, User, Wallet, WalletTransaction
 from app.models.products import product_domain
 from app.schemas import (
-    BusinessInfoResponse,
     ContactInfoResponse,
     PayoutInfoResponse,
     ShipmentsInfoResponse,
@@ -15,7 +12,6 @@ from app.schemas import (
     StoreInfoResponse,
     StoreResponse,
 )
-from app.models import Store, Wallet, WalletTransaction
 from app.utils.responses import response_builder
 
 
@@ -30,7 +26,7 @@ class StoreCRUDService:
             new_store = await Store.create(data, db)
             user.is_store_owner = True
             await user.save(db)
-            wallet = await Wallet.create({"user_id": user.id}, db)
+            wallet = await Wallet.create({"store_id": new_store.id}, db)
             await WalletTransaction.create({"wallet_id": wallet.id}, db)
             data = StoreResponse(**new_store.to_dict())
             return response_builder(

@@ -128,7 +128,7 @@ class VendorDashBoardService:
                 db=session,
                 filter={
                     "wallet_id": wallet.id,
-                    "type": "withdrawal"
+                    "transaction_type": "withdrawal"
                 },
                 order_by="-created_at",
                 page=page,
@@ -178,14 +178,6 @@ class VendorDashBoardService:
             return response_builder(
                 success=False,
                 message=f"Error fetching dashboard wallet: {str(e)}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        except Exception as e:
-            return response_builder(
-                success=False,
-                message="Error fetching dashboard data.",
-                errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

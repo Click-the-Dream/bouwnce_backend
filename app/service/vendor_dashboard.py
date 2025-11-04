@@ -207,21 +207,6 @@ class VendorDashBoardService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # except Exception as e:
-        #     return response_builder(
-        #         success=False,
-        #         message=f"Error fetching dashboard wallet: {str(e)}",
-        #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        #     )
-
-        # except Exception as e:
-        #     return response_builder(
-        #         success=False,
-        #         message="Error fetching dashboard data.",
-        #         errors=str(e),
-        #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        #    )
-
     # ---- suspend for now ------
     @staticmethod
     async def get_vendor_orders(
@@ -239,7 +224,9 @@ class VendorDashBoardService:
         """
 
         try:
-            filters = {"user_id": current_user.id}
+            filters = {
+                "user_id": current_user.id
+            }  # Should be pointing to store and not user
 
             if search:
                 filters["buyer_name__icontains"] = search
@@ -329,7 +316,9 @@ class VendorDashBoardService:
         Fetch vendor customers with pagination.
         """
         try:
-            orders = await SubOrder.filter_by(user_id=current_user.id, db=session)
+            orders = await SubOrder.filter_by(
+                user_id=current_user.id, db=session
+            )  # User store and not user
             if not orders:
                 return response_builder(
                     success=False,
@@ -343,7 +332,9 @@ class VendorDashBoardService:
                 if o.username not in customer_dict:
                     customer_dict[o.username] = {
                         "name": o.username,
-                        "email": getattr(o, "buyer_email", "Unknown"),
+                        "email": getattr(
+                            o, "buyer_email", "Unknown"
+                        ),  # Suborder doesn't have buyer_email
                         "total_orders": 0,
                         "total_spent": 0.0,
                     }

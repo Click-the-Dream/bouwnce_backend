@@ -11,6 +11,7 @@ from app.api.v1 import (
     user_router,
     vendor_dashboard,
     verification_router,
+    waitlist_router,
 )
 from app.core.rate_limiter import rate_limiter
 
@@ -36,13 +37,18 @@ store_router.include_router(contact_info_crud.router)
 store_router.include_router(payout_info_crud.router)
 store_router.include_router(shipments_info_crud.router)
 store_router.include_router(store_crud.router)
+store_router.include_router(product_router.router)
+store_router.include_router(vendor_dashboard.router)
 
-vendor_dashboard_router = APIRouter(prefix="/vendor/dashboard")
-vendor_dashboard_router.include_router(vendor_dashboard.router)
+
+waitlist = APIRouter(prefix="/waitlist")
+
+waitlist.include_router(waitlist_router.router)
 
 api_router = APIRouter()
 
 api_router.include_router(auth_router.router)
-api_router.include_router(product_router.router)
+
 api_router.include_router(user_api_router)
 api_router.include_router(store_router)
+api_router.include_router(waitlist)

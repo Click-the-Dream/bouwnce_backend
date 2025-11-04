@@ -129,6 +129,20 @@ class BaseModel(Base):
         return obj
 
     @classmethod
+    async def get_one(cls, db: AsyncSession, filter: dict | None = None) -> Self:
+
+        query = select(cls)
+
+        if filter:
+            for key, value in filter.items():
+                if hasattr(cls, key):
+                    column = getattr(cls, key)
+                    query = query.where(column == value)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    @classmethod
     async def get_by(
         cls,
         db: AsyncSession,

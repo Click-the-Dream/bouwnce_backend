@@ -129,6 +129,22 @@ def generate_login_verification_email(username: str, code: str) -> EmailData:
     return EmailData(html_content=html_content, subject=subject)
 
 
+def generate_waitlist_welcome_email(full_name: str):
+    project_name = settings.PROJECT_NAME
+
+    subject = f"{project_name} - Welcome"
+
+    html_content = render_email_templates(
+        template_name="waitlist_welcome.html",
+        context={
+            "user_name": full_name,
+            "project_name": project_name,
+            "contact_link": settings.PROJECT_EMAIL,
+        },
+    )
+    return EmailData(html_content=html_content, subject=subject)
+
+
 def generate_new_account_email(email_to: str, username: str) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - New account for user {username}"

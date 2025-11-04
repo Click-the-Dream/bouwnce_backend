@@ -1,0 +1,67 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Helvetica, Arial, sans-serif" />
+      <mj-text font-size="16px" color="#000000" line-height="1.5" />
+      <mj-button background-color="#ff3b0a" color="#ffffff" border-radius="6px" font-size="16px" padding="16px 30px" />
+    </mj-attributes>
+  </mj-head>
+
+  <mj-body background-color="#f9f9f9">
+
+    <!-- Header -->
+    <mj-section background-color="#ff3b0a" padding="20px 0">
+      <mj-column>
+        <mj-text align="center" color="#ffffff" font-size="22px" font-weight="bold">
+          Welcome to {{ project_name }} 🎉
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Main Content -->
+    <mj-section background-color="#ffffff" padding="40px 20px">
+      <mj-column>
+
+        <mj-text align="center" font-size="18px" color="#333333" font-weight="bold">
+          Hey {{ user_name }},
+        </mj-text>
+
+        <mj-text align="center" font-size="16px" color="#333333" padding-top="10px">
+          Thanks for joining the waitlist! We're excited to have you on board as one of the early members of our community.
+        </mj-text>
+
+        <mj-text align="center" font-size="16px" color="#333333" padding-top="10px">
+          You’ll be among the first to know when we launch and get exclusive early access.
+        </mj-text>
+
+        <mj-button href="{{ dashboard_link }}" align="center" padding-top="30px">
+          View Your Waitlist Status
+        </mj-button>
+
+        <mj-text align="center" font-size="14px" color="#555555" padding-top="20px">
+          Want to move up the waitlist? Share your referral link:<br/>
+          <strong>{{ referral_link }}</strong>
+        </mj-text>
+
+        <mj-text align="center" font-size="16px" color="#333333" padding-top="30px">
+          We're thrilled to have you with us,<br/>
+          The {{ project_name }} Team
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section background-color="#ffffff" border-top="1px solid #e0e0e0" padding="20px">
+      <mj-column>
+        <mj-text align="center" font-size="12px" color="#888888">
+          © 2025 {{ project_name }}. All rights reserved.
+        </mj-text>
+        <mj-text align="center" font-size="12px" color="#888888">
+          Questions? <a href="{{ contact_link }}" style="color:#ff3b0a; text-decoration:none;">Contact us</a>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

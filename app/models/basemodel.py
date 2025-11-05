@@ -189,7 +189,7 @@ class BaseModel(Base):
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
 
-        count_query = query.with_only_columns(func.count()).order_by(None)
+        count_query = select(func.count()).select_from(query.subquery())
         count_result = await db.execute(count_query)
 
         result = await db.execute(query)

@@ -30,8 +30,8 @@ async def create_shipment_info(
 
 
 @router.get(
-    "/{user_id}",
-    response_model=ShipmentsInfoResponse,
+    "/",
+    response_model=list[ShipmentsInfoResponse],
     status_code=status.HTTP_200_OK,
     summary="Get shipment information by user ID",
 )
@@ -40,18 +40,19 @@ async def get_shipment_info(current_store: CurrentStore):
 
 
 @router.put(
-    "/",
+    "/{id}",
     response_model=ShipmentsInfoResponse,
     status_code=status.HTTP_200_OK,
     summary="Update shipment information",
 )
 async def update_shipment_info(
+    id: str,
     shipment_data: ShipmentsInfoUpdate,
     session: dbSessionDep,
     current_store: CurrentStore,
 ):
     return await shipment_info_service.update(
-        session, shipment_data.model_dump(exclude_unset=True), current_store
+        id, session, shipment_data.model_dump(exclude_unset=True), current_store
     )
 
 
@@ -61,5 +62,7 @@ async def update_shipment_info(
     status_code=status.HTTP_200_OK,
     summary="Delete shipment information",
 )
-async def delete_shipment_info(session: dbSessionDep, current_store: CurrentStore):
-    return await shipment_info_service.delete(session, current_store)
+async def delete_shipment_info(
+    id: str, session: dbSessionDep, current_store: CurrentStore
+):
+    return await shipment_info_service.delete(id, session, current_store)

@@ -57,50 +57,46 @@ class ProductDomain:
         return obj_dict
 
     async def create_product(self, data: dict[str, Any], store_id: str) -> Product:
-        try:
-            product_category = data["category"]
-            category = await self.get_category_name(product_category)
 
-            if not category:
-                raise ValueError("Invalid category name")
+        product_category = data["category"]
+        category = await self.get_category_name(product_category)
 
-            image_paths = data["image_paths"]
-            state = "draft"
-            status = "active"
+        image_paths = data["image_paths"]
+        state = "draft"
+        status = "active"
 
-            data["state"] = state
+        data["state"] = state
 
-            image_results = await upload_images(image_paths, store_id)
-            images = [
-                Images(url=image["url"], public_id=image["public_id"])
-                for image in image_results
-                if image is not None
-            ]
+        image_results = await upload_images(image_paths, store_id)
+        images = [
+            Images(url=image["url"], public_id=image["public_id"])
+            for image in image_results
+            if image is not None
+        ]
 
-            product = self.Product(
-                store_id=store_id,
-                name=data["name"],
-                description=data["description"],
-                amount=int(data["amount"]),
-                stock=int(data["stock"]),
-                category=category.name,
-                state=state,
-                status=status,
-                images=images,
-            )
+        product = self.Product(
+            store_id=store_id,
+            name=data["name"],
+            description=data["description"],
+            amount=int(data["amount"]),
+            stock=int(data["stock"]),
+            category=category.name,
+            state=state,
+            status=status,
+            images=images,
+        )
 
-            await product.insert()
-            return product
-        except Exception as e:
-            print(f"Error occured creating a new product: {str(e)}")
-            return None
+        await product.insert()
+        return product
 
     async def get_category_name(self, name: str) -> Category:
         query = {"name": {"$regex": f".*{name}.*", "$options": "i"}}
 
         category = await self.Category.find_one(query)
         if not category:
-            raise ValueError(f"Category with {name} not specified")
+            raise ValueError(
+                f"Invalid category name: {name}, pls check the category and try again"
+            )
 
         return category
 

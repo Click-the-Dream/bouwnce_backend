@@ -21,7 +21,7 @@ scheduler = AsyncIOScheduler()
 async def cron_task():
     print("cron job is startting")
     async with httpx.AsyncClient() as client:
-        for _ in range(20):
+        for _ in range(10):
             await client.get(f"{settings.BASE_URL}/health")
             await asyncio.sleep(1)
 
@@ -29,7 +29,7 @@ async def cron_task():
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
     client = await mongo_conn()
-    scheduler.add_job(cron_task, CronTrigger(minute="*/1"))
+    scheduler.add_job(cron_task, CronTrigger(minute="*/5"))
     scheduler.start()
     yield
     client.close()

@@ -18,14 +18,15 @@ scheduler = AsyncIOScheduler()
 
 
 async def cron_task():
-    for _ in range(10):
+    for _ in range(20):
+        print("This cron job is running")
         sleep(1)
 
 
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
     client = await mongo_conn()
-    scheduler.add_job(cron_task, CronTrigger(minute="*/2"))
+    scheduler.add_job(cron_task, CronTrigger(minute="*/1"))
     scheduler.start()
     yield
     client.close()

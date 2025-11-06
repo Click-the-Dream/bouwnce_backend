@@ -1,6 +1,7 @@
+import asyncio
 from contextlib import asynccontextmanager
-from time import sleep
 
+import httpx
 import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -18,9 +19,11 @@ scheduler = AsyncIOScheduler()
 
 
 async def cron_task():
-    for _ in range(20):
-        print("This cron job is running")
-        sleep(1)
+    print("cron job is startting")
+    async with httpx.AsyncClient() as client:
+        for _ in range(20):
+            await client.get(f"{settings.BASE_URL}/health")
+            await asyncio.sleep(1)
 
 
 @asynccontextmanager
@@ -57,6 +60,11 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_STR)
+
+
+@app.get("/health", tags=["health"])
+async def health():
+    return {"health": "good", "status": "success"}
 
 
 if __name__ == "__main__":

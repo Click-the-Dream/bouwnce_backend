@@ -39,7 +39,7 @@ class StoreResponse(StoreBase):
 class StoreFullDetailsResponse(StoreResponse):
     contact_info: ContactInfoResponse | None = None
     payout_info: PayoutInfoResponse | None = None
-    shipment_info: ShipmentsInfoResponse | None = None
+    shipment_info: list[ShipmentsInfoResponse] | None = None
 
 
 class StoreUpdate(BaseModel):

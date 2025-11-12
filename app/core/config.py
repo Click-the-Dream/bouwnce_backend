@@ -30,6 +30,8 @@ class Config(BaseModel):
     CLOUDINARY_NAME: str = config("CLOUDINARY_NAME")
     EMAIL_VERIFICATION_EXPIRE_MINUTES: int = config("EMAIL_VERIFICATION_EXPIRE_MINUTES")
 
+    PAYSTACK_API_KEY: str = config("PAYSTACK_API_KEY")
+
 
 class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URL: str = config("SQLALCHEMY_DATABASE_PROD_URL")

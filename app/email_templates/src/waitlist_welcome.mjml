@@ -34,10 +34,6 @@
           You’ll be among the first to know when we launch and get exclusive early access.
         </mj-text>
 
-        <mj-button href="{{ dashboard_link }}" align="center" padding-top="30px">
-          View Your Waitlist Status
-        </mj-button>
-
         <mj-text align="center" font-size="14px" color="#555555" padding-top="20px">
           Want to move up the waitlist? Share your referral link:<br/>
           <strong>{{ referral_link }}</strong>
@@ -49,6 +45,57 @@
         </mj-text>
 
       </mj-column>
+    </mj-section>
+
+    <!-- Social Media Section -->
+    <mj-section background-color="#ffffff" padding="20px 0">
+      <mj-column>
+        <mj-text align="center" font-size="14px" color="#555555" padding-bottom="10px">
+          Follow us on social media
+        </mj-text>
+      </mj-column>
+
+      <mj-group>
+        <!-- Twitter -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="Twitter (X)"
+            href="https://x.com/Bouwnceofficial?t=6KixRDoqDqXNsQQwywP2pA&s=09"
+            src="https://upload.wikimedia.org/wikipedia/commons/9/95/Twitter_new_X_logo.png"
+          />
+        </mj-column>
+
+        <!-- Instagram -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="Instagram"
+            href="https://www.instagram.com/bouwnceofficial?igsh=OGQ5ZDc2ODk2ZA=="
+            src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png"
+          />
+        </mj-column>
+
+        <!-- TikTok -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="TikTok"
+            href="https://www.tiktok.com/@bouwnceofficial?_r=1&_t=ZS-91L6AaUf9kr"
+            src="https://upload.wikimedia.org/wikipedia/en/0/0a/TikTok_logo.svg"
+          />
+        </mj-column>
+
+        <!-- Snapchat -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="Snapchat"
+            href="https://www.snapchat.com/add/bouwnceofficial?share_id=zruiiUAVdKs&locale=en-GB"
+            src="https://upload.wikimedia.org/wikipedia/en/a/ad/Snapchat_logo.svg"
+          />
+        </mj-column>
+      </mj-group>
     </mj-section>
 
     <!-- Footer -->

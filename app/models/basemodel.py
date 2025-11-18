@@ -20,7 +20,9 @@ class BaseModel(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
@@ -189,7 +191,7 @@ class BaseModel(Base):
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
 
-        count_query = select(func.count()).select_from(query.subquery())
+        count_query = select(func.count()).select_from(cls)
         count_result = await db.execute(count_query)
 
         result = await db.execute(query)

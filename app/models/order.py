@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Enum, ForeignKey, Integer
+from sqlalchemy import Column, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -19,6 +19,7 @@ class Order(BaseModel):
         Enum("pending", "failed", "cancelled", "paid", name="order_status_enum"),
         default="pending",
     )
+    username = Column(String, ForeignKey("users.username", ondelete="CASCADE"), nullable=False, unique=True)
 
     user = relationship("User", back_populates="orders", uselist=False)
 

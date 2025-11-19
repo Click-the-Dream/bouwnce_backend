@@ -1,6 +1,6 @@
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
 from app.api.dependencies import (
     CurrentActiveStore,
@@ -15,6 +15,8 @@ from app.schemas import (
     StoreUpdate,
 )
 from app.service import store_service
+
+ImageUpdate = Annotated[UploadFile | None, File(...)]
 
 router = APIRouter(tags=["Store"], prefix="")
 
@@ -85,6 +87,26 @@ async def update_store(
 
 
 @router.put(
+    "/branding",
+    response_model=StoreResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update Store branding",
+)
+async def update_store_brand(
+    db: dbSessionDep,
+    current_store: CurrentActiveStore,
+    store_logo: ImageUpdate = None,
+    store_banner: ImageUpdate = None,
+    store_description: Annotated[
+        str | None, Form(min_length=10, examples=["The best Cloth store"])
+    ] = None,
+):
+    return await store_service.update_store_branding(
+        current_store, db, store_description, store_logo, store_banner
+    )
+
+
+@router.put(
     "/deactivate",
     response_model=StoreResponse,
     status_code=status.HTTP_200_OK,
@@ -112,3 +134,23 @@ async def activate_store(current_store: CurrentActiveStore, db: dbSessionDep):
 )
 async def delete_store(session: dbSessionDep, current_store: CurrentActiveStore):
     return await store_service.delete(session, current_store)
+
+
+@router.delete(
+    "/brand-image",
+    status_code=status.HTTP_200_OK,
+    summary="delete Store brand logo or banner",
+)
+async def delete_store_brand_images(
+    db: dbSessionDep,
+    current_store: CurrentActiveStore,
+    del_store_logo: bool | None = Query(
+        default=None, description="Delete store logo image"
+    ),
+    del_store_banner: bool | None = Query(
+        default=None, description="Delete store banner image"
+    ),
+):
+    return await store_service.delete_brand_images(
+        db, current_store, del_store_logo, del_store_banner
+    )

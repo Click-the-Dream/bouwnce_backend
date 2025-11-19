@@ -4,15 +4,16 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
-
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.db.mongo import mongo_conn
+from app.cron_jobs import init_store_cron_jobs
 
 
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
     client = await mongo_conn()
+    init_store_cron_jobs()
     yield
     client.close()
     print("Mongodb Client Closed successfully")
@@ -43,4 +44,5 @@ app.include_router(api_router, prefix=settings.API_STR)
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=settings.PORT)
+
+    uvicorn.run("main:app", host="0.0.0.0", port=settings.PORT)

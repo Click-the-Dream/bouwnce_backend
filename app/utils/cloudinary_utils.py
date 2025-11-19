@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -78,3 +79,9 @@ async def save_uploaded_file_temp(uploads: list[UploadFile]) -> list[str]:
         await upload.close()
 
     return temp_paths
+
+
+async def cleanup_temp_files(paths: list[str]):
+    for path in paths:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(path)

@@ -63,6 +63,15 @@ async def get_store_full_details(current_store: CurrentStore):
 
 
 @router.get(
+    "/onboarding-status",
+    status_code=status.HTTP_200_OK,
+    summary="Get Current Store onboarding status",
+)
+async def get_store_onboarding_status(current_store: CurrentStore):
+    return await store_service.get_store_onboarding_status(current_store)
+
+
+@router.get(
     "/{vendor_id}",
     response_model=StoreResponse,
     status_code=status.HTTP_200_OK,

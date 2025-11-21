@@ -20,6 +20,7 @@ class VerificationBase(BaseModel):
 class VerificationCreate(VerificationBase):
     pass
 
+
 class VerificationResponse(VerificationBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     status: Annotated[

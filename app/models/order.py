@@ -12,21 +12,25 @@ class Order(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     payment_id = Column(
-        UUID(as_uuid=True), ForeignKey("payments.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("payments.id", ondelete="CASCADE"),
+        nullable=False,
     )
     total_amount = Column(Integer, nullable=False)
     status = Column(
         Enum("pending", "failed", "cancelled", "paid", name="order_status_enum"),
         default="pending",
     )
-    username = Column(String, ForeignKey("users.username", ondelete="CASCADE"), nullable=False, unique=True)
+    username = Column(String, nullable=False)
 
     user = relationship("User", back_populates="orders", uselist=False)
 
     payments = relationship(
-        "Payment", back_populates="order", cascade="all, delete-orphan", single_parent=True
+        "Payment",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
 
     suborders = relationship(
-        "SubOrder", back_populates="order", cascade="all, delete-orphan"
-    )
+        "SubOrder", back_populates="order", cascade="all, delete-orphan")

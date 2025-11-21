@@ -50,8 +50,6 @@ class Store(BaseModel):
     )
 
     wallets = relationship("Wallet", back_populates="store", uselist=False)
-    
-    metrics = relationship("StoreMetrics", back_populates="store", uselist=False)
 
     @classmethod
     async def get_by_user_id(cls, id: str, db: AsyncSession) -> Self:

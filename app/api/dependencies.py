@@ -143,7 +143,7 @@ async def get_current_store(
                 "contact_info",
                 "payout_info",
                 "shipment_info",
-                "store_info",
+                "wallets"
             ],
         )
         if len(store) == 0:

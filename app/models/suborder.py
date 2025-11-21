@@ -1,10 +1,12 @@
-from sqlalchemy import Column, Enum, ForeignKey, Integer, String
+from typing import Any, Dict
+
+from sqlalchemy import Column, Enum, ForeignKey, Integer, String, distinct, func, select
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from app.models.basemodel import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, distinct
-from typing import Dict, Any
+from sqlalchemy.orm import relationship
+
+from app.models.basemodel import BaseModel
+
 
 class SubOrder(BaseModel):
     __tablename__ = "suborders"
@@ -30,27 +32,22 @@ class SubOrder(BaseModel):
         nullable=False,
     )
     otp = Column(String)
-    username = Column(String, ForeignKey("orders.username", ondelete="CASCADE"), nullable=False)
+    username = Column(String, nullable=False)
 
-    order = relationship(
-        "Order", back_populates="suborders", uselist=False
-    )
+    order = relationship("Order", back_populates="suborders", uselist=False)
 
-    store = relationship(
-        "Store", back_populates="suborders", uselist=False
-    )
+    store = relationship("Store", back_populates="suborders", uselist=False)
 
     order_items = relationship(
-        "OrderItem", back_populates="suborder", cascade="all, delete-orphan", single_parent=True
+        "OrderItem",
+        back_populates="suborder",
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
 
     @classmethod
     async def get_top_products_paginated(
-        cls,
-        store_id: str,
-        page: int,
-        page_size: int,
-        db: AsyncSession
+        cls, store_id: str, page: int, page_size: int, db: AsyncSession
     ):
 
         offset = (page - 1) * page_size
@@ -58,20 +55,13 @@ class SubOrder(BaseModel):
         total_query = await db.execute(
             select(func.count())
             .select_from(cls)
-            .where(
-                cls.store_id == store_id,
-                cls.status == "delivered"
-            )
+            .where(cls.store_id == store_id, cls.status == "delivered")
         )
         total_items = total_query.scalar() or 0
 
-
         result = await db.execute(
             select(cls)
-            .where(
-                cls.store_id == store_id,
-                cls.status == "delivered"
-            )
+            .where(cls.store_id == store_id, cls.status == "delivered")
             .order_by(cls.created_at.desc())
             .limit(page_size)
             .offset(offset)
@@ -80,15 +70,16 @@ class SubOrder(BaseModel):
 
         items_list = []
         for sub in suborders:
-            items_list.append({
-                **sub.to_dict(),
-                "products": [item.to_dict() for item in sub.order_items]
-            })
+            items_list.append(
+                {
+                    **sub.to_dict(),
+                    "products": [item.to_dict() for item in sub.order_items],
+                }
+            )
 
         total_pages = (total_items + page_size - 1) // page_size
 
         return {
-            "success": True,
             "page": page,
             "page_size": page_size,
             "total_items": total_items,
@@ -98,7 +89,7 @@ class SubOrder(BaseModel):
             "items": items_list,
         }
 
-    @classmethod
+    @staticmethod
     async def aggregate_suborders(
         db: AsyncSession,
         store_id: str,
@@ -106,18 +97,15 @@ class SubOrder(BaseModel):
         end_date,
     ) -> Dict[str, Any]:
 
-        stmt = (
-            select(
-                func.count(SubOrder.id).label("total_orders"),
-                func.count(distinct(SubOrder.username)).label("total_customers"),
-                func.sum(SubOrder.total_amount).label("total_revenue"),
-            )
-            .where(
-                SubOrder.store_id == store_id,
-                SubOrder.status == "delivered",
-                SubOrder.created_at >= start_date,
-                SubOrder.created_at < end_date,
-            )
+        stmt = select(
+            func.count(SubOrder.id).label("total_orders"),
+            func.count(distinct(SubOrder.username)).label("total_customers"),
+            func.sum(SubOrder.total_amount).label("total_revenue"),
+        ).where(
+            SubOrder.store_id == store_id,
+            SubOrder.status == "delivered",
+            SubOrder.created_at >= start_date,
+            SubOrder.created_at < end_date,
         )
 
         row = (await db.execute(stmt)).one_or_none()

@@ -28,7 +28,6 @@ class Payment(BaseModel):
         default="pending",
     )
 
-
     user = relationship("User", back_populates="payments", uselist=False)
 
     order = relationship("Order", back_populates="payments", uselist=False)

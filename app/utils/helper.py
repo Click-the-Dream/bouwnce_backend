@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
+from app.utils.responses import response_builder
 
 def is_valid_uuid(value: str) -> bool:
     try:
@@ -7,7 +8,8 @@ def is_valid_uuid(value: str) -> bool:
         return str(uuid_obj) == value.lower()
     except (ValueError, TypeError):
         return False
-    
+
+
 def build_date_filter(range_type: str, start_date=None, end_date=None):
     today = datetime.utcnow().date()
 
@@ -32,7 +34,5 @@ def build_date_filter(range_type: str, start_date=None, end_date=None):
         end = end_date
 
     else:
-        raise ValueError("Invalid date range type")
-
+        return response_builder(status_code=400, message="Invalid date range type")
     return start, end
-

@@ -14,7 +14,6 @@ from app.models.user import User
 from app.models.verification import Verification
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
-from app.models.store_metrics import StoreMetrics
 
 __all__ = [
     "BaseModel",
@@ -33,5 +32,4 @@ __all__ = [
     "Inventory",
     "Wallet",
     "WalletTransaction",
-    "StoreMetrics"
 ]

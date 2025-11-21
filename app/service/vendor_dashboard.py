@@ -1,8 +1,8 @@
-from fastapi import APIRouter, status
+from fastapi import status, APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import SubOrder, User, Wallet, WalletTransaction, StoreMetrics
-from app.models.products import product_domain
+
+from app.models import SubOrder, WalletTransaction
 from app.schemas import (
     OverviewDashboardResponse,
     PaginatedCustomers,
@@ -14,28 +14,30 @@ from app.schemas import (
     VendorOrdersDashboardResponse,
     WalletDashboardResponse,
     WithdrawalHistory,
+    TopProduct
 )
-from app.utils.responses import response_builder
-from app.utils.helper import build_date_filter
 from app.service.metrics_service import MetricService
+from app.utils.helper import build_date_filter
+from app.utils.responses import response_builder
 
 router = APIRouter()
 
 
 class VendorDashBoardService:
-    
-    @staticmethod
-    def _pct_change(old_value: float, new_value: float) -> float:
-        if old_value in (None, 0):
-            return 0.0 if (new_value in (None, 0)) else 100.0
-        return round(((new_value - old_value) / old_value) * 100.0, 1)
-    
 
     @staticmethod
     async def get_vendor_overview(
-        session, store_id: str, page: int = 1, page_size: int = 5, date_range_type: str = "month", start_date=None, end_date=None
+        session: AsyncSession,
+        store_id: str,
+        page: int = 1,
+        page_size: int = 5,
+        date_range_type: str = "month",
+        start_date=None,
+        end_date=None,
     ) -> JSONResponse:
+
         start_date, end_date = build_date_filter(date_range_type, start_date, end_date)
+
         try:
             pagination = await SubOrder.get_by(
                 db=session,
@@ -45,19 +47,10 @@ class VendorDashBoardService:
                 order_by="created_at",
             )
 
-            orders = pagination["items"]
-            total_records = pagination["total"]
-            total_pages = pagination["pages"]
+            orders = pagination.get("data", [])
+            total_records = pagination.get("total", 0)
+            total_pages = pagination.get("total_pages", 1)
 
-            if not orders:
-                return response_builder(
-                    success=False,
-                    message="No orders found",
-                    status_code=status.HTTP_404_NOT_FOUND,
-                )
-
-            
-            
             metrics = await MetricService.compute_overview_metrics(
                 db=session,
                 store_id=store_id,
@@ -66,23 +59,28 @@ class VendorDashBoardService:
                 end_date=end_date,
             )
 
-            recent_orders_data = (
-                [
-                    RecentOrder(
-                        order_id=o.order_id,
-                        customer_name=o.username,
-                        amount=o.amount,
-                        status=o.status,
-                    )
-                    for o in orders
-                ],
+            recent_orders = [
+                RecentOrder(
+                    order_id=o.order_id,
+                    customer_name=o.username,
+                    amount=float(o.amount or 0),
+                    status=o.status,
+                )
+                for o in orders
+            ]
+
+            top_products = await SubOrder.get_top_products_paginated(
+                store_id=store_id,
+                page=page,
+                page_size=page_size,
+                db=session,
             )
             
-            top_products = await SubOrder.get_top_products_paginated(
-                store_id=store_id, page=page, page_size=page_size, db=session
-            )
+            
+            top_products = [TopProduct(**item) for item in top_products["items"]]
+            
 
-            dashboard_data = OverviewDashboardResponse(
+            dashboard = OverviewDashboardResponse(
                 total_revenue=metrics["total_revenue"],
                 total_orders=metrics["total_orders"],
                 total_customers=metrics["total_customers"],
@@ -90,53 +88,42 @@ class VendorDashBoardService:
                 revenue_change_percent=metrics["revenue_change_percentage"],
                 orders_change_percent=metrics["orders_change_percentage"],
                 customers_change_percent=metrics["customers_change_percentage"],
-                recent_orders=recent_orders_data,
+                recent_orders=recent_orders,
                 top_products=top_products,
-            )
+            ).model_dump()
 
-            response_content = dashboard_data.model_dump()
-            response_content.update(
-                {
-                    "pagination": {
-                        "page": page,
-                        "page_size": page_size,
-                        "total_pages": total_pages,
-                        "total_records": total_records,
-                    }
-                }
-            )
+            dashboard["pagination"] = {
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_records": total_records,
+            }
+
             return response_builder(
-                success=True,
+                status="Success",
                 message="Dashboard data fetched successfully.",
-                data=response_content,
+                data=dashboard,
                 status_code=status.HTTP_200_OK,
             )
 
         except Exception as e:
             return response_builder(
-                success=False,
+                status="Failed",
                 message=f"Error fetching dashboard data: {str(e)}",
-                errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     @staticmethod
     async def get_dashboard_wallet(
-        session, current_user: User, page: int = 1, page_size: int = 10
+        session: AsyncSession,
+        current_user,
+        page: int = 1,
+        page_size: int = 10,
     ) -> JSONResponse:
 
         try:
-            wallet = await Wallet.filter_by(session, store_id=current_user.store_id)
-            if not wallet:
-                return response_builder(
-                    success=False,
-                    message="Wallet not found.",
-                    status_code=status.HTTP_404_NOT_FOUND,
-                )
+            wallet = current_user.wallets
 
-            wallet = wallet[0] if isinstance(wallet, list) else wallet
-
-            # 🔹 Paginated withdrawal history
             withdrawals_page = await WalletTransaction.get_by(
                 db=session,
                 filter={"wallet_id": wallet.id, "transaction_type": "withdrawal"},
@@ -145,18 +132,15 @@ class VendorDashBoardService:
                 page_size=page_size,
             )
 
-            # 🔹 Format paginated data
-            history = []
-            for txn in withdrawals_page.items:
-                history.append(
+            items = []
+            for txn in withdrawals_page.get("data", []):
+                items.append(
                     {
                         "id": txn.id,
-                        "description": txn.transaction_type or "Withdrawal transaction",
+                        "description": txn.transaction_type,
                         "status": txn.status,
                         "amount": float(-abs(txn.amount or 0)),
-                        "date": (
-                            txn.created_at.strftime("%b %d, %Y, %I:%M%p")
-                        ),
+                        "date": txn.created_at.strftime("%b %d, %Y, %I:%M%p"),
                     }
                 )
 
@@ -165,15 +149,16 @@ class VendorDashBoardService:
                 pending_balance=float(wallet.pending_balance or 0),
                 withdrawable_balance=float(wallet.withdrawable_balance or 0),
                 withdrawal_history=WithdrawalHistory(
-                    items=history,
-                    page=withdrawals_page.page,
-                    page_size=withdrawals_page.page_size,
-                    total=withdrawals_page.total,
-                    total_pages=withdrawals_page.total_pages,
+                    items=items,
+                    page=withdrawals_page.get("page", 1),
+                    page_size=withdrawals_page.get("page_size", page_size),
+                    total=withdrawals_page.get("total", 0),
+                    total_pages=withdrawals_page.get("total_pages", 1),
                 ),
             ).model_dump()
+
             return response_builder(
-                success=True,
+                status="Success",
                 message="Dashboard wallet fetched successfully.",
                 data=data,
                 status_code=status.HTTP_200_OK,
@@ -181,7 +166,7 @@ class VendorDashBoardService:
 
         except Exception as e:
             return response_builder(
-                success=False,
+                status="Failed",
                 message=f"Error fetching wallet data: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
@@ -196,132 +181,129 @@ class VendorDashBoardService:
         order_by: str = "date",
         order_dir: str = "desc",
     ) -> JSONResponse:
-        """
-        Fetch vendor orders with pagination, search, and sorting.
-        Uses model's .paginate() method.
-        """
 
         try:
-            filters = {
-                "store_id": current_user.store_id
-            }  # Should be pointing to store and not user
+            filters = {"store_id": current_user.store_id}
 
             if search:
                 filters["buyer_name__icontains"] = search
 
-            order_field_map = {
+            order_map = {
                 "name": "buyer_name",
                 "date": "created_at",
                 "price": "amount",
             }
 
-            order_field = order_field_map.get(order_by, "created_at")
-            order_by_param = f"-{order_field}" if order_dir == "desc" else order_field
+            field = order_map.get(order_by, "created_at")
+            ordering = f"-{field}" if order_dir == "desc" else field
 
-            orders_page = await SubOrder.get_by(
+            page_result = await SubOrder.get_by(
                 db=session,
                 filter=filters,
-                order_by=order_by_param,
+                order_by=ordering,
                 page=page,
                 page_size=page_size,
             )
 
-            if not orders_page.items:
-                return response_builder(
-                    success=False,
-                    message="No orders found",
-                    status_code=status.HTTP_404_NOT_FOUND,
-                )
-
-            all_orders = await SubOrder.filter_by(store_id=current_user.store_id, db=session)
-            total_orders = len(all_orders)
-            completed_orders = sum(o.status == "completed" for o in all_orders)
-            pending_orders = sum(o.status == "pending" for o in all_orders)
-            processing_orders = sum(o.status == "processing" for o in all_orders)
+            orders = page_result.get("data", [])
 
             order_items = [
                 VendorOrderItem(
-                    id=f"ORD-{o.id:03}",
+                    id=str(o.id),
                     buyer_name=getattr(o, "username", "Unknown"),
                     date=o.created_at.strftime("%d-%m-%Y") if o.created_at else None,
                     amount=float(o.amount or 0),
                     status=o.status,
                 )
-                for o in orders_page.items
+                for o in orders
             ]
 
             data = VendorOrdersDashboardResponse(
-                total_orders=total_orders,
-                completed_orders=completed_orders,
-                pending_orders=pending_orders,
-                processing_orders=processing_orders,
+                total_orders=page_result.get("total", 0),
+                completed_orders=sum(o.status == "completed" for o in orders),
+                pending_orders=sum(o.status == "pending" for o in orders),
+                processing_orders=sum(o.status == "processing" for o in orders),
                 orders=PaginatedOrders(
                     items=order_items,
-                    page=orders_page.page,
-                    page_size=orders_page.page_size,
-                    total=orders_page.total,
-                    total_pages=orders_page.total_pages,
+                    page=page_result.get("page", 1),
+                    page_size=page_result.get("page_size", page_size),
+                    total=page_result.get("total", 0),
+                    total_pages=page_result.get("total_pages", 1),
                 ),
             )
+
             return response_builder(
-                success=True,
+                status="Success",
                 message="Orders fetched successfully",
-                status_code=status.HTTP_200_OK,
                 data=data,
+                status_code=status.HTTP_200_OK,
             )
 
-        except Exception as e:
+        except Exception:
             return response_builder(
-                success=False,
+                status="Failed",
                 message="Error fetching vendor orders",
-                errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
     @staticmethod
     async def get_vendor_customers(
-        session: AsyncSession, current_user, page: int = 1, page_size: int = 10
+        session: AsyncSession,
+        current_user,
+        page: int = 1,
+        page_size: int = 10,
     ) -> JSONResponse:
         """
-        Fetch vendor customers with pagination.
+        Fetch vendor customers with pagination using schemas.
         """
         try:
-            result = await SubOrder.get_by(db=session, filter={"store_id": current_user.store_id}, page=page, page_size=page_size)
 
-            suborders = result["data"]
+            # Query SubOrders for this vendor store
+            result = await SubOrder.get_by(
+                db=session,
+                filter={"store_id": current_user.store.id},
+                page=page,
+                page_size=page_size,
+            )
 
-            if not suborders:
+            # Extract items and total count
+            items = result.get("items", [])
+            total_count = result.get("total", len(items))
+
+            if not items:
                 return response_builder(
-                    success=False,
+                    status="Failed",
                     message="No suborders found",
                     status_code=status.HTTP_404_NOT_FOUND,
                 )
 
+            # Aggregate by unique customer
             customer_model_dump = {}
-            for o in suborders:
-                if o.username not in customer_model_dump:
-                    customer_model_dump[o.username] = {
-                        "name": o.username,
+            for sub in items:
+                if sub.username not in customer_model_dump:
+                    customer_model_dump[sub.username] = {
+                        "name": sub.username,
                         "total_orders": 0,
                         "total_spent": 0.0,
                     }
-                customer_model_dump[o.username]["total_orders"] += 1
-                customer_model_dump[o.username]["total_spent"] += float(o.amount or 0.0)
+                customer_model_dump[sub.username]["total_orders"] += 1
+                customer_model_dump[sub.username]["total_spent"] += float(sub.amount or 0.0)
 
+            # Convert to schema items
             customer_items = [VendorCustomerItem(**c) for c in customer_model_dump.values()]
 
+            # Build paginated response
             data = VendorCustomersDashboardResponse(
                 customers=PaginatedCustomers(
                     items=customer_items,
                     page=page,
                     page_size=page_size,
-                    total=suborders["total"],
-                    total_pages=(suborders["total"] + page_size - 1) // page_size,
+                    total=total_count,
+                    total_pages=(total_count + page_size - 1) // page_size,
                 )
             )
 
             return response_builder(
-                success=True,
+                status="Success",
                 message="Customers fetched successfully",
                 status_code=status.HTTP_200_OK,
                 data=data.model_dump(),
@@ -329,8 +311,7 @@ class VendorDashBoardService:
 
         except Exception as e:
             return response_builder(
-                success=False,
-                message="Error fetching customer data",
-                errors=str(e),
+                status="Failed",
+                message=f"Error fetching customer data: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

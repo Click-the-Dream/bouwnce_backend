@@ -1,32 +1,27 @@
-from fastapi.responses import JSONResponse
-from fastapi import status
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import ShipmentInfo, User
-from app.utils.responses import response_builder
 from typing import Any
+
+from fastapi import status
+from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import ShipmentInfo, Store
 from app.schemas import ShipmentsInfoResponse
+from app.utils.responses import response_builder
+
 
 class ShipmentInfoCRUDService:
-    
-    async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        
-        user = await User.whoami(id=data.get("user_id"), user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
-            )
-        existing_shipment = await ShipmentInfo.get_by_id(id=data.get("user_id"), db=session)
-        if existing_shipment:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                status="error",
-                message="Shipment info already exists for this user.",
-            )
+
+    async def create(
+        self, db: AsyncSession, data: dict[str, Any], store: Store
+    ) -> JSONResponse:
+
         try:
-            new_shipment = await ShipmentInfo.create(data, session)
-            data = ShipmentsInfoResponse(**new_shipment.to_dict())
+            data["store_id"] = store.id
+            new_shipment = await ShipmentInfo.create(data, db)
+            new_shipment = new_shipment.to_dict()
+            new_shipment["user_id"] = str(store.user_id)
+            data = ShipmentsInfoResponse(**new_shipment)
+
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -34,57 +29,70 @@ class ShipmentInfoCRUDService:
                 data=data,
             )
         except Exception as e:
+            print("Error occured while creating store shipment info: ", str(e))
             return response_builder(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="An error occurred while creating shipment info.",
-                data=str(e),
-            )
-    
-    async def get(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
             )
 
-        shipment = await ShipmentInfo.get_by_id(id=user_id, db=session)
-        if not shipment:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Shipment info not found.",
-            )
-        shipment = shipment[0]
-        data = ShipmentsInfoResponse(**shipment.to_dict())
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Shipment info retrieved successfully.",
-            data=data,
-        )
-    
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        user = await User.whoami(id=data.get("user_id"), user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
-            )
-        shipment = await ShipmentInfo.get_by_id(id=data.get("user_id"), db=session)
-        if not shipment:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Shipment info not found.",
-            )
-        shipment = shipment[0]
+    async def get(self, store: Store) -> JSONResponse:
         try:
-            updated_shipment = await ShipmentInfo.update_by_id(str(shipment.id), data=data, db=session)
-            data = ShipmentsInfoResponse(**updated_shipment.to_dict())
+            shipments: ShipmentInfo | None = store.shipment_info
+            if not shipments:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Shipment info not found.",
+                )
+            data = []
+            for shipment in shipments:
+                shipment = shipment.to_dict()
+                shipment["user_id"] = str(store.user_id)
+                data.append(ShipmentsInfoResponse(**shipment))
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Shipment info retrieved successfully.",
+                data=data,
+            )
+        except Exception as e:
+            print("Error fetching store shipment info: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error fetching store shipment info",
+            )
+
+    async def update(
+        self, shipment_id: str, db: AsyncSession, data: dict[str, Any], store: Store
+    ) -> JSONResponse:
+
+        try:
+            shipments: ShipmentInfo | None = store.shipment_info
+            if not shipments:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Shipment info not found.",
+                )
+            shipment_to_update = None
+            for shipment in shipments:
+                if str(shipment.id) == shipment_id:
+                    shipment_to_update = shipment
+                    break
+            else:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="shipment not found",
+                )
+
+            updated_shipment = await shipment_to_update.update(db, data)
+            updated_shipment = updated_shipment.to_dict()
+            updated_shipment["user_id"] = str(store.user_id)
+            data = ShipmentsInfoResponse(**updated_shipment)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -92,40 +100,48 @@ class ShipmentInfoCRUDService:
                 data=data,
             )
         except Exception as e:
+            print("Error occured while updating store shipment info: ", str(e))
             return response_builder(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="An error occurred while updating shipment info.",
-                data=str(e),
-            )
-    
-    async def delete(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
             )
 
-        shipment = await ShipmentInfo.get_by_id(id=user_id, db=session)
-        if not shipment:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Shipment info not found.",
-            )
+    async def delete(
+        self, shipment_id: str, db: AsyncSession, store: Store
+    ) -> JSONResponse:
         try:
-            await ShipmentInfo.delete_by_id(id=user_id, db=session)
+            shipments: ShipmentInfo | None = store.shipment_info
+            if not shipments:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Shipment info not found.",
+                )
+
+            for shipment in shipments:
+                if str(shipment.id) == shipment_id:
+                    break
+            else:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="shipment not found",
+                )
+
+            await ShipmentInfo.delete_permanently_by_id(id=shipment_id, db=db)
             return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
+                status_code=status.HTTP_200_OK,
                 status="success",
                 message="Shipment info deleted successfully.",
             )
         except Exception as e:
+            print("Error occured while deleting store shipment info: ", str(e))
             return response_builder(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="An error occurred while deleting shipment info.",
-                data=str(e),
             )
+
+
+shipment_info_service = ShipmentInfoCRUDService()

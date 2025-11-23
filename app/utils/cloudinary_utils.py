@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -27,8 +28,12 @@ async def upload_image(path: str, folder_name: str) -> dict[str, Any]:
         loop = asyncio.get_event_loop()
 
         result = await loop.run_in_executor(
-            executor, lambda: cloudinary.uploader.upload(path, folder=folder_name)
+            executor,
+            lambda: cloudinary.uploader.upload(
+                path, folder=folder_name, resource_type="image"
+            ),
         )
+
         return {"url": result["secure_url"], "public_id": result["public_id"]}
     except Exception as e:
         print(f"Error uploading image {path}: {str(e)}")
@@ -78,3 +83,9 @@ async def save_uploaded_file_temp(uploads: list[UploadFile]) -> list[str]:
         await upload.close()
 
     return temp_paths
+
+
+async def cleanup_temp_files(paths: list[str]):
+    for path in paths:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(path)

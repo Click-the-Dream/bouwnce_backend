@@ -49,6 +49,9 @@ class AuthService:
 
             user_data = UserResponse(**new_user.to_dict())
 
+            # Temporarily for before email service works perfectly
+            user_data.otp = otp
+
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -125,6 +128,9 @@ class AuthService:
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="A verification code is sent to the specified email",
+                data={
+                    "otp": otp  # Temporarily for before email service works perfectly
+                },
             )
         except Exception as e:
             print("❌Error occured logging in user: ", str(e))

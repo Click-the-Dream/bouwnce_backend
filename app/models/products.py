@@ -27,8 +27,9 @@ class Product(BaseDocument):
     amount: Annotated[int, Field(ge=0)]
     stock: Annotated[int, Field(ge=0)]
     category: str
-    status: str
+    state: str
     images: list[Images]
+    status: str
 
     class Settings:
         name = "products"
@@ -56,48 +57,46 @@ class ProductDomain:
         return obj_dict
 
     async def create_product(self, data: dict[str, Any], store_id: str) -> Product:
-        try:
-            product_category = data["category"]
-            category = await self.get_category_name(product_category)
 
-            if not category:
-                raise ValueError("Invalid category name")
+        product_category = data["category"]
+        category = await self.get_category_name(product_category)
 
-            image_paths = data["image_paths"]
-            status = "draft"
+        image_paths = data["image_paths"]
+        state = "draft"
+        status = "active"
 
-            data["status"] = status
+        data["state"] = state
 
-            image_results = await upload_images(image_paths, store_id)
-            images = [
-                Images(url=image["url"], public_id=image["public_id"])
-                for image in image_results
-                if image is not None
-            ]
+        image_results = await upload_images(image_paths, store_id)
+        images = [
+            Images(url=image["url"], public_id=image["public_id"])
+            for image in image_results
+            if image is not None
+        ]
 
-            product = self.Product(
-                store_id=store_id,
-                name=data["name"],
-                description=data["description"],
-                amount=int(data["amount"]),
-                stock=int(data["stock"]),
-                category=category.name,
-                status=status,
-                images=images,
-            )
+        product = self.Product(
+            store_id=store_id,
+            name=data["name"],
+            description=data["description"],
+            amount=int(data["amount"]),
+            stock=int(data["stock"]),
+            category=category.name,
+            state=state,
+            status=status,
+            images=images,
+        )
 
-            await product.insert()
-            return product
-        except Exception as e:
-            print(f"Error occured creating a new product: {str(e)}")
-            return None
+        await product.insert()
+        return product
 
     async def get_category_name(self, name: str) -> Category:
         query = {"name": {"$regex": f".*{name}.*", "$options": "i"}}
 
         category = await self.Category.find_one(query)
         if not category:
-            raise ValueError(f"Category with {name} not specified")
+            raise ValueError(
+                f"Invalid category name: {name}, pls check the category and try again"
+            )
 
         return category
 
@@ -173,6 +172,16 @@ class ProductDomain:
             "per_page": per_page,
         }
 
+    async def get_products_by_ids(self, product_ids: list[str]) -> list[Product]:
+
+        try:
+            product_ids = [PydanticObjectId(id) for id in product_ids]
+        except Exception as e:
+            raise TypeError(str(e)) from None
+
+        products = await self.Product.find(self.Product.id.in_(product_ids)).to_list()
+        return products
+
     async def get_products_by(
         self,
         filter: dict[str, Any],
@@ -222,6 +231,21 @@ class ProductDomain:
         await product.save()
 
         return product
+
+    async def deactivate_stores_products(self, store_id: str):
+
+        products = await self.Product.find({"store_id": store_id}).update_many(
+            {"$set": {"status": "inactive"}}
+        )
+
+        return bool(products)
+
+    async def activate_stores_prouducts(self, store_id: str):
+        products = await self.Product.find({"store_id": store_id}).update_many(
+            {"$set": {"status": "active"}}
+        )
+
+        return bool(products)
 
     async def delete_product_image(
         self, product_id: str, image_public_id: str

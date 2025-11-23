@@ -1,0 +1,114 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Helvetica, Arial, sans-serif" />
+      <mj-text font-size="16px" color="#000000" line-height="1.5" />
+      <mj-button background-color="#ff3b0a" color="#ffffff" border-radius="6px" font-size="16px" padding="16px 30px" />
+    </mj-attributes>
+  </mj-head>
+
+  <mj-body background-color="#f9f9f9">
+
+    <!-- Header -->
+    <mj-section background-color="#ff3b0a" padding="20px 0">
+      <mj-column>
+        <mj-text align="center" color="#ffffff" font-size="22px" font-weight="bold">
+          Welcome to {{ project_name }} 🎉
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Main Content -->
+    <mj-section background-color="#ffffff" padding="40px 20px">
+      <mj-column>
+
+        <mj-text align="center" font-size="18px" color="#333333" font-weight="bold">
+          Hey {{ user_name }},
+        </mj-text>
+
+        <mj-text align="center" font-size="16px" color="#333333" padding-top="10px">
+          Thanks for joining the waitlist! We're excited to have you on board as one of the early members of our community.
+        </mj-text>
+
+        <mj-text align="center" font-size="16px" color="#333333" padding-top="10px">
+          You’ll be among the first to know when we launch and get exclusive early access.
+        </mj-text>
+
+        <mj-text align="center" font-size="14px" color="#555555" padding-top="20px">
+          Want to move up the waitlist? Share your referral link:<br/>
+          <strong>{{ referral_link }}</strong>
+        </mj-text>
+
+        <mj-text align="center" font-size="16px" color="#333333" padding-top="30px">
+          We're thrilled to have you with us,<br/>
+          The {{ project_name }} Team
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Social Media Section -->
+    <mj-section background-color="#ffffff" padding="20px 0">
+      <mj-column>
+        <mj-text align="center" font-size="14px" color="#555555" padding-bottom="10px">
+          Follow us on social media
+        </mj-text>
+      </mj-column>
+
+      <mj-group>
+        <!-- Twitter -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="Twitter (X)"
+            href="https://x.com/Bouwnceofficial?t=6KixRDoqDqXNsQQwywP2pA&s=09"
+            src="https://upload.wikimedia.org/wikipedia/commons/9/95/Twitter_new_X_logo.png"
+          />
+        </mj-column>
+
+        <!-- Instagram -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="Instagram"
+            href="https://www.instagram.com/bouwnceofficial?igsh=OGQ5ZDc2ODk2ZA=="
+            src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png"
+          />
+        </mj-column>
+
+        <!-- TikTok -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="TikTok"
+            href="https://www.tiktok.com/@bouwnceofficial?_r=1&_t=ZS-91L6AaUf9kr"
+            src="https://upload.wikimedia.org/wikipedia/en/0/0a/TikTok_logo.svg"
+          />
+        </mj-column>
+
+        <!-- Snapchat -->
+        <mj-column width="25%">
+          <mj-image
+            width="30px"
+            alt="Snapchat"
+            href="https://www.snapchat.com/add/bouwnceofficial?share_id=zruiiUAVdKs&locale=en-GB"
+            src="https://upload.wikimedia.org/wikipedia/en/a/ad/Snapchat_logo.svg"
+          />
+        </mj-column>
+      </mj-group>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section background-color="#ffffff" border-top="1px solid #e0e0e0" padding="20px">
+      <mj-column>
+        <mj-text align="center" font-size="12px" color="#888888">
+          © 2025 {{ project_name }}. All rights reserved.
+        </mj-text>
+        <mj-text align="center" font-size="12px" color="#888888">
+          Questions? <a href="{{ contact_link }}" style="color:#ff3b0a; text-decoration:none;">Contact us</a>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

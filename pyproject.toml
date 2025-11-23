@@ -24,6 +24,8 @@ dependencies = [
     "cloudinary>=1.44.1",
     "python-multipart>=0.0.20",
     "paystackapi>=2.1.3",
+    "resend>=2.17.0",
+    "apscheduler[asyncio]>=3.11.1",
 ]
 
 

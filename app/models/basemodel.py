@@ -1,11 +1,18 @@
 from datetime import UTC, datetime
-from typing import Self
+from typing import Any, Self, TypeVar
+from uuid import UUID as UUID_Type
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, func, or_, select
+from sqlalchemy import Boolean, Column, DateTime, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import text
+
 from app.db.postgres_db_conn import Base
+from app.utils.helper import is_valid_uuid
+
+T = TypeVar("T", bound="BaseModel")
 
 
 class BaseModel(Base):
@@ -13,7 +20,9 @@ class BaseModel(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
@@ -23,29 +32,42 @@ class BaseModel(Base):
         del obj_dict["_sa_instance_state"]
         del obj_dict["is_deleted"]
         del obj_dict["deleted_at"]
-        obj_dict["id"] = str(self.id)
-        if self.created_at:
-            obj_dict["created_at"] = self.created_at.isoformat()
-        if self.updated_at:
-            obj_dict["updated_at"] = self.updated_at.isoformat()
-        if self.deleted_at:
-            obj_dict["deleted_at"] = self.deleted_at.isoformat()
+
+        for key, value in obj_dict.items():
+            if isinstance(value, (UUID_Type,)):
+                obj_dict[key] = str(value)
+
+            if isinstance(value, datetime):
+                obj_dict[key] = value.isoformat()
 
         return obj_dict
 
-    async def save(self, db: AsyncSession) -> Self:
+    async def save(
+        self, db: AsyncSession, attribute_names: list[str] | None = None
+    ) -> Self:
 
         self.updated_at = datetime.now(UTC)
 
         db.add(self)
         await db.flush()
-        await db.refresh(self)
+        if attribute_names:
+            await db.refresh(self, attribute_names=attribute_names)
+        else:
+            await db.refresh(self)
 
         return self
 
     @classmethod
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
-        result = await db.execute(select(cls).where(cls.id == id))
+        if not is_valid_uuid(id):
+            raise TypeError("id not a valid uuid")
+
+        if hasattr(cls, "is_active"):
+            result = await db.execute(
+                select(cls).where(and_(cls.is_active.is_(True), cls.id == id))
+            )
+        else:
+            result = await db.execute(select(cls).where(cls.id == id))
 
         obj = result.scalar_one_or_none()
         if not obj:
@@ -79,7 +101,7 @@ class BaseModel(Base):
 
         await db.delete(obj)
 
-        await obj.save(db)
+        await db.commit()
 
         return obj
 
@@ -109,36 +131,72 @@ class BaseModel(Base):
         return obj
 
     @classmethod
+    async def get_one(cls, db: AsyncSession, filter: dict | None = None) -> Self:
+
+        query = select(cls)
+
+        if filter:
+            for key, value in filter.items():
+                if hasattr(cls, key):
+                    column = getattr(cls, key)
+                    query = query.where(column == value)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    @classmethod
     async def get_by(
-        cls, filter: dict, db: AsyncSession, page: int = 1, page_size: int = 10
-    ) -> list[Self]:
+        cls,
+        db: AsyncSession,
+        filter: dict | None = None,
+        page: int = 1,
+        page_size: int = 10,
+        order_by: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> dict:
 
         query = select(cls)
         or_condition = []
 
-        for key, value in filter.items():
-            if hasattr(cls, key):
-                column = getattr(cls, key)
-                if isinstance(value, str) and "%" in value:
-                    or_condition.append(column.ilike(value))
-                elif value is None:
-                    or_condition.append(column.is_(None))
-                else:
-                    or_condition.append(column == value)
+        if filter:
+            for key, value in filter.items():
+                if hasattr(cls, key):
+                    column = getattr(cls, key)
+                    if isinstance(value, str) and "%" in value:
+                        or_condition.append(column.ilike(value))
+                    elif value is None:
+                        or_condition.append(column.is_(None))
+                    else:
+                        or_condition.append(column == value)
 
-        if or_condition:
+        if or_condition and hasattr(cls, "is_active"):
+            query = query.filter(and_(cls.is_active.is_(True), or_(*or_condition)))
+        elif or_condition:
             query = query.where(or_(*or_condition))
 
-        offset = (page - 1) * page_size
+        if hasattr(cls, "created_at"):
+            if date_from:
+                query = query.where(cls.created_at >= text(f"'{date_from}'"))
+            if date_to:
+                query = query.where(cls.created_at <= text(f"'{date_to}'"))
 
-        count_query = query.with_only_columns(func.count()).order_by(None)
+        if order_by:
+            descending = order_by.startswith("-")
+            order_field = order_by.lstrip("-")
+            if hasattr(cls, order_field):
+                col = getattr(cls, order_field)
+                query = query.order_by(col.desc() if descending else col.asc())
+
+        offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
 
-        result = await db.execute(query)
+        count_query = select(func.count()).select_from(cls)
         count_result = await db.execute(count_query)
 
+        result = await db.execute(query)
         objs = result.scalars().all()
-        count = count_result.scalar()
+        count = count_result.scalar() or 0
 
         return {"data": objs, "total": count, "page": page, "page_size": page_size}
 
@@ -172,3 +230,47 @@ class BaseModel(Base):
         if user and user.role == user_type:
             return user
         return None
+
+    @classmethod
+    async def filter_by(
+        cls: type[T],
+        filter: dict[str, Any],
+        db: AsyncSession,
+        preload: list[str] | bool | None = None,
+    ) -> list[T]:
+        if preload is None:
+            preload = []
+
+        # if preload=True, load all relationships
+        if preload is True:
+            preload = [relation.key for relation in cls.__mapper__.relationships]
+
+        query = select(cls)
+
+        for relation in preload:
+            if hasattr(cls, relation):
+                query = query.options(selectinload(getattr(cls, relation)))
+
+        for key, value in filter.items():
+            if hasattr(cls, key):
+                column = getattr(cls, key)
+                if isinstance(value, str) and "%" in value:
+                    query = query.where(column.ilike(value))
+                elif value is None:
+                    query = query.where(column.is_(None))
+                else:
+                    query = query.where(column == value)
+
+        result = await db.execute(query)
+        return result.scalars().all()
+
+    async def update(self, db: AsyncSession, data: dict[str, Any]) -> Self:
+
+        for key, value in data.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+        db.add(self)
+        await db.commit()
+        await db.refresh(self)
+        return self

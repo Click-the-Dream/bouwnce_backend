@@ -1,7 +1,6 @@
 from sqlalchemy import Column, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-
 from app.models.basemodel import BaseModel
 
 
@@ -29,6 +28,7 @@ class SubOrder(BaseModel):
         nullable=False,
     )
     otp = Column(String)
+    username = Column(String)
 
     order = relationship(
         "Order", back_populates="suborders", uselist=False

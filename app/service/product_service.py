@@ -1,10 +1,12 @@
 from typing import Any
 
 from fastapi import UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.inventory import Inventory
 from app.models.products import product_domain
 from app.schemas.product import CategoryResponse, ProductResponse
-from app.utils.cloudinary_utils import save_uploaded_file_temp
+from app.utils.cloudinary_utils import cleanup_temp_files, save_uploaded_file_temp
 from app.utils.responses import response_builder
 
 
@@ -14,6 +16,7 @@ class ProductService:
         store_id: str,
         product_data: dict[str, Any],
         images: list[UploadFile],
+        db: AsyncSession,
     ) -> ProductResponse:
         try:
             if not images or len(images) == 0:
@@ -26,6 +29,17 @@ class ProductService:
             product_data["image_paths"] = await save_uploaded_file_temp(images)
 
             product = await product_domain.create_product(product_data, store_id)
+
+            await cleanup_temp_files(product_data["image_paths"])
+
+            # Create invontory row
+            inventory_data = {
+                "product_id": str(product.id),
+                "available": product.stock,
+                "reserved": 0,
+            }
+            await Inventory.create(inventory_data, db)
+
             product_response = ProductResponse(**product_domain.to_dict(product))
 
             return response_builder(
@@ -52,6 +66,14 @@ class ProductService:
 
         try:
             product = await product_domain.get_product_by_id(product_id)
+
+            if product.state != "live" or product.status != "active":
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="product with specified ID not found",
+                )
+
             product_resposne = ProductResponse(**product_domain.to_dict(product))
 
             return response_builder(
@@ -85,7 +107,8 @@ class ProductService:
         per_page: int | None = 10,
     ) -> list[ProductResponse]:
         try:
-            filter = {}
+            filter = {"state": "live", "status": "active"}
+
             if name:
                 filter["name"] = name
 
@@ -126,7 +149,7 @@ class ProductService:
         page: int | None = 1,
         per_page: int | None = 10,
     ) -> list[ProductResponse]:
-        filter_dict = {}
+        filter_dict = {"state": "live", "status": "active"}
 
         if product_name:
             filter_dict["name"] = product_name
@@ -187,6 +210,7 @@ class ProductService:
                 product = await product_domain.update_product_image(
                     product_id, temp_paths, store_id
                 )
+                await cleanup_temp_files(temp_paths)
 
             product_response = ProductResponse(**product_domain.to_dict(product))
             return response_builder(
@@ -209,6 +233,46 @@ class ProductService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="Error occurred while updating product",
+            )
+
+    async def toggle_current_store_product_state(
+        self, store_id: str, product_id: str
+    ) -> ProductResponse:
+        try:
+            product = await product_domain.get_product_by_id(product_id)
+            if product.store_id != store_id:
+                return response_builder(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    status="error",
+                    message="Product doesn't below the this store",
+                )
+
+            state = product.state
+            product.state = "active" if product.state == "draft" else "draft"
+
+            if state == "active":
+                message = "successfully toggle product state from active to draft"
+            else:
+                message = "successfully toggle product state from draft to active"
+
+            await product.save()
+            return response_builder(
+                status_code=status.HTTP_200_OK, status="error", message=message
+            )
+        except ValueError as ve:
+            return response_builder(
+                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
+            )
+        except Exception as e:
+            print("Error occured while toggling product state: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while toggling product state",
             )
 
     async def delete_products_by_id(self, product_id: str, store_id: str):

@@ -13,6 +13,9 @@ class CartService:
 
     async def _formulate_response(self, cart: Cart) -> CartResponse:
         product = await product_domain.get_product_by_id(cart.product_id)
+        if not product:
+            raise ValueError("Product with Id not found")
+
         product_response = ProductResponse(**product_domain.to_dict(product))
 
         cart_dict = cart.to_dict()
@@ -25,6 +28,13 @@ class CartService:
     async def create(self, cart_data: dict[str, Any], db: AsyncSession) -> CartResponse:
         try:
             product = await product_domain.get_product_by_id(cart_data["product_id"])
+            if not product:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Product with id not found",
+                )
+
             new_cart = await Cart.create(cart_data, db)
 
             product_response = ProductResponse(**product_domain.to_dict(product))
@@ -119,6 +129,10 @@ class CartService:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
             )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
+            )
         except Exception as e:
             print("Error occurred while retrieving cart: ", str(e))
             return response_builder(
@@ -183,6 +197,10 @@ class CartService:
         except ValueError as ve:
             return response_builder(
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
+            )
+        except TypeError as te:
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
             )
         except Exception as e:
             print("Error deleting cart by id: ", str(e))

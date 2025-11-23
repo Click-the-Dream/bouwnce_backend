@@ -1,32 +1,35 @@
-from fastapi.responses import JSONResponse
-from fastapi import status
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.models import PayoutInfo, User
-from app.utils.responses import response_builder
 from typing import Any
+
+from fastapi import status
+from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import PayoutInfo, Store
 from app.schemas import PayoutInfoResponse
+from app.utils.responses import response_builder
+
 
 class PayoutInfoCRUDService:
 
-    async def create(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
+    async def create(
+        self, db: AsyncSession, data: dict[str, Any], store: Store
+    ) -> JSONResponse:
 
-        user = await User.whoami(id=data.get("user_id"), user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
-            )
-        existing_payout = await PayoutInfo.get_by_id(id=data.get("user_id"), db=session)
-        if existing_payout:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                status="error",
-                message="Payout info already exists for this user.",
-            )
         try:
-            new_payout = await PayoutInfo.create(data, session)
-            data = PayoutInfoResponse(**new_payout.to_dict())
+            payout: PayoutInfo | None = store.payout_info
+            if payout:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Payout info already exists for this store.",
+                )
+
+            data["store_id"] = store.id
+            new_payout = await PayoutInfo.create(data, db)
+            new_payout = new_payout.to_dict()
+
+            new_payout["user_id"] = str(store.user_id)
+            data = PayoutInfoResponse(**new_payout)
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -34,58 +37,57 @@ class PayoutInfoCRUDService:
                 data=data,
             )
         except Exception as e:
+            print("Error creating store contact info: ", str(e))
             return response_builder(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="An error occurred while creating payout info.",
-                data=str(e),
-            )
-    
-    async def get(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
             )
 
-        payout = await PayoutInfo.get_by_id(id=user_id, db=session)
-        if not payout:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Payout info not found.",
-            )
-        payout = payout[0]
-        data = PayoutInfoResponse(**payout.to_dict())
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Payout info retrieved successfully.",
-            data=data,
-        )
-    
-    async def update(self, session: AsyncSession, data: dict[str, Any]) -> JSONResponse:
-        user = await User.whoami(id=data.get("user_id"), user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
-            )
+    async def get(self, store: Store) -> JSONResponse:
 
-        payout = await PayoutInfo.get_by_id(id=data.get("user_id"), db=session)
-        if not payout:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Payout info not found.",
-            )
-        payout = payout[0]
         try:
-            updated_payout = await PayoutInfo.update_by_id(str(payout.id), data=data, db=session)
-            data = PayoutInfoResponse(**updated_payout.to_dict())
+            payout: PayoutInfo | None = store.payout_info
+            if not payout:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Payout info not found.",
+                )
+
+            payout = payout.to_dict()
+            payout["user_id"] = str(store.user_id)
+            data = PayoutInfoResponse(**payout)
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Payout info retrieved successfully.",
+                data=data,
+            )
+        except Exception as e:
+            print("Error fetching store payout info: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error fetching store payout info",
+            )
+
+    async def update(
+        self, db: AsyncSession, data: dict[str, Any], store: Store
+    ) -> JSONResponse:
+        try:
+            payout: PayoutInfo | None = store.payout_info
+            if not payout:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Payout info not found.",
+                )
+
+            updated_payout = await payout.update(db, data)
+            updated_payout = updated_payout.to_dict()
+            updated_payout["user_id"] = str(store.user_id)
+            data = PayoutInfoResponse(**updated_payout)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -93,40 +95,36 @@ class PayoutInfoCRUDService:
                 data=data,
             )
         except Exception as e:
+            print("Error occured while updating store payout info: ", str(e))
             return response_builder(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="An error occurred while updating payout info.",
-                data=str(e),
-            )
-    
-    async def delete(self, session: AsyncSession, user_id: str) -> JSONResponse:
-        user = await User.whoami(id=user_id, user_type="vendor", db=session)
-        if not user:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="User not found or is not a vendor.",
             )
 
-        payout = await PayoutInfo.get_by_id(id=user_id, db=session)
-        if not payout:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND,
-                status="error",
-                message="Payout info not found.",
-            )
+    async def delete(self, db: AsyncSession, store: Store) -> JSONResponse:
         try:
-            await PayoutInfo.delete_by_id(id=user_id, db=session)
+            payout: PayoutInfo | None = store.payout_info
+            if not payout:
+                return response_builder(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    status="error",
+                    message="Payout info not found for this store.",
+                )
+
+            await PayoutInfo.delete_permanently_by_id(payout.id, db)
             return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
+                status_code=status.HTTP_200_OK,
                 status="success",
                 message="Payout info deleted successfully.",
             )
         except Exception as e:
+            print("Error occured while deleting store payout info: ", str(e))
             return response_builder(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="An error occurred while deleting payout info.",
-                data=str(e),
             )
+
+
+payout_info_service = PayoutInfoCRUDService()

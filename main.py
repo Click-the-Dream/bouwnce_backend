@@ -4,15 +4,23 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
-
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.db.mongo import mongo_conn
+from app.jobs.prevent_render_shutdown import call_health_endpoint_cron_task
+
+# Not going to be used in production
+# Just used to prevent render shuting down due to inactivity
+scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
     client = await mongo_conn()
+    scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
+    scheduler.start()
     yield
     client.close()
     print("Mongodb Client Closed successfully")

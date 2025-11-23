@@ -1,7 +1,5 @@
-import asyncio
 from contextlib import asynccontextmanager
 
-import httpx
 import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -12,24 +10,17 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.db.mongo import mongo_conn
+from app.jobs.prevent_render_shutdown import call_health_endpoint_cron_task
 
 # Not going to be used in production
 # Just used to prevent render shuting down due to inactivity
 scheduler = AsyncIOScheduler()
 
 
-async def cron_task():
-    print("cron job is startting")
-    async with httpx.AsyncClient() as client:
-        for _ in range(10):
-            await client.get(f"{settings.BASE_URL}/health")
-            await asyncio.sleep(1)
-
-
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
     client = await mongo_conn()
-    scheduler.add_job(cron_task, CronTrigger(minute="*/5"))
+    scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
     scheduler.start()
     yield
     client.close()

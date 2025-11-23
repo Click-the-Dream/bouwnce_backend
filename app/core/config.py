@@ -15,6 +15,7 @@ class Config(BaseModel):
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")
 
+    RESERVATION_TTL: int = config("RESERVATION_TTL", default=300, cast=int)
     ALGORITHM: str = config("ALGORITHM")
 
     SMTP_TLS: bool = config("SMTP_TLS")

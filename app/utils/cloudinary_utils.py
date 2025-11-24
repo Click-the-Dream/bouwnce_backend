@@ -28,8 +28,12 @@ async def upload_image(path: str, folder_name: str) -> dict[str, Any]:
         loop = asyncio.get_event_loop()
 
         result = await loop.run_in_executor(
-            executor, lambda: cloudinary.uploader.upload(path, folder=folder_name)
+            executor,
+            lambda: cloudinary.uploader.upload(
+                path, folder=folder_name, resource_type="image"
+            ),
         )
+
         return {"url": result["secure_url"], "public_id": result["public_id"]}
     except Exception as e:
         print(f"Error uploading image {path}: {str(e)}")

@@ -20,7 +20,9 @@ class BaseModel(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
 
@@ -129,6 +131,20 @@ class BaseModel(Base):
         return obj
 
     @classmethod
+    async def get_one(cls, db: AsyncSession, filter: dict | None = None) -> Self:
+
+        query = select(cls)
+
+        if filter:
+            for key, value in filter.items():
+                if hasattr(cls, key):
+                    column = getattr(cls, key)
+                    query = query.where(column == value)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    @classmethod
     async def get_by(
         cls,
         db: AsyncSession,
@@ -175,7 +191,7 @@ class BaseModel(Base):
         offset = (page - 1) * page_size
         query = query.offset(offset).limit(page_size)
 
-        count_query = query.with_only_columns(func.count()).order_by(None)
+        count_query = select(func.count()).select_from(cls)
         count_result = await db.execute(count_query)
 
         result = await db.execute(query)

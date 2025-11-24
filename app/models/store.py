@@ -42,7 +42,6 @@ class Store(BaseModel):
     shipment_info = relationship(
         "ShipmentInfo",
         back_populates="store",
-        uselist=False,
         cascade="all, delete-orphan",
     )
     suborders = relationship(

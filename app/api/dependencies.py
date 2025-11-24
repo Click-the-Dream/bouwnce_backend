@@ -49,6 +49,7 @@ async def get_current_user(
 ) -> User | None:
 
     token = auth.credentials
+    print("I am testing something")
 
     is_blacklisted = redis_db.get(f"blacklist_{token}")
 

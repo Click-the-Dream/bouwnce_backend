@@ -1,41 +1,20 @@
-import asyncio
 from contextlib import asynccontextmanager
 
-import httpx
 import uvicorn
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
 from app.core.config import settings
-from app.cron_jobs import init_store_cron_jobs
 from app.db.mongo import mongo_conn
-
-# Not going to be used in production
-# Just used to prevent render shuting down due to inactivity
-scheduler = AsyncIOScheduler()
-
-
-async def cron_task():
-    print("cron job is startting")
-    async with httpx.AsyncClient() as client:
-        for _ in range(10):
-            await client.get(f"{settings.BASE_URL}/health")
-            await asyncio.sleep(1)
 
 
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
     client = await mongo_conn()
-    scheduler.add_job(cron_task, CronTrigger(minute="*/5"))
-    scheduler.start()
-    init_store_cron_jobs()
     yield
     client.close()
-    scheduler.shutdown()
     print("Mongodb Client Closed successfully")
 
 
@@ -52,7 +31,6 @@ app = FastAPI(
     lifespan=fastapi_lifespan,
 )
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -62,11 +40,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_STR)
-
-
-@app.get("/health", tags=["health"])
-async def health():
-    return {"health": "good", "status": "success"}
 
 
 if __name__ == "__main__":

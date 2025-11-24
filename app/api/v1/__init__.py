@@ -49,7 +49,7 @@ api_router = APIRouter()
 
 api_router.include_router(auth_router.router)
 
+
 api_router.include_router(user_api_router)
 api_router.include_router(store_router)
-api_router.include_router(vendor_dashboard_router)
 api_router.include_router(waitlist)

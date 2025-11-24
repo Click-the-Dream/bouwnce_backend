@@ -83,6 +83,7 @@ class StoreCRUDService:
 
     async def get_vendor_store(self, vendor_id: str, db: AsyncSession):
         try:
+            print("Vendor ID: ", vendor_id)
             if not is_valid_uuid(vendor_id):
                 return response_builder(
                     status_code=status.HTTP_400_BAD_REQUEST,

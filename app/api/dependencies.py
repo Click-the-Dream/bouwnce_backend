@@ -49,7 +49,6 @@ async def get_current_user(
 ) -> User | None:
 
     token = auth.credentials
-    print("I am testing something")
 
     is_blacklisted = redis_db.get(f"blacklist_{token}")
 
@@ -89,7 +88,6 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 async def get_current_active_user(current_user: CurrentUser) -> User | None:
-
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -105,6 +103,7 @@ CurrentActiveUser = Annotated[User, Depends(get_current_active_user)]
 async def get_current_vendor(
     current_user: CurrentActiveUser,
 ) -> User | None:
+
     if current_user.role != "vendor":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -144,9 +143,10 @@ async def get_current_store(
                 "contact_info",
                 "payout_info",
                 "shipment_info",
-                "wallets"
+                "wallets",
             ],
         )
+
         if len(store) == 0:
             raise ValueError("User doesn't have a store")
 

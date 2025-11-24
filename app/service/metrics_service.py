@@ -9,8 +9,6 @@ from app.utils.helper import build_date_filter
 
 class MetricService:
 
-   
-
     @staticmethod
     def _prev_window(start, end) -> Tuple[Any, Any]:
         """Return the previous window [start - (end-start), start)."""

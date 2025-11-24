@@ -38,7 +38,12 @@ class User(BaseModel):
         "Payment", back_populates="user", cascade="all, delete-orphan"
     )
 
-    orders = relationship("Order", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Order.user_id]")
+    orders = relationship(
+        "Order",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="[Order.user_id]",
+    )
 
     def to_dict(self):
         data_dict = super().to_dict()

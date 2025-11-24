@@ -1,4 +1,5 @@
 from typing import Annotated, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -95,16 +96,12 @@ class WithdrawalHistory(BaseModel):
         ),
     ]
     page: Annotated[int, Field(description="Current page number", examples=[1])]
-    page_size: Annotated[
-        int, Field(description="Items per page", examples=[10])
-    ]
+    page_size: Annotated[int, Field(description="Items per page", examples=[10])]
     total: Annotated[
         int,
         Field(description="Total withdrawal count", examples=[50]),
     ]
-    total_pages: Annotated[
-        int, Field(description="Total pages", examples=[5])
-    ]
+    total_pages: Annotated[int, Field(description="Total pages", examples=[5])]
 
 
 class WalletDashboardResponse(BaseModel):
@@ -178,9 +175,7 @@ class PaginatedOrders(BaseModel):
         ),
     ]
     page: Annotated[int, Field(description="Page number", examples=[1])]
-    page_size: Annotated[
-        int, Field(description="Items per page", examples=[10])
-    ]
+    page_size: Annotated[int, Field(description="Items per page", examples=[10])]
     total: Annotated[int, Field(description="Total orders", examples=[100])]
     total_pages: Annotated[int, Field(description="Pages", examples=[10])]
 
@@ -227,7 +222,6 @@ class PaginatedCustomers(BaseModel):
 
 class VendorCustomersDashboardResponse(BaseModel):
     customers: PaginatedCustomers
-
 
 
 class OverviewDashboardResponse(BaseModel):

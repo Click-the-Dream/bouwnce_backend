@@ -1,4 +1,4 @@
-from fastapi import status, APIRouter
+from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,13 +8,13 @@ from app.schemas import (
     PaginatedCustomers,
     PaginatedOrders,
     RecentOrder,
+    TopProduct,
     VendorCustomerItem,
     VendorCustomersDashboardResponse,
     VendorOrderItem,
     VendorOrdersDashboardResponse,
     WalletDashboardResponse,
     WithdrawalHistory,
-    TopProduct
 )
 from app.service.metrics_service import MetricService
 from app.utils.helper import build_date_filter
@@ -75,10 +75,8 @@ class VendorDashBoardService:
                 page_size=page_size,
                 db=session,
             )
-            
-            
+
             top_products = [TopProduct(**item) for item in top_products["items"]]
-            
 
             dashboard = OverviewDashboardResponse(
                 total_revenue=metrics["total_revenue"],
@@ -174,7 +172,7 @@ class VendorDashBoardService:
     @staticmethod
     async def get_vendor_orders(
         session: AsyncSession,
-        current_user,
+        store_id: str,
         page: int = 1,
         page_size: int = 10,
         search: str = None,
@@ -183,7 +181,7 @@ class VendorDashBoardService:
     ) -> JSONResponse:
 
         try:
-            filters = {"store_id": current_user.store_id}
+            filters = {"store_id": store_id}
 
             if search:
                 filters["buyer_name__icontains"] = search
@@ -239,16 +237,17 @@ class VendorDashBoardService:
                 status_code=status.HTTP_200_OK,
             )
 
-        except Exception:
+        except Exception as e:
             return response_builder(
                 status="Failed",
-                message="Error fetching vendor orders",
+                message=f"Error fetching vendor orders {e}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
     @staticmethod
     async def get_vendor_customers(
         session: AsyncSession,
-        current_user,
+        store_id: str,
         page: int = 1,
         page_size: int = 10,
     ) -> JSONResponse:
@@ -257,26 +256,16 @@ class VendorDashBoardService:
         """
         try:
 
-            # Query SubOrders for this vendor store
             result = await SubOrder.get_by(
                 db=session,
-                filter={"store_id": current_user.store.id},
+                filter={"store_id": store_id},
                 page=page,
                 page_size=page_size,
             )
 
-            # Extract items and total count
             items = result.get("items", [])
             total_count = result.get("total", len(items))
 
-            if not items:
-                return response_builder(
-                    status="Failed",
-                    message="No suborders found",
-                    status_code=status.HTTP_404_NOT_FOUND,
-                )
-
-            # Aggregate by unique customer
             customer_model_dump = {}
             for sub in items:
                 if sub.username not in customer_model_dump:
@@ -286,12 +275,14 @@ class VendorDashBoardService:
                         "total_spent": 0.0,
                     }
                 customer_model_dump[sub.username]["total_orders"] += 1
-                customer_model_dump[sub.username]["total_spent"] += float(sub.amount or 0.0)
+                customer_model_dump[sub.username]["total_spent"] += float(
+                    sub.amount or 0.0
+                )
 
-            # Convert to schema items
-            customer_items = [VendorCustomerItem(**c) for c in customer_model_dump.values()]
+            customer_items = [
+                VendorCustomerItem(**c) for c in customer_model_dump.values()
+            ]
 
-            # Build paginated response
             data = VendorCustomersDashboardResponse(
                 customers=PaginatedCustomers(
                     items=customer_items,

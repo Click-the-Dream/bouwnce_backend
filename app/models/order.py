@@ -33,4 +33,5 @@ class Order(BaseModel):
     )
 
     suborders = relationship(
-        "SubOrder", back_populates="order", cascade="all, delete-orphan")
+        "SubOrder", back_populates="order", cascade="all, delete-orphan"
+    )

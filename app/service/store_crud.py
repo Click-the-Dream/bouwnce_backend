@@ -157,6 +157,35 @@ class StoreCRUDService:
                 message="Error occured while fetching store full details",
             )
 
+    async def get_store_onboarding_status(self, store: Store) -> JSONResponse:
+        try:
+            missing_sections = []
+
+            if not store.shipment_info or len(store.shipment_info) == 0:
+                missing_sections.append("shipment_info")
+
+            if not store.contact_info:
+                missing_sections.append("contact_info")
+
+            if not store.payout_info:
+                missing_sections.append("payout_info")
+
+            is_onboarded = len(missing_sections) == 0
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="sucess",
+                message="Status fetched successfully",
+                data={"is_onboarded": is_onboarded, "missing_sections": []},
+            )
+        except Exception as e:
+            print("Error occured while fetching store onboarding status: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while fetching store onboarding status",
+            )
+
     async def get_stores(
         self,
         db: AsyncSession,

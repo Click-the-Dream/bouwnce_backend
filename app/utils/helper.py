@@ -1,19 +1,14 @@
-import uuid
 from datetime import datetime, timedelta
-
-from app.utils.responses import response_builder
-
-
-def is_valid_uuid(value: str) -> bool:
-    try:
-        uuid_obj = uuid.UUID(value)
-        return str(uuid_obj) == value.lower()
-    except (ValueError, TypeError):
-        return False
-
 
 def build_date_filter(range_type: str, start_date=None, end_date=None):
     today = datetime.utcnow().date()
+
+
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
 
     if range_type == "yesterday":
         start = today - timedelta(days=1)
@@ -32,9 +27,11 @@ def build_date_filter(range_type: str, start_date=None, end_date=None):
         end = today
 
     elif range_type == "custom":
-        start = start_date
-        end = end_date
+        if not start_date or not end_date:
+            raise ValueError("start_date and end_date are required for custom range")
+        start, end = start_date, end_date
 
     else:
-        return response_builder(status_code=400, message="Invalid date range type")
+        raise ValueError(f"Invalid date range type: {range_type}")
+
     return start, end

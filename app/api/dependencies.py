@@ -10,7 +10,7 @@ from app.core.security import verify_token
 
 # from app.db.mongo import mongo_session
 from app.db.postgres_db_conn import get_async_session
-from app.db.redis import redis_client
+from app.db.redis import get_redis_client
 from app.models.store import Store
 from app.models.user import User
 
@@ -31,8 +31,9 @@ async def get_postgres_db() -> AsyncGenerator[AsyncSession, None]:
 #         yield database, session
 
 
-def get_redis():
+async def get_redis():
     try:
+        redis_client = await get_redis_client()
         yield redis_client
     finally:
         pass
@@ -49,9 +50,8 @@ async def get_current_user(
 ) -> User | None:
 
     token = auth.credentials
-    print("I am testing something")
 
-    is_blacklisted = redis_db.get(f"blacklist_{token}")
+    is_blacklisted = await redis_db.get(f"blacklist_{token}")
 
     if is_blacklisted:
         raise HTTPException(

@@ -34,7 +34,7 @@ async def get_all_user_carts(
     page: int | None = 1,
     page_size: int | None = 10,
 ):
-    return await cart_service.get_all_by_user(current_user.id, db, page, page_size)
+    return await cart_service.get_all_by_user(str(current_user.id), db, page, page_size)
 
 
 @router.get(

@@ -26,6 +26,7 @@ dependencies = [
     "paystackapi>=2.1.3",
     "resend>=2.17.0",
     "apscheduler[asyncio]>=3.11.1",
+    "paystack>=1.5.0",
 ]
 
 

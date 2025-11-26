@@ -1,7 +1,6 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
@@ -52,9 +51,3 @@ async def get_async_session():
             raise
         finally:
             await session.close()
-
-
-def register_db_shutdown(app: FastAPI):
-    @app.on_event("shutdown")
-    async def shutdown_db():
-        await engine.dispose()

@@ -13,10 +13,11 @@ from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
 from app.models.store import Store
 from app.models.user import User
+from app.service.payment.paystack import paystack_service
 
 oauth2_scheme = HTTPBearer()
 
-
+PaystackSignature = Annotated[bool, Depends(paystack_service.verify_webhook_signature)]
 TokenDep = Annotated[HTTPAuthorizationCredentials, Depends(oauth2_scheme)]
 
 

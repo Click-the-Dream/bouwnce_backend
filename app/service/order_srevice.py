@@ -173,6 +173,15 @@ class OrderService:
             reference = data["reference"]
             order = await Order.get_by_reference(reference, db)
 
+            # Only handle charge.success event
+            event = body.get("event")
+            if event and event != "charge.success":
+                return response_builder(
+                    status_code=status.HTTP_200_OK,
+                    status="success",
+                    message="ignore event",
+                )
+
             if not order:
                 return response_builder(
                     status_code=status.HTTP_400_BAD_REQUEST,

@@ -273,6 +273,5 @@ class BaseModel(Base):
                 setattr(self, key, value)
 
         db.add(self)
-        await db.commit()
         await db.refresh(self)
         return self

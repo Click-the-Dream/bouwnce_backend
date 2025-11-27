@@ -4,9 +4,13 @@ from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import genrate_verification_code
 from app.models.cart import Cart
 from app.models.order import Order
+from app.models.order_item import OrderItem
 from app.models.payment import Payment
+from app.models.products import product_domain
+from app.models.suborder import SubOrder
 from app.models.user import User
 from app.service.payment.paystack import paystack_service
 from app.utils.responses import response_builder
@@ -14,10 +18,10 @@ from app.utils.responses import response_builder
 
 class OrderService:
     def __init__(self):
-        self._max_tries = 10
+        self._max_tries = 5
 
     async def checkout(
-        self, user: User, redis: Redis, idempotent_key: str, db: AsyncSession
+        self, user: User, redis: Redis, request: Request, db: AsyncSession
     ) -> JSONResponse:
         """Create a checkout for user and return payment url
 
@@ -32,7 +36,13 @@ class OrderService:
         """
 
         try:
-
+            idempotent_key = request.headers.get("Idempotent-key")
+            if not idempotent_key:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Missing idempotent key",
+                )
             # Check if the order has been created before using the idempotent key
             # Return the response if order already exist to avoid duplicate processing
             order = await Order.get_by_idempotent_key(idempotent_key, db)
@@ -111,7 +121,7 @@ class OrderService:
                 "user_id": user.id,
                 "payment_id": payment.id,
                 "total_amount": total_price,
-                "products": reserved_product,
+                "products": [product.model_dump() for product in reserved_product],
                 "idemptotent_key": idempotent_key,
                 "reference_token": referenceToken,
             }
@@ -154,10 +164,10 @@ class OrderService:
             )
 
     async def handle_successful_payment(
-        self, request: Request, db: AsyncSession
+        self, request: Request, db: AsyncSession, redis: Redis
     ) -> JSONResponse:
         try:
-            body = await request.body()
+            body = await request.json()
 
             data = body["data"]
             reference = data["reference"]
@@ -178,18 +188,85 @@ class OrderService:
                     message="Order has been processed",
                 )
 
-            if order.total_amount != data["amount"]:
+            if (order.total_amount * 100) != data[
+                "amount"
+            ]:  # Convert to naira from kobo
                 return response_builder(
                     status_code=status.HTTP_409_CONFLICT,
                     status="error",
                     message="amount mismatch",
                 )
 
-            products = order["products"]
+            # The username of the user is needed for the suborder
+            user = await Order.fetch_owner_of_order(str(order.user_id))
+            if not user:
+                return response_builder(
+                    status_code=status.HTTP_409_CONFLICT,
+                    status="error",
+                    message="no user for order found",
+                )
+
+            products = order.products
 
             grouped_products_by_store = Order.group_products_by_store(products)
-            print(grouped_products_by_store)
 
+            # Create Suborders and order items
+            for store_id, products_data in grouped_products_by_store.items():
+                # Generate Otp
+                otp = genrate_verification_code()
+
+                suborder_data = {
+                    "store_id": store_id,
+                    "order_id": order.id,
+                    "total_amount": products_data["total_amount"],
+                    "otp": otp,
+                    "username": user.username,
+                    "status": "paid",
+                }
+                suborder = await SubOrder.create(suborder_data, db)
+
+                for product in products_data["products"]:
+                    order_item_data = {
+                        "product_id": product.id,
+                        "suborder_id": suborder.id,
+                        "quantity": product.quantity,
+                        "product_snapshot": {
+                            "name": product.name,
+                            "store_id": product.store_id,
+                            "category": product.category,
+                            "images": product.images,
+                        },
+                        "unit_price": product.amount,
+                        "line_price": product.amount * product.quantity,
+                    }
+                    await OrderItem.create(order_item_data, db)
+
+                    # Decrease the stock of product
+                    await product_domain.decrease_product_stock(
+                        product.id, product.quantity
+                    )
+
+                # Release all the reserved products
+                await Order.release_reserved_products(
+                    products_data["products"], str(user.id), redis
+                )
+
+            # Mark Both order and payment paid and successful respectively
+            await order.update(db, {"status": "paid"})
+            await Payment.update_by_id(
+                str(order.payment_id), {"status": "successful"}, db
+            )
+
+            # Clear User cart
+            await Cart.delete_by_user_id(str(user.id), db)
+
+            # Send Email to store email address and other push notifications
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully proccessed order",
+            )
         except Exception as e:
             print("Error occured while handling order successul: ", str(e))
             return response_builder(
@@ -197,3 +274,6 @@ class OrderService:
                 status="error",
                 message="Internal server error",
             )
+
+
+order_service = OrderService()

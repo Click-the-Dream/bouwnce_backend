@@ -155,6 +155,12 @@ class ProductDomain:
                 await pipe.unwatch()
                 raise e
 
+    async def decrease_product_stock(self, product_id: str, quantity: int) -> bool:
+        await self.Product.find(Product.id == product_id).update(
+            {"$inc": {"stock": (-quantity)}}
+        )
+        return True
+
     async def to_dict(self, obj: Product, redis: Redis | None = None) -> dict[str, Any]:
         obj_dict = obj.__dict__.copy()
 

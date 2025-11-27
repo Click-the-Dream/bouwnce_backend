@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import genrate_verification_code
 from app.models.cart import Cart
-from app.models.order import Order
+from app.models.order import Order, ProductMetadata
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.products import product_domain
@@ -19,6 +19,59 @@ from app.utils.responses import response_builder
 class OrderService:
     def __init__(self):
         self._max_tries = 5
+
+    async def verify_payment(
+        self, current_user: User, referenceToken: str, redis: Redis, db: AsyncSession
+    ):
+        try:
+            # Verirfy payment using reference token
+            is_success, response = paystack_service.callback(referenceToken)
+            if is_success:
+                return response_builder(
+                    status_code=status.HTTP_200_OK,
+                    status="success",
+                    message="Payment  successful",
+                    data=response,
+                )
+
+            # Check if order is present, then update the order and payment as failed
+            order = await Order.get_by_reference(referenceToken, db)
+            if not order:
+                return response_builder(
+                    status_code=status.HTTP_409_CONFLICT,
+                    status="error",
+                    message="order attached to reference not found",
+                )
+
+            # Verify order is for user
+            if str(current_user.id) != str(order.user_id):
+                return response_builder(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    status="error",
+                    message="Order not yours",
+                )
+
+            await order.update(db, {"status": "failed"})
+            await Payment.update_by_id(str(order.payment_id), {"status": "failed"}, db)
+
+            # Release reserved products
+            products = [ProductMetadata(**product) for product in order.products]
+            await Order.release_reserved_products(products, str(order.user_id), redis)
+
+            return response_builder(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                status="error",
+                message="Payment failed of incomplete",
+                data=response,
+            )
+
+        except Exception as e:
+            print("Error occured while verifying payment: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while verifying payment",
+            )
 
     async def checkout(
         self, user: User, redis: Redis, request: Request, db: AsyncSession

@@ -27,14 +27,16 @@ class PaystackGateWay:
         else:
             raise Exception(response["message"])
 
-    def webhook(self):
-        pass
-
     def callback(self, reference: str):
         """Verify Payment transaction using paystack SDK"""
         response = self.paystack.transaction.verify(reference)
-        if response["status"] and response["data"]["status"] == "success":
+
+        if not response["status"]:
+            return False, response["message"]
+
+        if response["data"]["status"] == "success":
             return True, response["data"]
+
         return False, response["data"]
 
     async def verify_webhook_signature(request: Request):

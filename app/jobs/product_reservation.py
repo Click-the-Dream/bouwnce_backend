@@ -3,6 +3,7 @@ from time import time
 from sqlalchemy import text, update
 from sqlalchemy.sql import func
 
+from app.core.config import settings
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
 from app.models.order import Order
@@ -57,11 +58,13 @@ async def mark_order_and_payment_abandoned():
         order_updated_result = await db.execute(order_statement)
         order_updated_count = order_updated_result.rowcount
 
+        minutes = settings.RESERVATION_TTL // 60
         payment_statement = (
             update(Payment)
             .where(
                 Payment.status == "initiated",
-                Payment.created_at <= func.now() - text("INTERVAL '15 minutes'"),
+                Payment.created_at
+                <= func.now() - text(f"INTERVAL '{minutes} minutes'"),
             )
             .values(status="abandoned")
         )

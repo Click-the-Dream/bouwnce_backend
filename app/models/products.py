@@ -2,7 +2,8 @@ import asyncio
 from time import time
 from typing import Annotated, Any
 
-from beanie import PydanticObjectId
+from beanie.operators import In
+from bson import ObjectId
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis, WatchError
 
@@ -86,6 +87,7 @@ class ProductDomain:
                     await pipe.watch(product_key)
 
                     currently_reserved_prod = int(await pipe.get(product_key) or 0)
+                    user_reserved = await pipe.get(product_user_key)
 
                     if currently_reserved_prod + quantity > available_quantity:
                         await pipe.unwatch()
@@ -95,9 +97,17 @@ class ProductDomain:
                     now = time() + int(settings.RESERVATION_TTL)
 
                     pipe.multi()
+
+                    # If user has already reserved product before
+                    # Decrease the quantity reserved before from product
+                    # Before increasing with this new quantity
+                    if user_reserved is not None:
+                        user_reserved = int(user_reserved or 0)
+                        pipe.decrby(product_key, user_reserved)
+
                     pipe.incrby(product_key, quantity)
                     pipe.set(product_user_key, quantity)
-                    pipe.ZADD("reservation_expiries", {product_user_key: now})
+                    pipe.zadd("reservation_expiries", {product_user_key: now})
                     await pipe.execute()
 
                     return True, None
@@ -192,6 +202,14 @@ class ProductDomain:
             obj_dict["created_at"] = obj.created_at.isoformat()
             obj_dict["updated_at"] = obj.updated_at.isoformat()
 
+            # Convert images to dict
+            if obj.images:
+                images = []
+                for img in obj.images:
+                    images.append(img.model_dump())
+
+                obj_dict["images"] = images
+
             obj_dicts_list.append(obj_dict)
             obj_key_list.append(self._compute_reserved_product_key(str(obj.id)))
 
@@ -255,12 +273,10 @@ class ProductDomain:
 
     async def delete_category(self, id: str) -> bool:
 
-        try:
-            PydanticObjectId(id)
-        except Exception as e:
-            raise TypeError(str(e)) from None
+        if not ObjectId.is_valid(id):
+            raise TypeError(f"Invalid product Id: {id}") from None
 
-        category = await self.Category.find_one(Category.id == PydanticObjectId(id))
+        category = await self.Category.find_one(Category.id == id)
         if not category:
             raise ValueError(f"Category with id {id} not found")
 
@@ -327,12 +343,14 @@ class ProductDomain:
 
     async def get_products_by_ids(self, product_ids: list[str]) -> list[Product]:
 
-        try:
-            product_ids = [PydanticObjectId(id) for id in product_ids]
-        except Exception as e:
-            raise TypeError(str(e)) from None
+        object_ids = []
+        for id in product_ids:
+            if not ObjectId.is_valid(id):
+                raise TypeError(f"Invalid product id: {id}")
 
-        products = await self.Product.find(self.Product.id.in_(product_ids)).to_list()
+            object_ids.append(ObjectId(id))
+        products = await self.Product.find(In(self.Product.id, object_ids)).to_list()
+
         return products
 
     async def get_products_by(
@@ -364,12 +382,10 @@ class ProductDomain:
         return {"products": results, "total": count, "page": page, "per_page": per_page}
 
     async def get_product_by_id(self, id: str) -> Product:
-        try:
-            PydanticObjectId(id)
-        except Exception as e:
-            raise TypeError(str(e)) from None
+        if not ObjectId.is_valid(id):
+            raise TypeError(f"Invalid product id: {id}") from None
 
-        product = await self.Product.find_one(self.Product.id == PydanticObjectId(id))
+        product = await self.Product.find_one(self.Product.id == ObjectId(id))
         if not product:
             raise ValueError(f"product with product id {id} not found")
         return product

@@ -1,4 +1,4 @@
-from fastapi import status
+from fastapi import HTTPException, status
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
@@ -116,7 +116,18 @@ class OrderService:
                 )
 
             # Get all the carts of a user
-            carts = await Cart.get_by_user_id(user_id=str(user.id), db=db, all=True)
+
+            carts_data = await Cart.get_by_user_id(
+                user_id=str(user.id), db=db, all=True
+            )
+            carts = carts_data["data"]
+
+            if not carts:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="User has no product in cart",
+                )
 
             # Check the  availability of the products in the carts
             avaialble_products, unavailable_products = (
@@ -154,11 +165,11 @@ class OrderService:
                 except Exception as e:
                     print("Error occured while releasing reserved products: ", str(e))
 
-                    return response_builder(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        status="error",
-                        message="Error occured while creating payment intent",
-                    )
+                return response_builder(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    status="error",
+                    message="Error occured while creating payment intent",
+                )
 
             # Create payment and order
             payment_data = {
@@ -175,7 +186,7 @@ class OrderService:
                 "payment_id": payment.id,
                 "total_amount": total_price,
                 "products": [product.model_dump() for product in reserved_product],
-                "idemptotent_key": idempotent_key,
+                "idempotent_key": idempotent_key,
                 "reference_token": referenceToken,
             }
 
@@ -192,11 +203,11 @@ class OrderService:
                 },
             )
 
-        except TypeError:
+        except TypeError as te:
             return response_builder(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 status="error",
-                message="Invalid user Id",
+                message=str(te),
             )
 
         except Exception as e:
@@ -220,6 +231,14 @@ class OrderService:
         self, request: Request, db: AsyncSession, redis: Redis
     ) -> JSONResponse:
         try:
+
+            try:
+                await paystack_service.verify_webhook_signature(request)
+            except HTTPException as he:
+                return response_builder(
+                    status_code=he.status_code, status="error", message=he.detail
+                )
+
             body = await request.json()
 
             data = body["data"]
@@ -260,7 +279,7 @@ class OrderService:
                 )
 
             # The username of the user is needed for the suborder
-            user = await Order.fetch_owner_of_order(str(order.user_id))
+            user = await Order.fetch_owner_of_order(str(order.user_id), db)
             if not user:
                 return response_builder(
                     status_code=status.HTTP_409_CONFLICT,

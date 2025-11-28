@@ -18,9 +18,8 @@ class PaystackGateWay:
 
         amount: Naira for now
         """
-
         response = self.paystack.transaction.initialize(
-            email=data["email"], amount=data["amount"]
+            email=data["email"], amount=int(data["amount"])
         )
         if response["status"]:
             return response["data"]["authorization_url"], response["data"]["reference"]
@@ -39,7 +38,7 @@ class PaystackGateWay:
 
         return False, response["data"]
 
-    async def verify_webhook_signature(request: Request):
+    async def verify_webhook_signature(self, request: Request):
         """
         verify the request coming to paystack webhook is coming from paystack
 
@@ -48,6 +47,7 @@ class PaystackGateWay:
         :return: True is validation is correct otherwise throw error
         :rtype: Literal[True]
         """
+
         body = await request.body()
 
         signature = request.headers.get("x-paystack-signature")

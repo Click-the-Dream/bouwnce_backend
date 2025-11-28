@@ -17,12 +17,12 @@ class ProductMetadata(PydnaticBaseModel):
     id: str
     store_id: str
     name: str
-    categories: str
-    image: list[dict[str, str]]
+    category: str
+    images: list[dict[str, str]]
     stock: int
     quantity: int
     amount: int
-    error: str | None
+    error: str | None = None
 
 
 class Order(BaseModel):
@@ -102,11 +102,17 @@ class Order(BaseModel):
         products = await product_domain.get_products_by_ids(product_ids)
 
         product_list = await product_domain.serialize_products(products, redis)
-
+        product_list = product_list
         available_products = []
         unavailable_products = []
 
-        for cart, product in zip(carts, product_list, strict=False):
+        product_list_dicts = {}
+        for product in product_list:
+            product_list_dicts[product["id"]] = product
+
+        for cart in carts:
+            product = product_list_dicts[str(cart.product_id)]
+
             product_model = ProductMetadata(
                 id=product["id"],
                 store_id=product["store_id"],
@@ -165,7 +171,7 @@ class Order(BaseModel):
         return reserved_products, unavailable_products
 
     @staticmethod
-    async def compute_total_amount(products: list[ProductMetadata]) -> float:
+    def compute_total_amount(products: list[ProductMetadata]) -> float:
         total_amount = 0
 
         for prod in products:
@@ -211,7 +217,7 @@ class Order(BaseModel):
 
         return grouped_products
 
-    @staticmethod
+    @classmethod
     async def fetch_owner_of_order(cls, user_id: str, db: AsyncSession) -> User | None:
         result = await db.execute(select(User).where(User.id == user_id))
 

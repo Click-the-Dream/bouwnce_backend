@@ -35,6 +35,16 @@ class CartService:
                     message="Product with id not found",
                 )
 
+            cart = await Cart.get_product_in_user_cart(
+                cart_data["user_id"], cart_data["product_id"]
+            )
+            if cart:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Product already in cart",
+                )
+
             new_cart = await Cart.create(cart_data, db)
 
             product_response = await product_domain.to_dict(product)
@@ -78,9 +88,13 @@ class CartService:
             user_carts = await Cart.get_by_user_id(user_id, db, page, page_size)
 
             cart_responses = []
+
             for cart in user_carts["data"]:
-                cart_response = await self._formulate_response(cart)
-                cart_responses.append(cart_response)
+                try:
+                    cart_response = await self._formulate_response(cart)
+                    cart_responses.append(cart_response)
+                except ValueError:
+                    pass
 
             return response_builder(
                 status_code=status.HTTP_200_OK,

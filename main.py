@@ -40,7 +40,7 @@ async def fastapi_lifespan(app: FastAPI):
 
     yield
 
-    engine.dispose()
+    await engine.dispose()
     print("✅ succeffully shutdown postgres engine")
 
     client.close()

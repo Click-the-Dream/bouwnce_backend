@@ -5,7 +5,6 @@ from fastapi.requests import Request
 
 from app.api.dependencies import (
     CurrentActiveUser,
-    PaystackSignature,
     dbSessionDep,
     redisSessionDep,
 )
@@ -15,9 +14,7 @@ router = APIRouter(prefix="/payment", tags=["Payments"])
 
 
 @router.post("/paystack/webhook", summary="Paystack Webhook to verify payment")
-async def paystack_webhook(
-    _: PaystackSignature, request: Request, db: dbSessionDep, redis: redisSessionDep
-):
+async def paystack_webhook(request: Request, db: dbSessionDep, redis: redisSessionDep):
     return await order_service.handle_successful_payment(request, db, redis)
 
 

@@ -4,6 +4,7 @@ from app.api.v1 import (
     auth_router,
     cart_router,
     contact_info_crud,
+    payment,
     payout_info_crud,
     product_router,
     shipments_info_crud,
@@ -52,3 +53,4 @@ api_router.include_router(auth_router.router)
 api_router.include_router(user_api_router)
 api_router.include_router(store_router)
 api_router.include_router(waitlist)
+api_router.include_router(payment.router)

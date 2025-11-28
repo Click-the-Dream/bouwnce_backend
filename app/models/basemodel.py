@@ -59,7 +59,7 @@ class BaseModel(Base):
 
     @classmethod
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
-        if not is_valid_uuid(id):
+        if not is_valid_uuid(str(id)):
             raise TypeError("id not a valid uuid")
 
         if hasattr(cls, "is_active"):

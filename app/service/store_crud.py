@@ -338,7 +338,7 @@ class StoreCRUDService:
 
                     store.save(db)
                     return response_builder(
-                        status_code=status.HTTP_200_OK,
+                        status_code=status.HTTP_204_NO_CONTENT,
                         status="success",
                         message="Store branding image successfully deleted",
                     )
@@ -371,7 +371,7 @@ class StoreCRUDService:
             )
             data = StoreResponse(**deleted_store.to_dict())
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Store deleted successfully.",
                 data=data,

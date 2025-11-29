@@ -142,6 +142,16 @@ class OrderService:
             # Add all the products that cannot be reserved to unvailable products
             unavailable_products.extend(cannot_reserve_products)
 
+            if not reserved_product:
+                return response_builder(
+                    status_code=status.HTTP_410_GONE,
+                    status="error",
+                    message="No product in user cart is available anymore",
+                    data={
+                        "available_products": [],
+                        "unavailable_products": unavailable_products,
+                    },
+                )
             # Compute the total ammount
             total_price = Order.compute_total_amount(reserved_product)
 

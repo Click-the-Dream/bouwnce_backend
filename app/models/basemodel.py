@@ -273,5 +273,6 @@ class BaseModel(Base):
                 setattr(self, key, value)
 
         db.add(self)
+        await db.flush()
         await db.refresh(self)
         return self

@@ -166,7 +166,7 @@ class ProductDomain:
                 raise e
 
     async def decrease_product_stock(self, product_id: str, quantity: int) -> bool:
-        await self.Product.find(Product.id == product_id).update(
+        await self.Product.find(Product.id == ObjectId(product_id)).update(
             {"$inc": {"stock": (-quantity)}}
         )
         return True
@@ -349,7 +349,13 @@ class ProductDomain:
                 raise TypeError(f"Invalid product id: {id}")
 
             object_ids.append(ObjectId(id))
-        products = await self.Product.find(In(self.Product.id, object_ids)).to_list()
+
+        filter = [
+            In(self.Product.id, object_ids),
+            self.Product.state == "live",
+            self.Product.status,
+        ]
+        products = await self.Product.find(*filter).to_list()
 
         return products
 

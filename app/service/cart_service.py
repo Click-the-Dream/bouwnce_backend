@@ -36,7 +36,7 @@ class CartService:
                 )
 
             cart = await Cart.get_product_in_user_cart(
-                cart_data["user_id"], cart_data["product_id"]
+                cart_data["user_id"], cart_data["product_id"], db
             )
             if cart:
                 return response_builder(
@@ -206,7 +206,9 @@ class CartService:
             await cart.delete(db)
 
             return response_builder(
-                status_code=status.HTTP_200_OK, status="success", message="Deleted cart"
+                status_code=status.HTTP_204_NO_CONTENT,
+                status="success",
+                message="Deleted cart",
             )
         except ValueError as ve:
             return response_builder(
@@ -229,7 +231,7 @@ class CartService:
             await Cart.delete_by_user_id(user_id, db)
 
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Successfully deleted user carts",
             )

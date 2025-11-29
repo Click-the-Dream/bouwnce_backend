@@ -1,0 +1,100 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-text font-family="Arial, Helvetica, sans-serif" color="#444444" />
+      <mj-button font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+
+    <mj-style>
+      .small-text { font-size: 13px; color: #777777; }
+      .muted { color: #777777; }
+      .table-header { font-weight: bold; font-size: 14px; background: #f1f1f1; padding: 10px; }
+      .table-row { padding: 10px; font-size: 14px; }
+    </mj-style>
+  </mj-head>
+
+  <mj-body background-color="#f5f6f8">
+
+    <!-- Card -->
+    <mj-section background-color="#ffffff" padding="25px 20px">
+      <mj-column width="100%">
+
+        <!-- Title -->
+        <mj-text
+          align="center"
+          font-size="22px"
+          font-weight="bold"
+          padding="10px 0 20px"
+          color="#2c3e50">
+          {{ project_name }} – Pending Order Reminder
+        </mj-text>
+
+        <!-- Greeting -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          Hello {{ vendor_name }},
+        </mj-text>
+
+        <!-- Body -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          You currently have one or more customer orders that are still awaiting your action.
+          Please review these orders and choose to <strong>Accept</strong> or <strong>Decline</strong> them.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 20px"
+          color="#555555">
+          If no action is taken before <strong>{{ auto_decline_time }}</strong>, these orders will be <strong>automatically marked as declined</strong>.
+        </mj-text>
+
+        <!-- Summary Table (Optional) -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Pending Orders
+        </mj-text>
+
+        <mj-table padding="0 25px 15px" font-size="14px" color="#444">
+          <tr class="table-header">
+            <th>Order ID</th>
+            <th>Customer</th>
+            <th>Total</th>
+          </tr>
+          {{ pending_orders_rows }} <!-- Inject HTML rows -->
+        </mj-table>
+
+        <!-- CTA -->
+        <mj-button
+          align="center"
+          background-color="#009688"
+          color="#ffffff"
+          font-size="17px"
+          border-radius="6px"
+          padding="18px 30px"
+          href="{{ dashboard_link }}">
+          Review Pending Orders
+        </mj-button>
+
+        <mj-divider border-width="2px" border-color="#eeeeee" padding="20px 0" />
+
+        <!-- Reminders -->
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          css-class="muted">
+          • Accepting an order means you will start processing it immediately.<br/>
+          • Declining an order notifies the customer and releases the reserved items.<br/>
+          • Orders automatically decline after: <strong>{{ auto_decline_time }}</stro

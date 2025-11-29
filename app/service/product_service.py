@@ -295,7 +295,7 @@ class ProductService:
             is_deleted = await product_domain.delete_product(product_id)
             if is_deleted:
                 return response_builder(
-                    status_code=status.HTTP_200_OK,
+                    status_code=status.HTTP_204_NO_CONTENT,
                     status="success",
                     message="successfully deleted product",
                 )
@@ -326,7 +326,7 @@ class ProductService:
             deleted_count = await product_domain.delete_all_store_products(store_id)
 
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="successfully deleted all vendor products",
                 data={"product_deleted_count": deleted_count},
@@ -362,7 +362,7 @@ class ProductService:
             )
             product_response = await product_domain.to_dict(product, redis)
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="successfully deleted product image",
                 data=product_response,
@@ -390,7 +390,7 @@ class ProductService:
                 await product_domain.to_dict(category) for category in categories
             ]
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Successfully get all available product categories",
                 data=categories_response,
@@ -427,7 +427,7 @@ class ProductService:
         try:
             await product_domain.delete_category(id)
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="successfully deleted category",
             )

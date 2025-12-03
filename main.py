@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.rate_limiter import rate_limiter
 from app.db.mongo import mongo_conn
 from app.db.postgres_db_conn import engine
-from app.jobs import (
+from app.worker.jobs import (
     call_health_endpoint_cron_task,
     mark_order_and_payment_abandoned,
     product_reservation,

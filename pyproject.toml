@@ -27,6 +27,7 @@ dependencies = [
     "resend>=2.17.0",
     "apscheduler[asyncio]>=3.11.1",
     "paystack>=1.5.0",
+    "celery>=5.5.3",
 ]
 
 

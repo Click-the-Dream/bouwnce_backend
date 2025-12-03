@@ -35,6 +35,7 @@ class Product(BaseDocument):
     state: str
     images: list[Images]
     status: bool
+    total_sales: Annotated[int, Field(default=0)]
 
     class Settings:
         name = "products"
@@ -165,9 +166,11 @@ class ProductDomain:
                 await pipe.unwatch()
                 raise e
 
-    async def decrease_product_stock(self, product_id: str, quantity: int) -> bool:
+    async def decrease_product_stock_and_increase_total_sales(
+        self, product_id: str, quantity: int
+    ) -> bool:
         await self.Product.find(Product.id == ObjectId(product_id)).update(
-            {"$inc": {"stock": (-quantity)}}
+            {"$inc": {"stock": (-quantity), "total_sales": quantity}}
         )
         return True
 

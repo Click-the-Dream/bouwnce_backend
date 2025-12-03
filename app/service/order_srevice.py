@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from fastapi import HTTPException, status
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
@@ -10,10 +12,12 @@ from app.models.order import Order, ProductMetadata
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.products import product_domain
+from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.models.user import User
 from app.service.payment.paystack import paystack_service
 from app.utils.responses import response_builder
+from app.worker.tasks.email import send_email_using_worker
 
 
 class OrderService:
@@ -271,7 +275,7 @@ class OrderService:
                     message="Invalid reference Token",
                 )
 
-            # The order status is not initiated or abandoned, then the order has been processed in one away or the other
+            # If the order status is not initiated or abandoned (for late payment), then the order has been processed in one away or the other
             if order.status not in ["initiated", "abandoned"]:
                 return response_builder(
                     status_code=status.HTTP_200_OK,
@@ -279,6 +283,7 @@ class OrderService:
                     message="Order has been processed",
                 )
 
+            # Confirm the amount paid is eqal to order amount
             if (order.total_amount * 100) != data[
                 "amount"
             ]:  # Convert to naira from kobo
@@ -304,6 +309,7 @@ class OrderService:
             # Create Suborders and order items
             for store_id, products_data in grouped_products_by_store.items():
                 # Generate Otp
+                store = await Store.get_by_id(store_id, db)
                 otp = genrate_verification_code()
 
                 suborder_data = {
@@ -332,14 +338,40 @@ class OrderService:
                     }
                     await OrderItem.create(order_item_data, db)
 
-                    # Decrease the stock of product
-                    await product_domain.decrease_product_stock(
+                    # Decrease the stock and increase total sales of product (can be pushed to worker)
+                    await product_domain.decrease_product_stock_and_increase_total_sales(
                         product.id, product.quantity
                     )
 
-                # Release all the reserved products
+                # Release all the reserved products (can be pushed to worker)
                 await Order.release_reserved_products(
                     products_data["products"], str(user.id), redis
+                )
+
+                # update store's wallet (can be pushed to worker)
+                await store.update_store_wallet(
+                    amount=products_data["total_amount"], db=db
+                )
+
+                # Send email to vendor for order
+                now = datetime.now(UTC)
+                year = now.year
+                context = {
+                    "vendor_name": store.name,
+                    "username": user.username,
+                    "order_id": str(order.id),
+                    "order_link": "#",
+                    "year": year,
+                }
+                template = "vendor_alert_order.html"
+                email_to = store.email
+                subject = "New Order"
+
+                send_email_using_worker.delay(
+                    email_to=email_to,
+                    subject=subject,
+                    context=context,
+                    template=template,
                 )
 
             # Mark Both order and payment paid and successful respectively
@@ -351,7 +383,24 @@ class OrderService:
             # Clear User cart
             await Cart.delete_by_user_id(str(user.id), db)
 
-            # Send Email to store email address and other push notifications
+            # Send an email to buyer that order has been received
+            context = {
+                "customer_name": user.username,
+                "year": year,
+                "order_id": str(order.id),
+                "order_date": now.isoformat(),
+                "currency": "NGN",
+                "total_amount": order.total_amount,
+                "order_link": "#",
+                "item_preview": [],
+            }
+            template = "buyer_order_confirmation.html"
+            email_to = user.email
+            subject = "Order Received"
+
+            send_email_using_worker.delay(
+                email_to=email_to, subject=subject, context=context, template=template
+            )
 
             return response_builder(
                 status_code=status.HTTP_200_OK,

@@ -1,5 +1,5 @@
-from app.jobs.prevent_render_shutdown import call_health_endpoint_cron_task
-from app.jobs.product_reservation import (
+from app.worker.jobs.prevent_render_shutdown import call_health_endpoint_cron_task
+from app.worker.jobs.product_reservation import (
     mark_order_and_payment_abandoned,
     product_reservation,
 )

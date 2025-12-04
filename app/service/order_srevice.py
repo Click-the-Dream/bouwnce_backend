@@ -371,7 +371,7 @@ class OrderService:
                     email_to=email_to,
                     subject=subject,
                     context=context,
-                    template=template,
+                    template_name=template,
                 )
 
             # Mark Both order and payment paid and successful respectively
@@ -399,7 +399,10 @@ class OrderService:
             subject = "Order Received"
 
             send_email_using_worker.delay(
-                email_to=email_to, subject=subject, context=context, template=template
+                email_to=email_to,
+                subject=subject,
+                context=context,
+                template_name=template,
             )
 
             return response_builder(

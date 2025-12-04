@@ -5,8 +5,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 
-from app.models import Wallet
 from app.models.basemodel import BaseModel
+from app.models.wallet import Wallet
 
 
 class Store(BaseModel):

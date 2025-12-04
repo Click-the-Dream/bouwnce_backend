@@ -2,7 +2,7 @@ import asyncio
 from time import time
 from typing import Annotated, Any
 
-from beanie.operators import In
+from beanie.operators import Eq, In
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis, WatchError
@@ -356,7 +356,7 @@ class ProductDomain:
         filter = [
             In(self.Product.id, object_ids),
             self.Product.state == "live",
-            self.Product.status,
+            Eq(self.Product.status, True),
         ]
         products = await self.Product.find(*filter).to_list()
 

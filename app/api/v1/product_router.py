@@ -2,7 +2,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
-from app.api.dependencies import CurrentAdmin, CurrentStore, dbSessionDep
+from app.api.dependencies import (
+    CurrentAdmin,
+    CurrentStore,
+    dbSessionDep,
+    redisSessionDep,
+)
 from app.schemas.product import CategoryCreate, CategoryResponse, ProductResponse
 from app.service.product_service import product_service
 
@@ -81,6 +86,7 @@ async def create_product(
     response_model=list[ProductResponse],
 )
 async def get_all_products(
+    redis: redisSessionDep,
     name: str | None = Query(default=None, min_lenght=3, description="name of product"),
     category: str | None = Query(
         default=None, min_length=3, description="Category of product to search for"
@@ -91,7 +97,11 @@ async def get_all_products(
     ),
 ):
     return await product_service.get_products(
-        product_name=name, produdct_category=category, page=page, per_page=per_page
+        product_name=name,
+        produdct_category=category,
+        redis=redis,
+        page=page,
+        per_page=per_page,
     )
 
 
@@ -103,6 +113,7 @@ async def get_all_products(
 )
 async def get_all_vendor_products(
     current_store: CurrentStore,
+    redis: redisSessionDep,
     name: str | None = Query(default=None, min_length=3, description="name of product"),
     category: str | None = Query(
         default=None, min_length=3, description="Category of product to search for"
@@ -114,6 +125,7 @@ async def get_all_vendor_products(
 ):
     return await product_service.get_products_by_store(
         store_id=str(current_store.id),
+        redis=redis,
         name=name,
         category=category,
         page=page,
@@ -129,6 +141,7 @@ async def get_all_vendor_products(
 )
 async def get_all_vendor_products_by_id(
     id: str,
+    redis: redisSessionDep,
     name: str | None = Query(default=None, min_length=3, description="name of product"),
     category: str | None = Query(
         default=None, min_length=3, description="Category of product to search for"
@@ -139,13 +152,18 @@ async def get_all_vendor_products_by_id(
     ),
 ):
     return await product_service.get_products_by_store(
-        store_id=id, name=name, category=category, page=page, per_page=per_page
+        store_id=id,
+        name=name,
+        category=category,
+        redis=redis,
+        page=page,
+        per_page=per_page,
     )
 
 
 @router.get("/{id}", summary="Get product by ID", response_model=ProductResponse)
-async def get_product_by_id(id: str):
-    return await product_service.get_product_by_id(id)
+async def get_product_by_id(id: str, redis: redisSessionDep):
+    return await product_service.get_product_by_id(id, redis=redis)
 
 
 @router.put(
@@ -157,6 +175,7 @@ async def get_product_by_id(id: str):
 async def update_product(
     id: str,
     current_store: CurrentStore,
+    redis: redisSessionDep,
     images: ImageUpdate = None,
     name: Annotated[str | None, Form(min_length=2, examples=["Round Neck"])] = None,
     description: Annotated[
@@ -180,6 +199,7 @@ async def update_product(
 
     return await product_service.update_products(
         update_data=product_dict,
+        redis=redis,
         product_id=id,
         store_id=str(current_store.id),
         images=images,
@@ -226,6 +246,7 @@ async def delete_product(product_id: str, current_store: CurrentStore):
 )
 async def delete_product_image(
     product_id: str,
+    redis: redisSessionDep,
     current_store: CurrentStore,
     image_public_id: str = Query(
         examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13/i0hwxwlwbhfofmeumurh"]
@@ -233,6 +254,7 @@ async def delete_product_image(
 ):
     return await product_service.delete_product_image(
         product_id=product_id,
+        redis=redis,
         image_public_id=image_public_id,
         store_id=str(current_store.id),
     )

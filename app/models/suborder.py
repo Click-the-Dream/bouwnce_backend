@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 from sqlalchemy import Column, Enum, ForeignKey, Integer, String, distinct, func, select
 from sqlalchemy.dialects.postgresql import UUID
@@ -18,11 +18,17 @@ class SubOrder(BaseModel):
         UUID(as_uuid=True), ForeignKey("stores.id", ondelete="CASCADE"), nullable=False
     )
     total_amount = Column(Integer, default=0, nullable=False)
-    shipping_fee = Column(Integer, default=0, nullable=False)
+    shipping_fee = Column(Integer, default=0)
+
+    otp = Column(String)
+    username = Column(String)
+
     status = Column(
         Enum(
             "pending",
-            "processing",
+            "paid",
+            "accepted",
+            "declined",
             "shipped",
             "delivered",
             "cancelled",
@@ -95,7 +101,7 @@ class SubOrder(BaseModel):
         store_id: str,
         start_date,
         end_date,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
 
         stmt = select(
             func.count(SubOrder.id).label("total_orders"),

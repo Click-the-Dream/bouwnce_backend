@@ -1,8 +1,13 @@
+import asyncio
+from time import time
 from typing import Annotated, Any
 
-from beanie import PydanticObjectId
+from beanie.operators import In
+from bson import ObjectId
 from pydantic import BaseModel, Field
+from redis.asyncio import Redis, WatchError
 
+from app.core.config import settings
 from app.models.base_document import BaseDocument
 from app.utils.cloudinary_utils import delete_folder, delete_images, upload_images
 
@@ -29,7 +34,8 @@ class Product(BaseDocument):
     category: str
     state: str
     images: list[Images]
-    status: str
+    status: bool
+    total_sales: Annotated[int, Field(default=0)]
 
     class Settings:
         name = "products"
@@ -40,12 +46,136 @@ class ProductDomain:
     def __init__(self):
         self.Product = Product
         self.Category = Category
+        self._max_tries = 5
 
-    def to_dict(self, obj) -> dict[str, Any]:
+    def _compute_reserved_product_key(self, product_id: str) -> str:
+        """Return a redis key used to store reserved product stock"""
+        return f"reserved:product:{product_id}"
+
+    def _compute_reserved_product_user_key(self, product_id: str, user_id: str) -> str:
+        """Return a redis key used to store reserved product stock of a user"""
+        return f"reserved:product:{product_id}:{user_id}"
+
+    async def get_available_product_stock(self, obj: Product, redis: Redis) -> int:
+        """Check if a product is still available by checking against reserve stock"""
+
+        if obj.stock <= 0:
+            return 0
+
+        redis_key = self._compute_reserved_product_key(str(obj.id))
+        reserved_stock = await redis.get(redis_key)
+        if reserved_stock is not None:
+            return obj.stock
+
+        avaialble = obj.stock - int(reserved_stock)
+        return max(avaialble, 0)
+
+    async def reserve_product(
+        self,
+        product_id: str,
+        user_id: str,
+        quantity: int,
+        available_quantity: int,
+        redis: Redis,
+    ) -> bool:
+        """Reserve stock by adding to temporarily adding to redis"""
+        product_key = self._compute_reserved_product_key(product_id)
+        product_user_key = self._compute_reserved_product_user_key(product_id, user_id)
+
+        async with redis.pipeline() as pipe:
+            for attempt in range(self._max_tries):
+                try:
+                    await pipe.watch(product_key)
+
+                    currently_reserved_prod = int(await pipe.get(product_key) or 0)
+                    user_reserved = await pipe.get(product_user_key)
+
+                    if currently_reserved_prod + quantity > available_quantity:
+                        await pipe.unwatch()
+                        return False, "Not enough available quantity"
+
+                    # Multiple Execution for atomic transaction
+                    now = time() + int(settings.RESERVATION_TTL)
+
+                    pipe.multi()
+
+                    # If user has already reserved product before
+                    # Decrease the quantity reserved before from product
+                    # Before increasing with this new quantity
+                    if user_reserved is not None:
+                        user_reserved = int(user_reserved or 0)
+                        pipe.decrby(product_key, user_reserved)
+
+                    pipe.incrby(product_key, quantity)
+                    pipe.set(product_user_key, quantity)
+                    pipe.zadd("reservation_expiries", {product_user_key: now})
+                    await pipe.execute()
+
+                    return True, None
+                except WatchError:
+
+                    # Retry if race condition occured
+                    if attempt < self._max_tries - 1:
+                        await asyncio.sleep(0.05)
+                        continue
+                    else:
+                        return False, "Maximum WatchError reached"
+                except Exception as e:
+
+                    await pipe.unwatch()
+                    raise e
+
+    async def release_product(self, product_id: str, user_id: str, redis: Redis):
+        """Releases all the products that has been reserved"""
+
+        product_key = self._compute_reserved_product_key(product_id)
+        product_user_key = self._compute_reserved_product_user_key(product_id, user_id)
+        zset_key = "reservation_expires"
+
+        for attempt in range(self._max_tries):
+            try:
+                async with redis.pipeline() as pipe:
+
+                    # Prevent Race Condition
+                    await pipe.watch(product_key, product_user_key)
+
+                    quantity = int(await pipe.get(product_user_key) or 0)
+
+                    if quantity == 0:
+                        await pipe.unwatch()
+                        return True  # There is nothing to release
+
+                    pipe.multi()
+                    pipe.delete(product_user_key)
+                    pipe.decrby(product_key, quantity)
+                    pipe.zrem(zset_key, product_user_key)
+
+                    await pipe.execute()
+
+                    return True
+            except WatchError:
+
+                if attempt < self._max_tries - 1:
+                    await asyncio.sleep(0.05)
+                    continue
+                else:
+                    await pipe.unwatch()
+                    return False
+
+            except Exception as e:
+                await pipe.unwatch()
+                raise e
+
+    async def decrease_product_stock_and_increase_total_sales(
+        self, product_id: str, quantity: int
+    ) -> bool:
+        await self.Product.find(Product.id == ObjectId(product_id)).update(
+            {"$inc": {"stock": (-quantity), "total_sales": quantity}}
+        )
+        return True
+
+    async def to_dict(self, obj: Product, redis: Redis | None = None) -> dict[str, Any]:
         obj_dict = obj.__dict__.copy()
-
-        if obj_dict.get("_sa_instance_state"):
-            obj_dict.pop("_sa_instance_state")
 
         if obj_dict.get("revision_id"):
             obj_dict.pop("revision_id")
@@ -54,7 +184,51 @@ class ProductDomain:
         obj_dict["created_at"] = obj.created_at.isoformat()
         obj_dict["updated_at"] = obj.updated_at.isoformat()
 
+        if redis:
+            obj_dict["stock"] = await self.get_available_product_stock(obj, redis)
+
         return obj_dict
+
+    async def serialize_products(
+        self, objs: list[Product], redis: Redis
+    ) -> list[dict[str, Any]]:
+
+        obj_key_list = []
+        obj_dicts_list = []
+        for obj in objs:
+            obj_dict = obj.__dict__.copy()
+
+            if obj_dict.get("revision_id"):
+                obj_dict.pop("revision_id")
+
+            obj_dict["id"] = str(obj.id)
+            obj_dict["created_at"] = obj.created_at.isoformat()
+            obj_dict["updated_at"] = obj.updated_at.isoformat()
+
+            # Convert images to dict
+            if obj.images:
+                images = []
+                for img in obj.images:
+                    images.append(img.model_dump())
+
+                obj_dict["images"] = images
+
+            obj_dicts_list.append(obj_dict)
+            obj_key_list.append(self._compute_reserved_product_key(str(obj.id)))
+
+        reserved_stocks = await redis.mget(obj_key_list)
+
+        for obj_dict, reserved_stock in zip(
+            obj_dicts_list, reserved_stocks, strict=False
+        ):
+            stock = obj_dict.get("stock", 0)
+            if reserved_stock is None:
+                obj_dict["stock"] = stock
+            else:
+                available = stock - int(reserved_stock)
+                obj_dict["stock"] = max(available, 0)
+
+        return obj_dicts_list
 
     async def create_product(self, data: dict[str, Any], store_id: str) -> Product:
 
@@ -63,7 +237,7 @@ class ProductDomain:
 
         image_paths = data["image_paths"]
         state = "draft"
-        status = "active"
+        status = True
 
         data["state"] = state
 
@@ -102,12 +276,10 @@ class ProductDomain:
 
     async def delete_category(self, id: str) -> bool:
 
-        try:
-            PydanticObjectId(id)
-        except Exception as e:
-            raise TypeError(str(e)) from None
+        if not ObjectId.is_valid(id):
+            raise TypeError(f"Invalid product Id: {id}") from None
 
-        category = await self.Category.find_one(Category.id == PydanticObjectId(id))
+        category = await self.Category.find_one(Category.id == id)
         if not category:
             raise ValueError(f"Category with id {id} not found")
 
@@ -174,12 +346,20 @@ class ProductDomain:
 
     async def get_products_by_ids(self, product_ids: list[str]) -> list[Product]:
 
-        try:
-            product_ids = [PydanticObjectId(id) for id in product_ids]
-        except Exception as e:
-            raise TypeError(str(e)) from None
+        object_ids = []
+        for id in product_ids:
+            if not ObjectId.is_valid(id):
+                raise TypeError(f"Invalid product id: {id}")
 
-        products = await self.Product.find(self.Product.id.in_(product_ids)).to_list()
+            object_ids.append(ObjectId(id))
+
+        filter = [
+            In(self.Product.id, object_ids),
+            self.Product.state == "live",
+            self.Product.status,
+        ]
+        products = await self.Product.find(*filter).to_list()
+
         return products
 
     async def get_products_by(
@@ -196,23 +376,25 @@ class ProductDomain:
                 regrex = {"$regex": f".*{value}.*", "$options": "i"}
                 query.append({key: regrex})
         if len(query) > 0:
-            results_query = self.Product.find({"$or": query}).sort(
+            print(query)
+            results_query = self.Product.find(
+                {"$and": [{"$or": query}, {"state": "live"}, {"status": True}]}
+            ).sort(-self.Product.updated_at)
+        else:
+            results_query = self.Product.find({"state": "live", "status": True}).sort(
                 -self.Product.updated_at
             )
-        else:
-            results_query = self.Product.find().sort(-self.Product.updated_at)
+
         offset = (page - 1) * per_page
         count = await results_query.count()
         results = await results_query.skip(offset).limit(per_page).to_list()
         return {"products": results, "total": count, "page": page, "per_page": per_page}
 
     async def get_product_by_id(self, id: str) -> Product:
-        try:
-            PydanticObjectId(id)
-        except Exception as e:
-            raise TypeError(str(e)) from None
+        if not ObjectId.is_valid(id):
+            raise TypeError(f"Invalid product id: {id}") from None
 
-        product = await self.Product.find_one(self.Product.id == PydanticObjectId(id))
+        product = await self.Product.find_one(self.Product.id == ObjectId(id))
         if not product:
             raise ValueError(f"product with product id {id} not found")
         return product

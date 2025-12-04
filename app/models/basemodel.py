@@ -59,7 +59,7 @@ class BaseModel(Base):
 
     @classmethod
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
-        if not is_valid_uuid(id):
+        if not is_valid_uuid(str(id)):
             raise TypeError("id not a valid uuid")
 
         if hasattr(cls, "is_active"):
@@ -154,6 +154,7 @@ class BaseModel(Base):
         order_by: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        all: bool = False,
     ) -> dict:
 
         query = select(cls)
@@ -189,7 +190,8 @@ class BaseModel(Base):
                 query = query.order_by(col.desc() if descending else col.asc())
 
         offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size)
+        if not all:
+            query = query.offset(offset).limit(page_size)
 
         count_query = select(func.count()).select_from(cls)
         count_result = await db.execute(count_query)
@@ -271,6 +273,6 @@ class BaseModel(Base):
                 setattr(self, key, value)
 
         db.add(self)
-        await db.commit()
+        await db.flush()
         await db.refresh(self)
         return self

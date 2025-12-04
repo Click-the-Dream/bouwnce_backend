@@ -112,7 +112,7 @@ class ContactInfoCRUDService:
 
             await ContactInfo.delete_permanently_by_id(str(contact.id), session)
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Contact info deleted successfully.",
             )

@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
+import uuid
+from datetime import UTC, datetime, timedelta
+
 
 def build_date_filter(range_type: str, start_date=None, end_date=None):
-    today = datetime.utcnow().date()
-
+    today = datetime.now(UTC).date()
 
     if isinstance(start_date, str):
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
@@ -35,3 +36,11 @@ def build_date_filter(range_type: str, start_date=None, end_date=None):
         raise ValueError(f"Invalid date range type: {range_type}")
 
     return start, end
+
+
+def is_valid_uuid(value: str) -> bool:
+    try:
+        uuid_obj = uuid.UUID(str(value))
+        return str(uuid_obj) == value.lower()
+    except (ValueError, TypeError):
+        return False

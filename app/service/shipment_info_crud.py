@@ -131,7 +131,7 @@ class ShipmentInfoCRUDService:
 
             await ShipmentInfo.delete_permanently_by_id(id=shipment_id, db=db)
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Shipment info deleted successfully.",
             )

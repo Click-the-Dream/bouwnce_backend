@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 
+from app.models import Wallet
 from app.models.basemodel import BaseModel
 
 
@@ -70,3 +71,14 @@ class Store(BaseModel):
     async def get_all(cls, db: AsyncSession) -> list:
         result = await db.execute(select(cls))
         return result.scalars().all()
+
+    async def update_store_wallet(self, amount: int, db: AsyncSession) -> Self:
+        wallet = await Wallet.get_by_store_id(str(self.id), db)
+
+        if not wallet:
+            return
+
+        wallet.available_balance = wallet.available_balance + amount
+        wallet.pending_balance = wallet.pending_balance + amount
+
+        await wallet.save(db)

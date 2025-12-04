@@ -1,15 +1,22 @@
 from contextlib import asynccontextmanager
 
 import uvicorn
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.rate_limiter import rate_limiter
 from app.db.mongo import mongo_conn
-from app.jobs.prevent_render_shutdown import call_health_endpoint_cron_task
+from app.db.postgres_db_conn import engine
+from app.worker.jobs import (
+    call_health_endpoint_cron_task,
+    mark_order_and_payment_abandoned,
+    product_reservation,
+)
 
 # Not going to be used in production
 # Just used to prevent render shuting down due to inactivity
@@ -18,12 +25,29 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
+
+    await rate_limiter.init()
+    print("✅ Rate Limiter Initialized successfully")
+
     client = await mongo_conn()
-    scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
+
+    if settings.NAME == "staging":
+        scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
+    scheduler.add_job(product_reservation, CronTrigger(minute="*/1"))
+    scheduler.add_job(mark_order_and_payment_abandoned, CronTrigger(minute="*/2"))
+
     scheduler.start()
+
     yield
+
+    await engine.dispose()
+    print("✅ succeffully shutdown postgres engine")
+
     client.close()
-    print("Mongodb Client Closed successfully")
+    print("✅ succeffully shutdown mongo client")
+
+    scheduler.shutdown()
+    print("✅ succeffully closed all cron jobs")
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:

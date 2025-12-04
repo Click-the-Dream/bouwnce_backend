@@ -1,0 +1,140 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-text font-family="Arial, Helvetica, sans-serif" color="#444444" />
+      <mj-button font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+
+    <mj-style>
+      .small-text { font-size: 13px; color: #777777; }
+      .muted { color: #777777; }
+    </mj-style>
+  </mj-head>
+
+  <mj-body background-color="#f5f6f8">
+
+    <!-- Main Card -->
+    <mj-section background-color="#ffffff" padding="25px 20px">
+      <mj-column width="100%" vertical-align="middle">
+
+        <!-- Header / Title -->
+        <mj-text
+          align="center"
+          padding="20px 0 10px"
+          font-size="22px"
+          font-weight="bold"
+          color="#2c3e50">
+          {{ project_name }} – Order Confirmation
+        </mj-text>
+
+        <!-- Greeting -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="10px 25px 5px"
+          color="#555555">
+          Hi {{ customer_name }},
+        </mj-text>
+
+        <!-- Main Message -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          Thank you for your order <strong>#{{ order_id }}</strong>. Your order has been received and sent to the vendor.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 15px"
+          color="#555555">
+          The vendor will now review your order and can either <strong>accept</strong> or <strong>decline</strong> it. You’ll receive an update as soon as the vendor takes action.
+        </mj-text>
+
+        <!-- Order Summary (lightweight) -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="10px 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Order Summary
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 5px"
+          css-class="muted">
+          Order ID: <strong>{{ order_id }}</strong><br />
+          Placed on: <strong>{{ order_date }}</strong><br />
+          Total Amount: <strong>{{ currency }} {{ total_amount }}</strong>
+        </mj-text>
+
+        <!-- Optional: short list of items -->
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="10px 25px 5px"
+          color="#555555">
+          Items in this order include:
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          color="#555555">
+          {{ items_preview }} <!-- e.g. "2 × Burger, 1 × Fries, 1 × Drink" -->
+        </mj-text>
+
+        <!-- CTA -->
+        <mj-button
+          align="center"
+          background-color="#009688"
+          color="#ffffff"
+          font-size="17px"
+          border-radius="6px"
+          padding="18px 30px"
+          href="{{ order_link }}">
+          View Your Order
+        </mj-button>
+
+        <mj-divider border-width="2px" border-color="#e0e0e0" padding="20px 0" />
+
+        <!-- Status Explanation -->
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          css-class="muted">
+          <strong>What happens next?</strong><br />
+          • If the vendor <strong>accepts</strong> your order, you’ll receive a confirmation and the order will move to processing.<br />
+          • If the vendor <strong>declines</strong> your order, you’ll be notified and any payment authorization will be voided or refunded according to our policy.
+        </mj-text>
+
+        <!-- Support Note -->
+        <mj-text
+          align="left"
+          font-size="13px"
+          padding="10px 25px 0"
+          css-class="small-text">
+          If you did not place this order or believe this email was sent in error, please contact our support team immediately.
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section padding="10px 20px">
+      <mj-column width="100%">
+        <mj-text align="center" css-class="small-text">
+          © {{ year }} {{ project_name }}. All rights reserved.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

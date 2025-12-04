@@ -16,16 +16,19 @@ class Payment(BaseModel):
     currency = Column(String, default="NGN", nullable=False)
     provider = Column(String, server_default="paystack", nullable=False)
     provider_payment_id = Column(String, nullable=False)
+    payment_url = Column(String, nullable=False)
     status = Column(
         Enum(
             "successful",
             "cancelled",
-            "pending",
+            "initiated",
             "declined",
             "refunded",
+            "abandoned",
+            "failed",
             name="payment_status_enum",
         ),
-        default="pending",
+        default="initiated",
     )
 
     user = relationship("User", back_populates="payments", uselist=False)

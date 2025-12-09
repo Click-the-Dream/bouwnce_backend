@@ -113,14 +113,14 @@ class VendorDashBoardService:
     @staticmethod
     async def get_dashboard_wallet(
         session: AsyncSession,
-        current_user,
+        current_store,
         page: int = 1,
         page_size: int = 10,
     ) -> JSONResponse:
         
         
         try:
-            wallet = current_user.wallets
+            wallet = current_store.wallets
 
             withdrawals_page = await WalletTransaction.get_by(
                 db=session,

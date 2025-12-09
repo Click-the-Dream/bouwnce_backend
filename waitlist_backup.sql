@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict iYVa2kfXF3cFlab6n6uwemvQSAQnEvFNxcROfVr2VUcFO1HP1xBDw96loRTaNWo
+\restrict HhkzwHC7CdF8GSen8AyBZyjxUpNgjMP0paQbt1fGRO3s5qRZsxPaNTIJg3OLUeJ
 
 -- Dumped from database version 17.2
 -- Dumped by pg_dump version 17.7 (Ubuntu 17.7-3.pgdg24.04+1)
@@ -104,6 +104,29 @@ alamugloria21@gmail.com	Alamu Gloria 	09155097003	Ladoke Akintola University of 
 olasojinifemi67@gmail.com	Olasoji Oluwanifemi Loveth	08054682103	Ondo State University of Science and Technology Okitipupa	fa384059-9aab-443f-9426-6ba0565b4794	2025-11-29 14:42:37.432974+00	2025-11-29 14:42:37.432974+00	\N	f
 tonyettech@gmail.com	Anthony Oyenuga	07034345702	University of Ibadan	500e2504-e9a6-40ba-bffa-d7a4fb44ea5d	2025-11-29 14:57:11.188542+00	2025-11-29 14:57:11.188542+00	\N	f
 peculiarlove20@gmail.com	Adegoke Oyindamola	09162558324	University of Ibadan	c5ebd199-1645-4ee6-a0ea-dbfaa428f3d6	2025-11-29 15:44:27.010058+00	2025-11-29 15:44:27.010058+00	\N	f
+franciscaadenuga@gmail.com	Adenuga Francisca Oluwatosin 	08029664579	Olabisi Onabanjo University, Ago Iwoye	766d13c1-5489-497c-9c32-793af83d5583	2025-12-02 09:51:14.080258+00	2025-12-02 09:51:14.080258+00	\N	f
+oluyoleboluwatife055@gmail.com	Oluyole Boluwatife 	09126740099	Olabisi Onabanjo University, Ago Iwoye	faf5f911-f0dd-4ed1-970b-0ffd1ded9aca	2025-12-02 12:44:08.929544+00	2025-12-02 12:44:08.929544+00	\N	f
+robiatabeke949@gmail.com	Aremu Robiat Abeke 	08106906760	Olabisi Onabanjo University, Ago Iwoye	c1bb4f9e-42f7-4eb5-aa96-719525e8bcb2	2025-12-02 13:42:22.415534+00	2025-12-02 13:42:22.415534+00	\N	f
+ramadan41999@gmail.com	Ramadan kazeem	09164114491	Olabisi Onabanjo University, Ago Iwoye	64a8b1bd-3ea5-4114-9a93-c436b82bb9e8	2025-12-02 13:53:20.515207+00	2025-12-02 13:53:20.515207+00	\N	f
+subomiisrael@gmail.com	James Ayosubomi	07048151620	Olabisi Onabanjo University, Ago Iwoye	be8b8e65-a6ff-4b5d-b793-8988b10fc66a	2025-12-02 14:03:50.486671+00	2025-12-02 14:03:50.486671+00	\N	f
+ademolaolayinka16@gmail.com	Habeeb Egberongbe	09045440496	Olabisi Onabanjo University, Ago Iwoye	6dd79410-fc84-4036-b245-667a6638cb7e	2025-12-02 23:02:45.980195+00	2025-12-02 23:02:45.980195+00	\N	f
+adegboyegamuhammed20@gmail.com	Adegboyega Muhammed	09020756782	Olabisi Onabanjo University, Ago Iwoye	3be08a96-ce93-4328-aa45-6c444eb0993a	2025-12-03 05:55:14.388382+00	2025-12-03 05:55:14.388382+00	\N	f
+ibrahimadegbenga39@gmail.com	Amisu Ibrahim Adegbenga 	09071734033	Olabisi Onabanjo University, Ago Iwoye	ce1d54aa-10b8-4132-89d9-e7610914851e	2025-12-03 06:04:55.066261+00	2025-12-03 06:04:55.066261+00	\N	f
+maheersanee0@gmail.com	Mukhtar Sani Shehu	09049946418	Ahmadu Bello University, Zaria	94eecf74-9fa9-4f8a-bb46-53505d478f3c	2025-12-03 06:06:22.585298+00	2025-12-03 06:06:22.585298+00	\N	f
+kamolideenibikunle@gmail.com	Ibikunle kamolideen olanrewaju 	08083476163	University of Ilorin	ae53c153-1678-45f0-9a92-f35325b649c3	2025-12-03 06:12:58.111932+00	2025-12-03 06:12:58.111932+00	\N	f
+julusm55@gmail.com	Hassan musa	07032617164	University of Abuja, Gwagwalada	5ee7e5fc-643c-4a14-82dc-2afd2d040f4b	2025-12-03 06:15:55.0228+00	2025-12-03 06:15:55.0228+00	\N	f
+elermeenmoh@gmail.com	Alamin Muhammad	08168253678	Al-Qalam University, Katsina	cb37632b-6b89-4a53-bb6a-850c16aeeb7d	2025-12-03 06:16:48.231441+00	2025-12-03 06:16:48.231441+00	\N	f
+habeebolatunji383@gmail.com	Olatunji Habeeb	09035804757	Federal University of Technology, Minna	7765b18f-bb8b-4108-b2d4-04946ad2324d	2025-12-03 06:20:54.433712+00	2025-12-03 06:20:54.433712+00	\N	f
+adesinaabdmatin@gmail.com	Adesina Abdmatin Olamilekan	08142164048	Federal University of Technology, Minna	eae38f27-7e1b-4ba0-83f3-9b2bc6a440eb	2025-12-03 06:36:17.495028+00	2025-12-03 06:36:17.495028+00	\N	f
+ayomideuthman876@gmail.com	Jimoh uthman ayomide 	07026764691	Bayero University, Kano	dd370530-3317-4e1a-9f98-3154671987bb	2025-12-03 10:00:35.232949+00	2025-12-03 10:00:35.232949+00	\N	f
+akinladeadejoke926@gmail.com	Adejoke Bukola Akinlade	09056207684	Olabisi Onabanjo University, Ago Iwoye	76ea3abb-0c4a-4e62-85c7-796ef7a9a93f	2025-12-03 18:08:49.165565+00	2025-12-03 18:08:49.165565+00	\N	f
+abdulhaqqjimoh@gmail.com	Jimoh Abdulhaqq	08108114742	Federal University of Agriculture, Abeokuta	0ea0d7e8-87a3-45b5-9c5b-85cd0fab72c3	2025-12-06 19:51:57.288702+00	2025-12-06 19:51:57.288702+00	\N	f
+gloria73399@gmail.com	Akinyefa Oluwatosin Gloria	08160874177	University of Ilorin	5afac914-ef7d-42ad-b491-25a9f77e9bc6	2025-12-06 22:30:20.139609+00	2025-12-06 22:30:20.139609+00	\N	f
+obasichidiebube99@gmail.com	Obasi Chidiebube	09150810342	Nnamdi Azikiwe University, Awka	50cf1840-2510-4b07-be60-2a2ec71d2b23	2025-12-07 15:19:19.506214+00	2025-12-07 15:19:19.506214+00	\N	f
+shalomadebayo95@gmail.com	Shalom Ayoade 	08062883607	Olabisi Onabanjo University, Ago Iwoye	dec754c7-7f28-4b7f-95c0-fd17d60b47fa	2025-12-07 16:27:46.05807+00	2025-12-07 16:27:46.05807+00	\N	f
+bolajitoluwalase@gmail.com	Jagun Dhikrullah	09034146925	Olabisi Onabanjo University, Ago Iwoye	0ad9ecb2-234c-40ac-b775-db3f7b422162	2025-12-08 07:52:24.555231+00	2025-12-08 07:52:24.555231+00	\N	f
+chiamakafavour319@gmail.com	Iloduba Chiamaka 	08057343910	Nnamdi Azikiwe University, Awka	a00f75e8-da0f-41fd-9080-3280633b53f5	2025-12-08 09:31:46.656342+00	2025-12-08 09:31:46.656342+00	\N	f
+ilodubachiamaka619@gmail.com	Iloduba Chiamaka	09026563340	Nnamdi Azikiwe University, Awka	34b49651-18f5-41e3-88c6-b315a3a56a3b	2025-12-08 09:35:11.656453+00	2025-12-08 09:35:11.656453+00	\N	f
 \.
 
 
@@ -127,5 +150,5 @@ ALTER TABLE ONLY public.waitlists
 -- PostgreSQL database dump complete
 --
 
-\unrestrict iYVa2kfXF3cFlab6n6uwemvQSAQnEvFNxcROfVr2VUcFO1HP1xBDw96loRTaNWo
+\unrestrict HhkzwHC7CdF8GSen8AyBZyjxUpNgjMP0paQbt1fGRO3s5qRZsxPaNTIJg3OLUeJ
 

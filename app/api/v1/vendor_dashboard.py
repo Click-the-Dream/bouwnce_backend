@@ -16,7 +16,7 @@ router = APIRouter(tags=["Dashboard Information"], prefix="/dashboard")
 @router.get(
     "/overview",
     status_code=status.HTTP_200_OK,
-    summary="Get vendor dashboard overview",
+    summary="Get vendor dashboard overview if date range is not provided, last 7 days will be used",
     response_model=OverviewDashboardResponse,
 )
 async def get_vendor_dashboard_overview(

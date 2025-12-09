@@ -2,8 +2,9 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import OrderItem, SubOrder, User, Wallet, WalletTransaction
+from app.models import OrderItem, SubOrder, Wallet, WalletTransaction
 from app.models.products import product_domain
+from app.models.store import Store
 from app.schemas import (
     OverviewDashboardResponse,
     PaginatedCustomers,
@@ -141,13 +142,13 @@ class VendorDashBoardService:
 
     @staticmethod
     async def get_dashboard_wallet(
-        session, current_user: User, page: int = 1, page_size: int = 10
+        session, current_store: Store, page: int = 1, page_size: int = 10
     ) -> JSONResponse:
         """
         Fetch wallet summary + paginated withdrawal history for vendor dashboard.
         """
         try:
-            wallet = await Wallet.filter_by(session, user_id=current_user.id)
+            wallet = await Wallet.filter_by(session, store_id=str(current_store.id))
             if not wallet:
                 return response_builder(
                     status="error",

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,6 @@ from app.service.metrics_service import MetricService
 from app.utils.helper import build_date_filter
 from app.utils.responses import response_builder
 
-router = APIRouter()
 
 
 class VendorDashBoardService:
@@ -106,7 +105,7 @@ class VendorDashBoardService:
 
         except Exception as e:
             return response_builder(
-                status="Failed",
+                status="error",
                 message=f"Error fetching dashboard data: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
@@ -118,7 +117,8 @@ class VendorDashBoardService:
         page: int = 1,
         page_size: int = 10,
     ) -> JSONResponse:
-
+        
+        
         try:
             wallet = current_user.wallets
 
@@ -131,6 +131,7 @@ class VendorDashBoardService:
             )
 
             items = []
+            
             for txn in withdrawals_page.get("data", []):
                 items.append(
                     {
@@ -141,7 +142,6 @@ class VendorDashBoardService:
                         "date": txn.created_at.strftime("%b %d, %Y, %I:%M%p"),
                     }
                 )
-
             data = WalletDashboardResponse(
                 available_balance=float(wallet.available_balance or 0),
                 pending_balance=float(wallet.pending_balance or 0),

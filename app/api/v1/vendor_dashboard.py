@@ -33,6 +33,8 @@ async def get_vendor_dashboard_overview(
     end_date: str = Query(None, description="End date for the overview", example="2023-01-31"),
 ) -> JSONResponse:
 
+    if not date_range:
+        date_range = "last_7_days"
     if date_range == "custom":
         if not start_date or not end_date:
             return JSONResponse(

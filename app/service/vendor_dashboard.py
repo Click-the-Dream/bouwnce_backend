@@ -112,7 +112,7 @@ class VendorDashBoardService:
                 top_products=top_products,
             )
 
-            response_content = dashboard_data.dict()
+            response_content = dashboard_data.model_dump()
             response_content.update(
                 {
                     "pagination": {
@@ -124,13 +124,16 @@ class VendorDashBoardService:
                 }
             )
 
-            return JSONResponse(
-                status_code=status.HTTP_200_OK, content=response_content
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully fetched dashboard overview",
+                data=response_content,
             )
 
         except Exception as e:
             return response_builder(
-                success=False,
+                status="error",
                 message=f"Error fetching dashboard data: {str(e)}",
                 errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -147,7 +150,7 @@ class VendorDashBoardService:
             wallet = await Wallet.filter_by(session, user_id=current_user.id)
             if not wallet:
                 return response_builder(
-                    success=False,
+                    status="error",
                     message="Wallet not found.",
                     status_code=status.HTTP_404_NOT_FOUND,
                 )
@@ -191,10 +194,10 @@ class VendorDashBoardService:
                     total=withdrawals_page.total,
                     total_pages=withdrawals_page.total_pages,
                 ),
-            ).dict()
+            ).model_dump()
 
             return response_builder(
-                success=True,
+                status="success",
                 message="Dashboard wallet fetched successfully.",
                 data=data,
                 status_code=status.HTTP_200_OK,
@@ -202,7 +205,7 @@ class VendorDashBoardService:
 
         except Exception as e:
             return response_builder(
-                success=False,
+                status="error",
                 message=f"Error fetching wallet data: {str(e)}",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
@@ -250,7 +253,7 @@ class VendorDashBoardService:
 
             if not orders_page.items:
                 return response_builder(
-                    success=False,
+                    status="error",
                     message="No orders found",
                     status_code=status.HTTP_404_NOT_FOUND,
                 )
@@ -292,7 +295,7 @@ class VendorDashBoardService:
                 ),
             )
             return response_builder(
-                success=True,
+                status="success",
                 message="Orders fetched successfully",
                 status_code=status.HTTP_200_OK,
                 data=data,
@@ -300,7 +303,7 @@ class VendorDashBoardService:
 
         except Exception as e:
             return response_builder(
-                success=False,
+                status="error",
                 message="Error fetching vendor orders",
                 errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -321,7 +324,7 @@ class VendorDashBoardService:
             )  # User store and not user
             if not orders:
                 return response_builder(
-                    success=False,
+                    status="error",
                     message="No orders found",
                     status_code=status.HTTP_404_NOT_FOUND,
                 )
@@ -363,15 +366,15 @@ class VendorDashBoardService:
             )
 
             return response_builder(
-                success=True,
+                status="success",
                 message="Customers fetched successfully",
                 status_code=status.HTTP_200_OK,
-                data=data.dict(),
+                data=data.model_dump(),
             )
 
         except Exception as e:
             return response_builder(
-                success=False,
+                status="error",
                 message="Error fetching customer data",
                 errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

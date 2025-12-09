@@ -47,7 +47,7 @@ class VendorDashBoardService:
 
             if not orders:
                 return response_builder(
-                    success=False,
+                    status="error",
                     message="No orders found",
                     status_code=status.HTTP_404_NOT_FOUND,
                 )
@@ -136,7 +136,6 @@ class VendorDashBoardService:
             return response_builder(
                 status="error",
                 message=f"Error fetching dashboard data: {str(e)}",
-                errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -302,11 +301,10 @@ class VendorDashBoardService:
                 data=data,
             )
 
-        except Exception as e:
+        except Exception:
             return response_builder(
                 status="error",
                 message="Error fetching vendor orders",
-                errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -373,10 +371,9 @@ class VendorDashBoardService:
                 data=data.model_dump(),
             )
 
-        except Exception as e:
+        except Exception:
             return response_builder(
                 status="error",
                 message="Error fetching customer data",
-                errors=str(e),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

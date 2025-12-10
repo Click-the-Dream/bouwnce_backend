@@ -46,7 +46,7 @@ async def get_vendor_dashboard_overview(
 
     return await VendorDashBoardService.get_vendor_overview(
         session=session,
-        store_id=current_user.id,
+        store_id=current_store.id,
         page=page,
         page_size=page_size,
         date_range_type=date_range,

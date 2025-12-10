@@ -237,7 +237,7 @@ class VendorDashBoardService:
                 status_code=status.HTTP_200_OK,
             )
 
-        except Exception as e:
+        except Exception:
             return response_builder(
                 status="Failed",
                 message=f"Error fetching vendor orders {e}",
@@ -300,7 +300,7 @@ class VendorDashBoardService:
                 data=data.model_dump(),
             )
 
-        except Exception as e:
+        except Exception:
             return response_builder(
                 status="Failed",
                 message=f"Error fetching customer data: {str(e)}",

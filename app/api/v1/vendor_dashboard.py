@@ -21,7 +21,7 @@ router = APIRouter(tags=["Dashboard Information"], prefix="/dashboard")
 )
 async def get_vendor_dashboard_overview(
     session: dbSessionDep,
-    current_user: CurrentStore,
+    current_store: CurrentStore,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     date_range: str = Query(
@@ -63,12 +63,12 @@ async def get_vendor_dashboard_overview(
 )
 async def get_wallet_dashboard(
     session: dbSessionDep,
-    current_user: CurrentStore,
+    current_store: CurrentStore,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
 ) -> JSONResponse:
     return await VendorDashBoardService.get_dashboard_wallet(
-        session=session, current_user=current_user, page=page, page_size=page_size
+        session=session, current_store=current_store, page=page, page_size=page_size
     )
 
 

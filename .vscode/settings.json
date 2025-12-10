@@ -1,3 +1,4 @@
 {
-    "remote.autoForwardPortsFallback": 0
+  "remote.autoForwardPortsFallback": 0,
+  "idf.pythonInstallPath": "/home/librazionpc/.espressif/python_env/idf5.4_py3.12_env/bin/python"
 }

@@ -1,0 +1,122 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-text font-family="Arial, Helvetica, sans-serif" color="#444444" />
+      <mj-button font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+
+    <mj-style>
+      .small-text { font-size: 13px; color: #777777; }
+      .muted { color: #777777; }
+      .table-header { font-weight: bold; font-size: 14px; background: #f1f1f1; padding: 10px; }
+      .table-row { padding: 10px; font-size: 14px; }
+    </mj-style>
+  </mj-head>
+
+  <mj-body background-color="#f5f6f8">
+
+    <!-- Main Card -->
+    <mj-section background-color="#ffffff" padding="25px 20px">
+      <mj-column width="100%">
+
+        <!-- Header -->
+        <mj-text
+          align="center"
+          font-size="22px"
+          font-weight="bold"
+          padding="10px 0 20px"
+          color="#2c3e50">
+          {{ project_name }} – Orders Automatically Declined
+        </mj-text>
+
+        <!-- Greeting -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          Hi {{ vendor_name }},
+        </mj-text>
+
+        <!-- Message -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          The following orders were automatically <strong>declined</strong> because no action was taken before the deadline.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 15px"
+          color="#555555">
+          These orders have now been marked as <strong>declined</strong> and the respective customers have been notified.
+        </mj-text>
+
+        <!-- Orders Table -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Declined Orders
+        </mj-text>
+
+        <mj-table padding="0 25px 20px" font-size="14px" color="#444">
+          <tr class="table-header">
+            <th>Order ID</th>
+            <th>Customer</th>
+            <th>Total</th>
+          </tr>
+          {{ declined_orders_rows }} <!-- Inject table rows -->
+        </mj-table>
+
+        <!-- CTA -->
+        <mj-button
+          align="center"
+          background-color="#009688"
+          color="#ffffff"
+          font-size="17px"
+          border-radius="6px"
+          padding="18px 30px"
+          href="{{ dashboard_link }}">
+          View Orders in Dashboard
+        </mj-button>
+
+        <mj-divider border-width="2px" border-color="#eeeeee" padding="20px 0" />
+
+        <!-- Reminder -->
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          css-class="muted">
+          To avoid auto-decline, please ensure you accept or decline new orders within the required time period.
+        </mj-text>
+
+        <!-- Support -->
+        <mj-text
+          align="left"
+          font-size="13px"
+          padding="10px 25px 0"
+          css-class="small-text">
+          If you have any questions or need assistance, please contact support.
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section padding="10px 20px">
+      <mj-column>
+        <mj-text align="center" css-class="small-text">
+          © {{ year }} {{ project_name }}. All rights reserved.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

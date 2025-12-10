@@ -1,7 +1,5 @@
-import asyncio
 from contextlib import asynccontextmanager
 
-import httpx
 import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -11,30 +9,45 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.rate_limiter import rate_limiter
 from app.db.mongo import mongo_conn
+from app.db.postgres_db_conn import engine
+from app.worker.jobs import (
+    call_health_endpoint_cron_task,
+    mark_order_and_payment_abandoned,
+    product_reservation,
+)
 
 # Not going to be used in production
 # Just used to prevent render shuting down due to inactivity
 scheduler = AsyncIOScheduler()
 
 
-async def cron_task():
-    print("cron job is startting")
-    async with httpx.AsyncClient() as client:
-        for _ in range(10):
-            await client.get(f"{settings.BASE_URL}/health")
-            await asyncio.sleep(1)
-
-
 @asynccontextmanager
 async def fastapi_lifespan(app: FastAPI):
+
+    await rate_limiter.init()
+    print("✅ Rate Limiter Initialized successfully")
+
     client = await mongo_conn()
-    scheduler.add_job(cron_task, CronTrigger(minute="*/5"))
+
+    if settings.NAME == "staging":
+        scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
+    scheduler.add_job(product_reservation, CronTrigger(minute="*/1"))
+    scheduler.add_job(mark_order_and_payment_abandoned, CronTrigger(minute="*/2"))
+
     scheduler.start()
+
     yield
+
+    await engine.dispose()
+    print("✅ succeffully shutdown postgres engine")
+
     client.close()
+    print("✅ succeffully shutdown mongo client")
+
     scheduler.shutdown()
-    print("Mongodb Client Closed successfully")
+    print("✅ succeffully closed all cron jobs")
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -50,7 +63,6 @@ app = FastAPI(
     lifespan=fastapi_lifespan,
 )
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -60,11 +72,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_STR)
-
-
-@app.get("/health", tags=["health"])
-async def health():
-    return {"health": "good", "status": "success"}
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project is a **BOUNWCE BACKEND API** using PostgreSQL, MongoDB, and Redis Databases. The project follows a **layered architecture** to separate concerns and maintain modularity, making it easy for team development and maintenance.  
+This project is a **BOUNWCE BACKEND API** using PostgreSQL, MongoDB, and Redis Databases. The project follows a **layered architecture** to separate concerns and maintain modularity, making it easy for team development and maintenance.
 
 The project also uses **`uv`** as the Python package manager and several Python tools for code quality, formatting, and migrations.
 
@@ -11,6 +11,7 @@ The project also uses **`uv`** as the Python package manager and several Python 
 # Project Setup and Architecture
 
 <!-- Badges -->
+
 ![Python](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/postgresql-15-blue?logo=postgresql&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/mongodb-6.0-green?logo=mongodb&logoColor=white)
@@ -37,12 +38,15 @@ The project also uses **`uv`** as the Python package manager and several Python 
 The project uses **`uv`** as the package manager.
 
 ### Installing dependencies
+
 ```bash
 uv install
 ```
+
 This will install all dependencies listed in uv.lock.
 
 ---
+
 ### Running scripts
 
 - To add a new package:
@@ -79,6 +83,7 @@ uv update
 ---
 
 ### Python Tools
+
 The project uses the following Python tools:
 
 - **Black**: For automatic code formatting.
@@ -89,45 +94,54 @@ uv run black .
 ```
 
 - **Ruff**: For linting and code quality checks.
+
 ```bash
 ruff check .
 ```
 
 - **Alembic**: For PostgreSQL database migrations.
+
 ```bash
 uv run alembic upgrade head
 ```
 
 - **Pre-commit**: To enforce code quality before commits.
+
 ```bash
 uv run pre-commit install
 uv run pre-commit run --all-files
 ```
-Whenever you want to commit, ruff and black will run, if they pass, you commit will become successful otherwise it will fail, ruff will automatically fix the issues, all you might want to do is 
+
+Whenever you want to commit, ruff and black will run, if they pass, you commit will become successful otherwise it will fail, ruff will automatically fix the issues, all you might want to do is
+
 ```bash
 git add .
 git commit -m "You commit message"
 ```
 
 ### Databases
+
 This Projct uses three databases:
+
 1. **PostgreSQL**
-    - Used for relational, schema-based storage.
-    - Migrations handles via **Alembic**
-    - Connection via **SQLAlchemy**
+   - Used for relational, schema-based storage.
+   - Migrations handles via **Alembic**
+   - Connection via **SQLAlchemy**
 2. **MongoDB**
-    - Used for schema-less document storage.
-    - Supports transactions via **client sessions**
-    - Migration will be handled via custom Python scripts under `migrations/mongodb`
+   - Used for schema-less document storage.
+   - Supports transactions via **client sessions**
+   - Migration will be handled via custom Python scripts under `migrations/mongodb`
 3. **Redis**
-    - Used for caching and ephemeral data
-    - Connection via a **Redis URL**
-    - Long-lived client, dependency-injection via **FastAPI**
+   - Used for caching and ephemeral data
+   - Connection via a **Redis URL**
+   - Long-lived client, dependency-injection via **FastAPI**
 
 ---
 
 ### Folder Structure
+
 The project follows a **layered architecture**:
+
 ```graphql
 ├── Alembic
 │   ├── env.py                   # Alembic environment configuration
@@ -165,6 +179,7 @@ The project follows a **layered architecture**:
 ├── README.md                     # Project setup documentation
 └── uv.lock                       # Dependency lockfile managed by uv
 ```
+
 ---
 
 ### Running the Application
@@ -176,46 +191,49 @@ uv install
 ```
 
 2. Run database migrations
-    - **PostgreSQL**:
-    ```bash
-    uv run alembic upgrade head
-    ```
-    - **MongoDB**:
-    ```bash
-    python migrations/mongodb/<migration_script>.py
-    ```
+   - **PostgreSQL**:
+
+   ```bash
+   uv run alembic upgrade head
+   ```
+
+   - **MongoDB**:
+
+   ```bash
+   python migrations/mongodb/<migration_script>.py
+   ```
+
 ---
 
 ### Database Migrations
 
 - PostgreSQL:
+  - Handled using Alembic.
 
-    - Handled using Alembic.
+  - Migration scripts are under Alembic/versions.
 
-    - Migration scripts are under Alembic/versions.
-
-    - Use alembic revision --autogenerate -m "description" to create migrations.
+  - Use alembic revision --autogenerate -m "description" to create migrations.
 
 - MongoDB:
+  - Managed via Python scripts in migrations/mongodb.
 
-    - Managed via Python scripts in migrations/mongodb.
-
-    - Supports versioning by numbering scripts (e.g., 001_add_field.py).
+  - Supports versioning by numbering scripts (e.g., 001_add_field.py).
 
 - Redis:
-
-    - Redis does not require migrations; used for caching only.
+  - Redis does not require migrations; used for caching only.
 
 ---
 
 ### Pre-commit Hooks
 
 - **Setup**
+
 ```bash
 pre-commit install
 ```
 
 - **Run manually**
+
 ```bash
 pre-commit run --all-files
 ```
@@ -229,16 +247,15 @@ Ensures **code formatting, linting, and other checks** before commits.
 - Environment variables are configured in `app/core/config.py`.
 
 - Use the **layered architecture** to maintain separation of concerns:
+  - **API layer**: Handles HTTP requests and dependency injection.
 
-    - **API layer**: Handles HTTP requests and dependency injection.
+  - **Service layer**: Contains business logic.
 
-    - **Service layer**: Contains business logic.
+  - **DB layer**: Database connections and session management.
 
-    - **DB layer**: Database connections and session management.
+  - **Core layer**: Config, security, logging, utilities.
 
-    - **Core layer**: Config, security, logging, utilities.
-
-    - **Schemas**: Pydantic models for data validation.
+  - **Schemas**: Pydantic models for data validation.
 
 - Logging and security utilities are centralized in `app/core`.
 
@@ -247,6 +264,7 @@ Ensures **code formatting, linting, and other checks** before commits.
 ---
 
 ### References
+
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
 - [Alembic Documentation](https://alembic.sqlalchemy.org/)

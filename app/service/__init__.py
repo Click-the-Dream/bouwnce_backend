@@ -1,4 +1,5 @@
 from app.service.contact_info_crud import ContactInfoCRUDService, contact_info_service
+from app.service.metrics_service import MetricService
 from app.service.payout_info_crud import PayoutInfoCRUDService, payout_info_service
 from app.service.shipment_info_crud import (
     ShipmentInfoCRUDService,
@@ -21,4 +22,5 @@ __all__ = [
     "ShipmentInfoCRUDService",
     "PayoutInfoCRUDService",
     "ContactInfoCRUDService",
+    "MetricService",
 ]

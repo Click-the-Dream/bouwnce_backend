@@ -158,3 +158,12 @@ def generate_new_account_email(email_to: str, username: str) -> EmailData:
         },
     )
     return EmailData(html_content=html_content, subject=subject)
+
+
+def generate_email_content(subject: str, template_name: str, context: dict[str, str]):
+    project_name = settings.PROJECT_NAME
+
+    context["project_name"] = project_name
+    html_content = render_email_templates(template_name=template_name, context=context)
+
+    return EmailData(html_content=html_content, subject=subject)

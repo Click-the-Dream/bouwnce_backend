@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import Annotated
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -30,6 +31,7 @@ class UserResponse(UserBase):
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
     is_store_owner: Annotated[bool, Field(examples=[False])]
+
 
 class CodeVerification(BaseModel):
     email: Annotated[EmailStr, Field(examples=["johndoe@example.com"])]

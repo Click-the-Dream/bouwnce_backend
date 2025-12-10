@@ -1,11 +1,11 @@
 from typing import Any
 
 from fastapi import UploadFile, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.inventory import Inventory
 from app.models.products import product_domain
-from app.schemas.product import CategoryResponse, ProductResponse
 from app.utils.cloudinary_utils import cleanup_temp_files, save_uploaded_file_temp
 from app.utils.responses import response_builder
 
@@ -17,7 +17,7 @@ class ProductService:
         product_data: dict[str, Any],
         images: list[UploadFile],
         db: AsyncSession,
-    ) -> ProductResponse:
+    ) -> dict[str, Any]:
         try:
             if not images or len(images) == 0:
                 return response_builder(
@@ -40,7 +40,7 @@ class ProductService:
             }
             await Inventory.create(inventory_data, db)
 
-            product_response = ProductResponse(**product_domain.to_dict(product))
+            product_response = await product_domain.to_dict(product)
 
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
@@ -62,9 +62,10 @@ class ProductService:
                 message="Error occured while creating product",
             )
 
-    async def get_product_by_id(self, product_id: str) -> ProductResponse:
+    async def get_product_by_id(self, product_id: str, redis: Redis) -> dict[str, Any]:
 
         try:
+
             product = await product_domain.get_product_by_id(product_id)
 
             if product.state != "live" or product.status != "active":
@@ -74,13 +75,13 @@ class ProductService:
                     message="product with specified ID not found",
                 )
 
-            product_resposne = ProductResponse(**product_domain.to_dict(product))
+            product_response = await product_domain.to_dict(product, redis)
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully retrieved a product",
-                data=product_resposne,
+                data=product_response,
             )
         except ValueError as ve:
             return response_builder(
@@ -101,13 +102,14 @@ class ProductService:
     async def get_products_by_store(
         self,
         store_id: str,
+        redis: Redis,
         name: str | None = None,
         category: str | None = None,
         page: int | None = 1,
         per_page: int | None = 10,
-    ) -> list[ProductResponse]:
+    ) -> list[dict[str, Any]]:
         try:
-            filter = {"state": "live", "status": "active"}
+            filter = {}
 
             if name:
                 filter["name"] = name
@@ -118,10 +120,10 @@ class ProductService:
             products_data = await product_domain.get_all_product_by_store(
                 store_id, filter=filter, page=page, per_page=per_page
             )
-            products = [
-                ProductResponse(**product_domain.to_dict(product))
-                for product in products_data["products"]
-            ]
+
+            products = await product_domain.serialize_products(
+                products_data["products"], redis
+            )
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -144,12 +146,13 @@ class ProductService:
 
     async def get_products(
         self,
+        redis: Redis,
         product_name: str | None = None,
         produdct_category: str | None = None,
         page: int | None = 1,
         per_page: int | None = 10,
-    ) -> list[ProductResponse]:
-        filter_dict = {"state": "live", "status": "active"}
+    ) -> list[dict[str, Any]]:
+        filter_dict = {}
 
         if product_name:
             filter_dict["name"] = product_name
@@ -161,10 +164,11 @@ class ProductService:
             product_data = await product_domain.get_products_by(
                 filter_dict, page=page, per_page=per_page
             )
-            products = [
-                ProductResponse(**product_domain.to_dict(product))
-                for product in product_data["products"]
-            ]
+
+            products = await product_domain.serialize_products(
+                product_data["products"], redis
+            )
+
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -177,9 +181,7 @@ class ProductService:
                 },
             )
         except Exception as e:
-            print(
-                f"Error occurred while fetching products ValueErrorby filtering: {str(e)}"
-            )
+            print(f"Error occurred while fetching products: {str(e)}")
             return response_builder(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
@@ -191,8 +193,9 @@ class ProductService:
         update_data: dict[str, Any],
         product_id: str,
         store_id: str,
+        redis: Redis,
         images: list[UploadFile] | None = None,
-    ) -> ProductResponse:
+    ) -> dict[str, Any]:
 
         try:
             product = await product_domain.get_product_by_id(product_id)
@@ -212,7 +215,8 @@ class ProductService:
                 )
                 await cleanup_temp_files(temp_paths)
 
-            product_response = ProductResponse(**product_domain.to_dict(product))
+            product_response = await product_domain.to_dict(product, redis)
+
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -237,23 +241,24 @@ class ProductService:
 
     async def toggle_current_store_product_state(
         self, store_id: str, product_id: str
-    ) -> ProductResponse:
+    ) -> dict[str, Any]:
         try:
             product = await product_domain.get_product_by_id(product_id)
-            if product.store_id != store_id:
+
+            if product.store_id != str(store_id):
                 return response_builder(
                     status_code=status.HTTP_403_FORBIDDEN,
                     status="error",
-                    message="Product doesn't below the this store",
+                    message="Product doesn't belong the this store",
                 )
 
             state = product.state
-            product.state = "active" if product.state == "draft" else "draft"
+            product.state = "live" if product.state == "draft" else "draft"
 
-            if state == "active":
-                message = "successfully toggle product state from active to draft"
+            if state == "live":
+                message = "successfully toggle product state from live to draft"
             else:
-                message = "successfully toggle product state from draft to active"
+                message = "successfully toggle product state from draft to live"
 
             await product.save()
             return response_builder(
@@ -275,7 +280,9 @@ class ProductService:
                 message="Error occured while toggling product state",
             )
 
-    async def delete_products_by_id(self, product_id: str, store_id: str):
+    async def delete_products_by_id(
+        self, product_id: str, store_id: str
+    ) -> dict[str, Any]:
         try:
             product = await product_domain.get_product_by_id(product_id)
             if product.store_id != store_id:
@@ -288,7 +295,7 @@ class ProductService:
             is_deleted = await product_domain.delete_product(product_id)
             if is_deleted:
                 return response_builder(
-                    status_code=status.HTTP_200_OK,
+                    status_code=status.HTTP_204_NO_CONTENT,
                     status="success",
                     message="successfully deleted product",
                 )
@@ -314,12 +321,12 @@ class ProductService:
                 message="Error occured while deleting product",
             )
 
-    async def delete_all_store_products(self, store_id: str):
+    async def delete_all_store_products(self, store_id: str) -> dict[str, Any]:
         try:
             deleted_count = await product_domain.delete_all_store_products(store_id)
 
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="successfully deleted all vendor products",
                 data={"product_deleted_count": deleted_count},
@@ -338,8 +345,8 @@ class ProductService:
             )
 
     async def delete_product_image(
-        self, product_id: str, image_public_id: str, store_id: str
-    ) -> ProductResponse:
+        self, product_id: str, image_public_id: str, store_id: str, redis: Redis
+    ) -> dict[str, Any]:
         try:
 
             product = await product_domain.get_product_by_id(product_id)
@@ -353,9 +360,9 @@ class ProductService:
             product = await product_domain.delete_product_image(
                 product_id, image_public_id
             )
-            product_response = ProductResponse(**product_domain.to_dict(product))
+            product_response = await product_domain.to_dict(product, redis)
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="successfully deleted product image",
                 data=product_response,
@@ -376,15 +383,14 @@ class ProductService:
                 message="Error occured while deleting image product",
             )
 
-    async def get_product_categories(self):
+    async def get_product_categories(self) -> dict[str, Any]:
         try:
             categories = await product_domain.get_all_category()
             categories_response = [
-                CategoryResponse(**product_domain.to_dict(category))
-                for category in categories
+                await product_domain.to_dict(category) for category in categories
             ]
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Successfully get all available product categories",
                 data=categories_response,
@@ -397,12 +403,12 @@ class ProductService:
                 message="Error occured while fetching product categories",
             )
 
-    async def create_product_category(self, data: dict[str, Any]) -> CategoryResponse:
+    async def create_product_category(self, data: dict[str, Any]) -> dict[str, Any]:
         try:
             category = await product_domain.create_category(
                 data["name"], data["description"]
             )
-            category_response = CategoryResponse(**product_domain.to_dict(category))
+            category_response = await product_domain.to_dict(category)
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -417,11 +423,11 @@ class ProductService:
                 message="Error occured while creating a category",
             )
 
-    async def delete_product_category(self, id: str) -> CategoryResponse:
+    async def delete_product_category(self, id: str) -> dict[str, Any]:
         try:
             await product_domain.delete_category(id)
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="successfully deleted category",
             )

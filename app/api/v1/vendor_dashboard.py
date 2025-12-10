@@ -10,13 +10,13 @@ from app.schemas import (
 )
 from app.service import VendorDashBoardService
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard Information"])
+router = APIRouter(tags=["Dashboard Information"], prefix="/dashboard")
 
 
 @router.get(
     "/overview",
     status_code=status.HTTP_200_OK,
-    summary="Get vendor dashboard overview",
+    summary="Get vendor dashboard overview if date range is not provided, last 7 days will be used",
     response_model=OverviewDashboardResponse,
 )
 async def get_vendor_dashboard_overview(
@@ -24,9 +24,34 @@ async def get_vendor_dashboard_overview(
     current_store: CurrentStore,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
+    date_range: str = Query(
+        None,
+        description="Date range for the overview",
+        regex="^(yesterday|last_7_days|last_30_days|this_month|custom)$",
+    ),
+    start_date: str = Query(None, description="Start date for the overview", example="2023-01-01"),
+    end_date: str = Query(None, description="End date for the overview", example="2023-01-31"),
 ) -> JSONResponse:
+
+    if not date_range:
+        date_range = "last_7_days"
+    if date_range == "custom":
+        if not start_date or not end_date:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "start_date and end_date are required for custom date range"
+                },
+            )
+
     return await VendorDashBoardService.get_vendor_overview(
-        session=session, store_id=str(current_store.id), page=page, page_size=page_size
+        session=session,
+        store_id=current_user.id,
+        page=page,
+        page_size=page_size,
+        date_range_type=date_range,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 
@@ -53,7 +78,7 @@ async def get_wallet_dashboard(
     status_code=status.HTTP_200_OK,
     summary="Fetch vendor orders with pagination, filtering, and sorting.",
 )
-async def fetch_vendor_orders(
+async def vendor_orders_dashboard(
     session: dbSessionDep,
     current_user: CurrentStore,
     page: int = Query(1, ge=1, description="Page number for pagination"),
@@ -68,7 +93,7 @@ async def fetch_vendor_orders(
 ) -> JSONResponse:
     return await VendorDashBoardService.get_vendor_orders(
         session=session,
-        current_user=current_user,
+        store_id=current_user.id,
         page=page,
         page_size=page_size,
         search=search,
@@ -78,7 +103,7 @@ async def fetch_vendor_orders(
 
 
 @router.get(
-    "/dashboard",
+    "/customers",
     response_model=VendorCustomersDashboardResponse,
     status_code=status.HTTP_200_OK,
     summary="Fetch paginated list of vendor customers",
@@ -92,5 +117,5 @@ async def vendor_customers_dashboard(
     ),
 ):
     return await VendorDashBoardService.get_vendor_customers(
-        session, current_user, page, page_size
+        session=session, store_id=current_user.id, page=page, page_size=page_size
     )

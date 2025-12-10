@@ -114,7 +114,7 @@ class PayoutInfoCRUDService:
 
             await PayoutInfo.delete_permanently_by_id(payout.id, db)
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Payout info deleted successfully.",
             )

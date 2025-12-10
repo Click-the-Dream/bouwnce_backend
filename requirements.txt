@@ -98,7 +98,6 @@ tzdata==2025.2
 tzlocal==5.3.1
 urllib3==2.5.0
 uvicorn==0.35.0
-uvloop==0.21.0
 vine==5.1.0
 virtualenv==20.34.0
 watchfiles==1.1.0

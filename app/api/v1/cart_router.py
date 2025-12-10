@@ -1,8 +1,10 @@
 from fastapi import APIRouter, status
+from fastapi.requests import Request
 
-from app.api.dependencies import CurrentActiveUser, dbSessionDep
+from app.api.dependencies import CurrentActiveUser, dbSessionDep, redisSessionDep
 from app.schemas.cart import CartCreate, CartResponse, UpdateCart
 from app.service.cart_service import cart_service
+from app.service.order_srevice import order_service
 
 router = APIRouter(prefix="/carts", tags=["Carts"])
 
@@ -34,7 +36,7 @@ async def get_all_user_carts(
     page: int | None = 1,
     page_size: int | None = 10,
 ):
-    return await cart_service.get_all_by_user(current_user.id, db, page, page_size)
+    return await cart_service.get_all_by_user(str(current_user.id), db, page, page_size)
 
 
 @router.get(
@@ -71,3 +73,15 @@ async def delete_cart_by_id(id: str, current_user: CurrentActiveUser, db: dbSess
 )
 async def delete_all_user_cart(current_user: CurrentActiveUser, db: dbSessionDep):
     return await cart_service.delete_all_user_cart(current_user.id, db)
+
+
+@router.post("/checkout", summary="Checkout current user cart")
+async def checkout_cart(
+    db: dbSessionDep,
+    current_user: CurrentActiveUser,
+    request: Request,
+    redis: redisSessionDep,
+):
+    return await order_service.checkout(
+        user=current_user, redis=redis, request=request, db=db
+    )

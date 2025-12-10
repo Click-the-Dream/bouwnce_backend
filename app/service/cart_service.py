@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cart import Cart
 from app.models.products import product_domain
-from app.schemas.cart import CartResponse, ProductResponse
+from app.schemas.cart import CartResponse
 from app.utils.responses import response_builder
 
 
@@ -16,7 +16,7 @@ class CartService:
         if not product:
             raise ValueError("Product with Id not found")
 
-        product_response = ProductResponse(**product_domain.to_dict(product))
+        product_response = await product_domain.to_dict(product)
 
         cart_dict = cart.to_dict()
         cart_dict["user_id"] = str(cart.user_id)
@@ -35,9 +35,19 @@ class CartService:
                     message="Product with id not found",
                 )
 
+            cart = await Cart.get_product_in_user_cart(
+                cart_data["user_id"], cart_data["product_id"], db
+            )
+            if cart:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Product already in cart",
+                )
+
             new_cart = await Cart.create(cart_data, db)
 
-            product_response = ProductResponse(**product_domain.to_dict(product))
+            product_response = await product_domain.to_dict(product)
 
             new_data_dict = new_cart.to_dict()
             new_data_dict["product"] = product_response
@@ -78,9 +88,13 @@ class CartService:
             user_carts = await Cart.get_by_user_id(user_id, db, page, page_size)
 
             cart_responses = []
+
             for cart in user_carts["data"]:
-                cart_response = await self._formulate_response(cart)
-                cart_responses.append(cart_response)
+                try:
+                    cart_response = await self._formulate_response(cart)
+                    cart_responses.append(cart_response)
+                except ValueError:
+                    pass
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -192,7 +206,9 @@ class CartService:
             await cart.delete(db)
 
             return response_builder(
-                status_code=status.HTTP_200_OK, status="success", message="Deleted cart"
+                status_code=status.HTTP_204_NO_CONTENT,
+                status="success",
+                message="Deleted cart",
             )
         except ValueError as ve:
             return response_builder(
@@ -215,7 +231,7 @@ class CartService:
             await Cart.delete_by_user_id(user_id, db)
 
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Successfully deleted user carts",
             )

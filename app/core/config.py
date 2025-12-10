@@ -17,6 +17,7 @@ class Config(BaseModel):
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")
 
+    RESERVATION_TTL: int = config("RESERVATION_TTL", default=300, cast=int)
     ALGORITHM: str = config("ALGORITHM")
 
     CLOUDINARY_KEY: str = config("CLOUDINARY_KEY")
@@ -28,6 +29,8 @@ class Config(BaseModel):
     TRUST_X_FORWARDED_FOR: bool = config(
         "TRUST_X_FORWARDED_FOR", default=True, cast=bool
     )
+
+    PAYSTACK_API_KEY: str = config("PAYSTACK_API_KEY")
 
 
 class ProductionConfig(Config):

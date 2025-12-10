@@ -1,0 +1,177 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-text font-family="Arial, Helvetica, sans-serif" color="#444444" />
+      <mj-button font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+
+    <mj-style>
+      .small-text { font-size: 13px; color: #777777; }
+      .muted { color: #777777; }
+      .badge-accepted {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        background-color: #e6f7ed;
+        color: #1b915c;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .product-row { font-size: 14px; padding: 6px 0; }
+    </mj-style>
+  </mj-head>
+
+  <mj-body background-color="#f5f6f8">
+
+    <!-- Main Card -->
+    <mj-section background-color="#ffffff" padding="25px 20px">
+      <mj-column width="100%">
+
+        <!-- Header -->
+        <mj-text
+          align="center"
+          font-size="22px"
+          font-weight="bold"
+          padding="10px 0 10px"
+          color="#2c3e50">
+          {{ project_name }} – Order Update
+        </mj-text>
+
+        <!-- Accepted Badge -->
+        <mj-text align="center" padding="0 0 10px">
+          <span class="badge-accepted">Order Accepted</span>
+        </mj-text>
+
+        <!-- Greeting -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="10px 25px 5px"
+          color="#555555">
+          Hi {{ customer_name }},
+        </mj-text>
+
+        <!-- Main Message -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          Great news! Your order <strong>#{{ order_id }}</strong> has been <strong>accepted</strong> by <strong>{{ store_name }}</strong>.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 15px"
+          color="#555555">
+          The vendor is now preparing your items. You’ll be notified once your order is ready or out for delivery.
+        </mj-text>
+
+        <!-- Store Information -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Store
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 15px"
+          css-class="muted">
+          {{ store_name }}
+        </mj-text>
+
+        <!-- Products List -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Products in Your Order
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          color="#555555">
+          {{ products_block }}
+        </mj-text>
+
+        <!-- Example for products_block (server-rendered):
+          <div class="product-row">• 2 × Pizza – ₦4,500</div>
+          <div class="product-row">• 1 × Drinks – ₦800</div>
+        -->
+
+        <!-- Order Summary -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="15px 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Order Summary
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          css-class="muted">
+          Order ID: <strong>{{ order_id }}</strong><br/>
+          Placed on: <strong>{{ order_date }}</strong><br/>
+          Total Amount: <strong>{{ currency }} {{ total_amount }}</strong>
+        </mj-text>
+
+        <!-- CTA -->
+        <mj-button
+          align="center"
+          background-color="#009688"
+          color="#ffffff"
+          font-size="17px"
+          border-radius="6px"
+          padding="18px 30px"
+          href="{{ order_link }}">
+          View Order
+        </mj-button>
+
+        <mj-divider border-width="2px" border-color="#eeeeee" padding="20px 0" />
+
+        <!-- What Happens Next -->
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          css-class="muted">
+          You’ll receive another update once the vendor confirms the order is ready for pickup or delivery.
+        </mj-text>
+
+        <!-- Support -->
+        <mj-text
+          align="left"
+          font-size="13px"
+          padding="10px 25px 0"
+          css-class="small-text">
+          If something doesn’t look right or you need help, please contact our support team.
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section padding="10px 20px">
+      <mj-column>
+        <mj-text align="center" css-class="small-text">
+          © {{ year }} {{ project_name }}. All rights reserved.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

@@ -70,12 +70,15 @@ class WaistlistService:
                 for waitlist in waitlists_list["data"]
             ]
 
+            today_count = await Waitlist.get_today_count(db)
+
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="successfully retrieved waitlist",
                 data={
                     "data": waitlistResponse,
+                    "today_count": today_count,
                     "page": waitlists_list["page"],
                     "page_size": waitlists_list["page_size"],
                     "total": waitlists_list["total"],

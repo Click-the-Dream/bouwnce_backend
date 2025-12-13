@@ -50,10 +50,14 @@ async def get_all(
 
 
 @router.get(
-    "/today-count",
+    "/institution-count",
     response_model=BaseResponse,
-    summary="Get the count of today register",
+    summary="Get all the institution and the count of students in each institution",
     status_code=status.HTTP_200_OK,
 )
-async def get_today_count(db: dbSessionDep):
-    return await waitlist_service.get_today_count(db)
+async def get_today_count(
+    db: dbSessionDep,
+    page: int = Query(default=1, description="The page number to fetch"),
+    page_size: int = Query(default=10, description="Number of resources per page"),
+):
+    return await waitlist_service.get_intitution_count(db, page, page_size)

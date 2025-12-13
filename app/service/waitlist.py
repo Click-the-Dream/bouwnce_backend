@@ -110,5 +110,17 @@ class WaistlistService:
                 message="Internal server error",
             )
 
+    async def get_intitution_count(
+        self, db: AsyncSession, page: int = 1, page_size: int = 10
+    ):
+        all_intitution = await Waitlist.group_by_institution(db, page, page_size)
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="successfully fetched all institution count",
+            data=all_intitution,
+        )
+
 
 waitlist_service = WaistlistService()

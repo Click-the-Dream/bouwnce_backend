@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import Column, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,3 +32,26 @@ class Waitlist(BaseModel):
         count = result.scalar_one()
 
         return count
+
+    @classmethod
+    async def group_by_institution(
+        cls, db: AsyncSession, page: int = 1, page_size: int = 10
+    ) -> dict[str, Any]:
+
+        smt = select(cls.institution, func.count().label("count")).group_by(
+            cls.institution
+        )
+
+        offset = (page - 1) * page_size
+
+        smt = smt.offset(offset).limit(page_size)
+        result = await db.execute(smt)
+
+        result = result.all()
+
+        count_query = select(func.count()).select_from(cls)
+        count_result = await db.execute(count_query)
+        count = count_result.scalar() or 0
+
+        data = {institute: count for institute, count in result}
+        return {"data": data, "page": page, "page_size": page_size, "total": count}

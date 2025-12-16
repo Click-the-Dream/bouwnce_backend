@@ -134,8 +134,7 @@ CurrentAdmin = Annotated[User, Depends(get_current_admin)]
 async def get_current_store(
     current_vendor: CurrentVendor, db: dbSessionDep
 ) -> User | None:
-    
-    
+
     try:
         store = await Store.filter_by(
             filter={"user_id": current_vendor.id},
@@ -146,7 +145,7 @@ async def get_current_store(
                 "payout_info",
                 "shipment_info",
                 "store_info",
-                "wallets"
+                "wallets",
             ],
         )
         if len(store) == 0:

@@ -29,8 +29,12 @@ async def get_vendor_dashboard_overview(
         description="Date range for the overview",
         regex="^(today|yesterday|last_7_days|last_30_days|this_month|custom)$",
     ),
-    start_date: str = Query(None, description="Start date for the overview", example="2023-01-01"),
-    end_date: str = Query(None, description="End date for the overview", example="2023-01-31"),
+    start_date: str = Query(
+        None, description="Start date for the overview", example="2023-01-01"
+    ),
+    end_date: str = Query(
+        None, description="End date for the overview", example="2023-01-31"
+    ),
 ) -> JSONResponse:
 
     if date_range == "custom":

@@ -21,7 +21,6 @@ from app.utils.helper import build_date_filter
 from app.utils.responses import response_builder
 
 
-
 class VendorDashBoardService:
 
     @staticmethod
@@ -82,6 +81,7 @@ class VendorDashBoardService:
                 total_orders=metrics["total_orders"],
                 total_customers=metrics["total_customers"],
                 avg_order_value=metrics["aov"],
+                avg_order_value_change_percent=metrics["aov_change_percentage"],
                 revenue_change_percent=metrics["revenue_change_percentage"],
                 orders_change_percent=metrics["orders_change_percentage"],
                 customers_change_percent=metrics["customers_change_percentage"],
@@ -117,8 +117,7 @@ class VendorDashBoardService:
         page: int = 1,
         page_size: int = 10,
     ) -> JSONResponse:
-        
-        
+
         try:
             wallet = current_store.wallets
 
@@ -131,7 +130,7 @@ class VendorDashBoardService:
             )
 
             items = []
-            
+
             for txn in withdrawals_page.get("data", []):
                 items.append(
                     {

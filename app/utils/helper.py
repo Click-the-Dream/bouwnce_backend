@@ -1,7 +1,5 @@
 import uuid
-from datetime import UTC, datetime, timedelta
-
-from datetime import datetime, timedelta, date, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 UTC = timezone.utc
 
@@ -55,6 +53,7 @@ def build_date_filter(
             raise ValueError(f"Invalid date range type: {range_type}")
 
     return start, end
+
 
 def is_valid_uuid(value: str) -> bool:
     try:

@@ -30,7 +30,7 @@ class VendorDashBoardService:
         store_id: str,
         page: int = 1,
         page_size: int = 5,
-        date_range_type: str = "month",
+        date_range_type: str = "this_month",
         start_date=None,
         end_date=None,
     ) -> JSONResponse:
@@ -237,7 +237,7 @@ class VendorDashBoardService:
                 status_code=status.HTTP_200_OK,
             )
 
-        except Exception:
+        except Exception as e:
             return response_builder(
                 status="Failed",
                 message=f"Error fetching vendor orders {e}",
@@ -300,7 +300,7 @@ class VendorDashBoardService:
                 data=data.model_dump(),
             )
 
-        except Exception:
+        except Exception as e:
             return response_builder(
                 status="Failed",
                 message=f"Error fetching customer data: {str(e)}",

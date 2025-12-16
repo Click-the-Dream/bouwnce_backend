@@ -1,8 +1,16 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from datetime import datetime, timedelta, date, timezone
 
-def build_date_filter(range_type: str, start_date=None, end_date=None):
+UTC = timezone.utc
+
+
+def build_date_filter(
+    range_type: str,
+    start_date: str | date | None = None,
+    end_date: str | date | None = None,
+) -> tuple[date, date]:
     today = datetime.now(UTC).date()
 
     if isinstance(start_date, str):
@@ -11,32 +19,42 @@ def build_date_filter(range_type: str, start_date=None, end_date=None):
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
 
-    if range_type == "yesterday":
-        start = today - timedelta(days=1)
-        end = start
+    match range_type:
+        case "today":
+            start = end = today
 
-    elif range_type == "last_7_days":
-        start = today - timedelta(days=7)
-        end = today
+        case "yesterday":
+            start = end = today - timedelta(days=1)
 
-    elif range_type == "last_30_days":
-        start = today - timedelta(days=30)
-        end = today
+        case "last_7_days":
+            # Includes today → today + previous 6 days
+            start = today - timedelta(days=6)
+            end = today
 
-    elif range_type == "this_month":
-        start = today.replace(day=1)
-        end = today
+        case "last_30_days":
+            # Includes today → today + previous 29 days
+            start = today - timedelta(days=29)
+            end = today
 
-    elif range_type == "custom":
-        if not start_date or not end_date:
-            raise ValueError("start_date and end_date are required for custom range")
-        start, end = start_date, end_date
+        case "this_month":
+            start = today.replace(day=1)
+            end = today
 
-    else:
-        raise ValueError(f"Invalid date range type: {range_type}")
+        case "custom":
+            if not start_date or not end_date:
+                raise ValueError(
+                    "start_date and end_date are required for custom range"
+                )
+
+            if start_date > end_date:
+                raise ValueError("start_date cannot be after end_date")
+
+            start, end = start_date, end_date
+
+        case _:
+            raise ValueError(f"Invalid date range type: {range_type}")
 
     return start, end
-
 
 def is_valid_uuid(value: str) -> bool:
     try:

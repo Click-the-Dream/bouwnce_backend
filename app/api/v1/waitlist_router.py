@@ -3,6 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Query, status
 from app.api.dependencies import dbSessionDep
 from app.schemas.waitlist import WaitlistCreate, WaitlistResponse
 from app.service.waitlist import waitlist_service
+from app.utils.responses import BaseResponse
 
 router = APIRouter(prefix="/waitlist", tags=["Waitlist"])
 
@@ -46,3 +47,17 @@ async def get_all(
         filter["institution"] = institution
 
     return await waitlist_service.get_waitlist(db, filter, page, page_size)
+
+
+@router.get(
+    "/institution-count",
+    response_model=BaseResponse,
+    summary="Get all the institution and the count of students in each institution",
+    status_code=status.HTTP_200_OK,
+)
+async def get_today_count(
+    db: dbSessionDep,
+    page: int = Query(default=1, description="The page number to fetch"),
+    page_size: int = Query(default=10, description="Number of resources per page"),
+):
+    return await waitlist_service.get_intitution_count(db, page, page_size)

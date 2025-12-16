@@ -1,7 +1,15 @@
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+
+class BaseResponse(BaseModel):
+    status_code: Annotated[int, Field(examples=[200])]
+    status: Annotated[Literal["success", "error"], Field(examples=["success", "error"])]
+    message: Annotated[str, Field(examples=["message is successful"])]
+    data: dict[str, Any] | list[Any] | None
 
 
 def response_builder(

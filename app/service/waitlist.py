@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import BackgroundTasks, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.waitlist import Waitlist
@@ -69,12 +70,15 @@ class WaistlistService:
                 for waitlist in waitlists_list["data"]
             ]
 
+            today_count = await Waitlist.get_today_count(db)
+
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="successfully retrieved waitlist",
                 data={
                     "data": waitlistResponse,
+                    "today_count": today_count,
                     "page": waitlists_list["page"],
                     "page_size": waitlists_list["page_size"],
                     "total": waitlists_list["total"],
@@ -87,6 +91,36 @@ class WaistlistService:
                 status="error",
                 message="Internal server error",
             )
+
+    async def get_today_count(self, db: AsyncSession) -> JSONResponse:
+
+        try:
+            today_count = await Waitlist.get_today_count(db)
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="successfully fetched today's count",
+                data={"today_count": today_count},
+            )
+        except Exception as e:
+            print("Error occured while fetching today's count: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Internal server error",
+            )
+
+    async def get_intitution_count(
+        self, db: AsyncSession, page: int = 1, page_size: int = 10
+    ):
+        all_intitution = await Waitlist.group_by_institution(db, page, page_size)
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="successfully fetched all institution count",
+            data=all_intitution,
+        )
 
 
 waitlist_service = WaistlistService()

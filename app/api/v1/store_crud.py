@@ -15,6 +15,7 @@ from app.schemas import (
     StoreUpdate,
 )
 from app.service import store_service
+from app.utils.responses import BaseResponse
 
 ImageUpdate = Annotated[UploadFile | None, File(...)]
 
@@ -66,6 +67,7 @@ async def get_store_full_details(current_store: CurrentStore):
     "/onboarding-status",
     status_code=status.HTTP_200_OK,
     summary="Get Current Store onboarding status",
+    response_model=BaseResponse,
 )
 async def get_store_onboarding_status(current_store: CurrentStore):
     return await store_service.get_store_onboarding_status(current_store)

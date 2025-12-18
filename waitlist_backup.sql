@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict HhkzwHC7CdF8GSen8AyBZyjxUpNgjMP0paQbt1fGRO3s5qRZsxPaNTIJg3OLUeJ
+\restrict 40Jq4IKltJYcSodl8TDLZFjuszXRb9PLAuveFvmnDTGqCDThlwFt9SAqvccX8vX
 
 -- Dumped from database version 17.2
 -- Dumped by pg_dump version 17.7 (Ubuntu 17.7-3.pgdg24.04+1)
@@ -127,6 +127,21 @@ shalomadebayo95@gmail.com	Shalom Ayoade 	08062883607	Olabisi Onabanjo University
 bolajitoluwalase@gmail.com	Jagun Dhikrullah	09034146925	Olabisi Onabanjo University, Ago Iwoye	0ad9ecb2-234c-40ac-b775-db3f7b422162	2025-12-08 07:52:24.555231+00	2025-12-08 07:52:24.555231+00	\N	f
 chiamakafavour319@gmail.com	Iloduba Chiamaka 	08057343910	Nnamdi Azikiwe University, Awka	a00f75e8-da0f-41fd-9080-3280633b53f5	2025-12-08 09:31:46.656342+00	2025-12-08 09:31:46.656342+00	\N	f
 ilodubachiamaka619@gmail.com	Iloduba Chiamaka	09026563340	Nnamdi Azikiwe University, Awka	34b49651-18f5-41e3-88c6-b315a3a56a3b	2025-12-08 09:35:11.656453+00	2025-12-08 09:35:11.656453+00	\N	f
+alliayomide050@gmail.com	Ayomide Alli	08127966553	The Polytechnic, Ibadan	a2f24ebc-19fc-4bc8-b1bf-8b3fa6d981bf	2025-12-10 18:23:54.445672+00	2025-12-10 18:23:54.445672+00	\N	f
+omotoyosiagboola74@gmail.com	Oyindamola Deji-Agboola	08154744802	Olabisi Onabanjo University, Ago Iwoye	3aca6173-4a5f-4d65-b1bd-a1cc239c9898	2025-12-10 19:43:55.789434+00	2025-12-10 19:43:55.789434+00	\N	f
+oladeposhola33@gmail.com	Oladepo Shola	08083876891	Olabisi Onabanjo University, Ago Iwoye	a6186f7f-3de8-44a8-af9d-da5ddb2be50c	2025-12-11 04:15:28.112818+00	2025-12-11 04:15:28.112818+00	\N	f
+abdulhakeemwaliyah623@gmail.com	Abdulhakeem Abidemi	09058389089	University of Ibadan	a2d4ca54-5e5d-4039-9d04-6241266030cb	2025-12-12 20:35:33.377107+00	2025-12-12 20:35:33.377107+00	\N	f
+aladevictortimothy@gmail.com	Alade Victor 	07040794313	University of Ibadan	70490761-4f4c-4b58-8801-27f6d89f4b02	2025-12-12 20:41:30.913306+00	2025-12-12 20:41:30.913306+00	\N	f
+ayomidemorenikeji040@gmail.com	Mubarak Abdulkareem	07040956574	Fountain Unveristy, Oshogbo	45734fbe-3bc7-4e54-9d8c-f957e81e808e	2025-12-12 20:41:41.659756+00	2025-12-12 20:41:41.659756+00	\N	f
+lilianayanwu2001@gmail.com	Ngozi Anyanwu	2348143441524	National Open University of Nigeria, Lagos	38033c9e-7fb1-4d87-8a30-41e5f713b645	2025-12-13 01:03:18.730529+00	2025-12-13 01:03:18.730529+00	\N	f
+agbaraoluwasimiloluwa@gmail.com	Aderemi Agbaraoluwa	07012582514	Federal University of Technology, Minna	e727e413-6527-400d-9e60-4c57947d409e	2025-12-13 04:42:03.437625+00	2025-12-13 04:42:03.437625+00	\N	f
+vukecha@gmail.com	Ukecha victor	09057126335	The Polytechnic, Ibadan	7c033da1-e7b0-434e-b411-7296811b549a	2025-12-13 20:44:00.173592+00	2025-12-13 20:44:00.173592+00	\N	f
+usalmah224@gmail.com	Umar Selimat Oluwatunmishe 	2347014666564	Lagos State University, Ojo	0876c2fc-bc99-4e5f-83b3-f95c6802245f	2025-12-14 18:02:13.121248+00	2025-12-14 18:02:13.121248+00	\N	f
+adeyosola11@gmail.com	Abdullah Adeyosola Abubakr	09034047944	Olabisi Onabanjo University, Ago Iwoye	0a059ed7-672d-4d03-ae82-4678d2233447	2025-12-15 05:21:51.325485+00	2025-12-15 05:21:51.325485+00	\N	f
+davidolafare94@gmail.com	Olafare Oluwadamilare David 	2348162415018	Olabisi Onabanjo University, Ago Iwoye	79277a64-b642-4ee7-8e53-46bed727fab3	2025-12-15 05:24:22.095285+00	2025-12-15 05:24:22.095285+00	\N	f
+favoursofoluwe5@gmail.com	Sofoluwe Favour Moyinoluwa 	08071373871	Olabisi Onabanjo University, Ago Iwoye	8384dda1-1d3f-4d73-ae44-47707924e3bd	2025-12-16 15:55:59.035827+00	2025-12-16 15:55:59.035827+00	\N	f
+ogbuaguifeanyi236@gmail.com	Ogbuagu IFEANYI Desmond 	07072316055	Federal University of Technology, Owerri	1fd303c0-db04-4a05-bc6d-b2905c1e2864	2025-12-17 15:33:32.985421+00	2025-12-17 15:33:32.985421+00	\N	f
+ajeyimary4@gmail.com	Ajeyi  Mary 	2349064262361	Benue State University, Makurdi	0ca84aba-5929-4f18-bf0e-2c88667ace48	2025-12-17 22:53:58.675435+00	2025-12-17 22:53:58.675435+00	\N	f
 \.
 
 
@@ -150,5 +165,5 @@ ALTER TABLE ONLY public.waitlists
 -- PostgreSQL database dump complete
 --
 
-\unrestrict HhkzwHC7CdF8GSen8AyBZyjxUpNgjMP0paQbt1fGRO3s5qRZsxPaNTIJg3OLUeJ
+\unrestrict 40Jq4IKltJYcSodl8TDLZFjuszXRb9PLAuveFvmnDTGqCDThlwFt9SAqvccX8vX
 

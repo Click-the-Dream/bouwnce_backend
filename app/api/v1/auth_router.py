@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 
 from app.api.dependencies import (
     CurrentUser,
@@ -43,10 +43,11 @@ async def register_user(
     ],
 )
 async def verify_code(
-    code_data: CodeVerification,
-    db: dbSessionDep,
+    code_data: CodeVerification, db: dbSessionDep, request: Request, response: Response
 ):
-    return await auth_service.verify_code(code_data.model_dump(), db)
+    return await auth_service.verify_code(
+        user_data=code_data.model_dump(), request=request, response=response, db=db
+    )
 
 
 @router.post(
@@ -68,7 +69,29 @@ async def login_user(
 @router.post("/logout", status_code=status.HTTP_200_OK, response_model=dict[str, Any])
 async def logout_user(
     auth: TokenDep,
+    db: dbSessionDep,
     redis_db: redisSessionDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
+    request: Request,
+    response: Response,
 ):
-    return await auth_service.logout_user(auth=auth, redis_db=redis_db)
+    return await auth_service.logout_user(
+        user_id=str(current_user.id),
+        auth=auth,
+        redis_db=redis_db,
+        db=db,
+        request=request,
+        response=response,
+    )
+
+
+@router.post(
+    "/refresh-token",
+    summary="Refresh Access Token",
+    status_code=status.HTTP_200_OK,
+    response_model=dict[str, Any],
+)
+async def refresh_access_token(db: dbSessionDep, request: Request, response: Response):
+    return await auth_service.refresh_access_token(
+        request=request, response=response, db=db
+    )

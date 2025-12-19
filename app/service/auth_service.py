@@ -112,11 +112,7 @@ class AuthService:
             access_token = create_access_token(subject=user.id)
 
             # Generate device_id cookie if not exists
-            if not device_id:
-                device_id = str(uuid.uuid4())
-                set_cookies(
-                    response, "device_id", device_id, max_age=31536000
-                )  # Setting the device_id cookie to 1 year
+            new_device_id = device_id if device_id else str(uuid.uuid4())
 
             # generate refresh token
             refresh_token_expires_at = datetime.now(UTC) + parse_duration(
@@ -128,7 +124,7 @@ class AuthService:
             await RefreshToken.create_refresh_token(
                 user_id=user.id,
                 token=hashed_refresh_token,
-                device_id=device_id,
+                device_id=new_device_id,
                 user_agent=user_agent,
                 ip_address=ip_address,
                 expires_at=refresh_token_expires_at,
@@ -136,14 +132,22 @@ class AuthService:
             )
             max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
 
-            set_cookies(response, "refresh_token", refresh_token, max_age)
-
-            return response_builder(
+            response = response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully logged in",
                 data={"user": user_data, "access_token": access_token},
             )
+
+            if not device_id:
+                set_cookies(
+                    response, "device_id", new_device_id, max_age=31536000
+                )  # Setting the device_id cookie to 1 year
+
+            set_cookies(response, "refresh_token", refresh_token, max_age)
+
+            return response
+
         except Exception as e:
             print("Error occured verifying code: ", str(e))
             return response_builder(
@@ -213,13 +217,14 @@ class AuthService:
             expiry_time = payload.get("exp")
             if not expiry_time:
                 expiry_datetime = parse_duration(settings.ACCESS_TOKEN_TTL)
-                redis_db.setex(
+                await redis_db.setex(
                     f"blacklist_{authorization_token}", expiry_datetime, "blacklisted"
                 )
             else:
+                print(authorization_token)
                 expiry_datetime = datetime.fromtimestamp(expiry_time, tz=UTC)
                 remaining_time = expiry_datetime - datetime.now(UTC)
-                redis_db.setex(
+                await redis_db.setex(
                     f"blacklist_{authorization_token}", remaining_time, "blacklisted"
                 )
 
@@ -232,14 +237,16 @@ class AuthService:
                 if refresh_token:
                     await refresh_token.revoke(db)
 
-            # clear cookies
-            response.delete_cookie("refresh_token", path="/")
-
-            return response_builder(
+            response = response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully logged out",
             )
+
+            # clear cookies
+            response.delete_cookie("refresh_token", path="/")
+
+            return response
         except Exception as e:
             print("❌Error occured logging out user: ", str(e))
             return response_builder(
@@ -339,16 +346,18 @@ class AuthService:
                 db=db,
             )
 
-            # Set new refresh token in cookies
-            max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
-            set_cookies(response, "refresh_token", new_refresh_token, max_age)
-
-            return response_builder(
+            response = response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Access token refreshed successfully",
                 data={"access_token": access_token},
             )
+
+            # Set new refresh token in cookies
+            max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
+            set_cookies(response, "refresh_token", new_refresh_token, max_age)
+
+            return response
         except Exception as e:
             print("❌Error occured refreshing access token: ", str(e))
             return response_builder(

@@ -50,6 +50,8 @@ async def get_current_user(
 
     token = auth.credentials
 
+    print(token)
+
     is_blacklisted = await redis_db.get(f"blacklist_{token}")
 
     if is_blacklisted:

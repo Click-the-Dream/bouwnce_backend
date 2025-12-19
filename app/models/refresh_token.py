@@ -22,12 +22,7 @@ class RefreshToken(BaseModel):
     issued_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
 
-    user = relationship(
-        "User",
-        back_populates="refresh_tokens",
-        uselist=False,
-        cascade="all, delete-orphan",
-    )
+    user = relationship("User", back_populates="refresh_tokens", uselist=False)
 
     @classmethod
     async def get_token_by_user_and_device(
@@ -43,7 +38,7 @@ class RefreshToken(BaseModel):
         """
         Revoke the refresh token for a specific user and device.
         """
-        self.delete(db)
+        await self.delete(db)
 
     @classmethod
     async def create_refresh_token(
@@ -56,7 +51,7 @@ class RefreshToken(BaseModel):
         expires_at: datetime,
         db: AsyncSession,
     ):
-        existing_token = await cls.get_token_by_user_and_device(user_id, device_id)
+        existing_token = await cls.get_token_by_user_and_device(user_id, device_id, db)
         if existing_token:
             await existing_token.revoke(db)
 

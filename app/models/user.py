@@ -45,6 +45,10 @@ class User(BaseModel):
         foreign_keys="[Order.user_id]",
     )
 
+    refresh_tokens = relationship(
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
+
     def to_dict(self):
         data_dict = super().to_dict()
 

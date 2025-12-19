@@ -70,7 +70,7 @@ def verify_data(plain_data: str, hashed_data: str) -> bool:
 
 def set_cookies(response, key: str, value: str, max_age: int) -> None:
     if settings.NAME == "production":
-        response.set_cookies(
+        response.set_cookie(
             key=key,
             value=value,
             httponly=True,
@@ -81,7 +81,7 @@ def set_cookies(response, key: str, value: str, max_age: int) -> None:
         )
 
     else:
-        response.set_cookies(
+        response.set_cookie(
             key=key, value=value, httponly=True, max_age=max_age, path="/"
         )
 

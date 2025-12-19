@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Request, Response, status
@@ -13,6 +13,8 @@ from app.core.security import (
     create_refresh_token,
     hash_data,
     set_cookies,
+    verify_data,
+    verify_token,
 )
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
@@ -187,8 +189,17 @@ class AuthService:
                 message="Error occured when logging in user",
             )
 
-    async def logout_user(self, auth: HTTPAuthorizationCredentials, redis_db: Redis):
+    async def logout_user(
+        self,
+        user_id: str,
+        auth: HTTPAuthorizationCredentials,
+        redis_db: Redis,
+        db: AsyncSession,
+        request: Request,
+        response: Response,
+    ):
         try:
+
             authorization_token = auth.credentials
 
             if not authorization_token:
@@ -197,9 +208,32 @@ class AuthService:
                     status="error",
                     message="Authorization token is missing",
                 )
-            redis_db.setex(
-                f"blacklist_{authorization_token}", timedelta(days=30), "blacklisted"
-            )
+            # Blacklist access token for the remaining time to expire
+            payload = verify_token(authorization_token)
+            expiry_time = payload.get("exp")
+            if not expiry_time:
+                expiry_datetime = parse_duration(settings.ACCESS_TOKEN_TTL)
+                redis_db.setex(
+                    f"blacklist_{authorization_token}", expiry_datetime, "blacklisted"
+                )
+            else:
+                expiry_datetime = datetime.fromtimestamp(expiry_time, tz=UTC)
+                remaining_time = expiry_datetime - datetime.now(UTC)
+                redis_db.setex(
+                    f"blacklist_{authorization_token}", remaining_time, "blacklisted"
+                )
+
+            # Get refresh token from cookies and revoke it
+            device_id = request.cookies.get("device_id", None)
+            if device_id:
+                refresh_token = await RefreshToken.get_token_by_user_and_device(
+                    user_id, device_id, db
+                )
+                if refresh_token:
+                    await refresh_token.revoke(db)
+
+            # clear cookies
+            response.delete_cookie("refresh_token", path="/")
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -212,6 +246,115 @@ class AuthService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 status="error",
                 message="Error occured when logging out user",
+            )
+
+    async def refresh_access_token(
+        self, request: Request, response: Response, db: AsyncSession
+    ):
+        try:
+            # Get device_id from cookies
+            device_id = request.cookies.get("device_id", None)
+            if not device_id:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Device ID is missing in cookies",
+                )
+
+            # Get refresh_token from cookies
+            refresh_token = request.cookies.get("refresh_token", None)
+            if not refresh_token:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="Refresh token is missing in cookies",
+                )
+
+            try:
+                payload = verify_token(refresh_token)
+            except Exception:
+                return response_builder(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    status="error",
+                    message="Invalid refresh token",
+                )
+
+            user_id: str = payload.get("sub")
+            if not user_id:
+                return response_builder(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    status="error",
+                    message="could not validate credentials",
+                )
+
+            type = payload.get("type")
+            if type != "refresh":
+                return response_builder(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    status="error",
+                    message="Invalid token type",
+                )
+
+            user = await User.get_by_id(user_id, db)
+            if not user:
+                return response_builder(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    status="error",
+                    message="Could not validate credentials",
+                )
+            store_refresh_token = await RefreshToken.get_token_by_user_and_device(
+                user_id, device_id, db
+            )
+            if not store_refresh_token:
+                return response_builder(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    status="error",
+                    message="Refresh token revoked or not found. Please login again",
+                )
+
+            if not verify_data(refresh_token, store_refresh_token.token):
+                return response_builder(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    status="error",
+                    message="Invalid refresh token. Please login again",
+                )
+
+            # Create new access token
+            access_token = create_access_token(subject=user.id)
+
+            # Create a new refresh token
+            refresh_token_expires_at = datetime.now(UTC) + parse_duration(
+                settings.REFRESH_TOKEN_TTL
+            )
+            new_refresh_token = create_refresh_token(subject=user.id)
+            hashed_refresh_token = hash_data(new_refresh_token)
+
+            await RefreshToken.create_refresh_token(
+                user_id=user.id,
+                token=hashed_refresh_token,
+                device_id=device_id,
+                user_agent=request.headers.get("user-agent", "unknown"),
+                ip_address=request.client.host if request.client else "unknown",
+                expires_at=refresh_token_expires_at,
+                db=db,
+            )
+
+            # Set new refresh token in cookies
+            max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
+            set_cookies(response, "refresh_token", new_refresh_token, max_age)
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Access token refreshed successfully",
+                data={"access_token": access_token},
+            )
+        except Exception as e:
+            print("❌Error occured refreshing access token: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured when refreshing access token",
             )
 
 

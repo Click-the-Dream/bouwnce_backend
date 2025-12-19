@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -44,3 +45,44 @@ def is_valid_uuid(value: str) -> bool:
         return str(uuid_obj) == value.lower()
     except (ValueError, TypeError):
         return False
+
+
+_DURATION_RE = re.compile(r"^(?P<value>\d+)(?P<unit>[smhd])$")
+
+
+def parse_duration(duration: str) -> timedelta:
+    """
+    Convert a duration string like 15m, 7d 10s to timedelta object from datetime
+    """
+
+    if not isinstance(duration, str):
+        raise ValueError("Duration must be a string")
+
+    match = _DURATION_RE.match(duration.strip().lower())
+    if not match:
+        raise ValueError(
+            "Invalid duration format. Expected format: <value><unit> e.g. 10s, 7d"
+        )
+
+    value = int(match.group("value"))
+    unit = match.group("unit")
+
+    if unit == "s":
+        return timedelta(seconds=value)
+    elif unit == "m":
+        return timedelta(minutes=value)
+    elif unit == "h":
+        return timedelta(hours=value)
+    elif unit == "d":
+        return timedelta(days=value)
+
+    return ValueError(f"Unsupported duration unit: {unit}")
+
+
+def compute_remaining_time(time: datetime) -> float:
+
+    now = datetime.now(UTC)
+
+    remaining_time_seconds = (time - now).total_seconds()
+
+    return max(0, remaining_time_seconds)

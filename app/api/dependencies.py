@@ -60,6 +60,14 @@ async def get_current_user(
         )
     try:
         payload = verify_token(token)
+        type = payload.get("type")
+        if type != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(
@@ -134,8 +142,7 @@ CurrentAdmin = Annotated[User, Depends(get_current_admin)]
 async def get_current_store(
     current_vendor: CurrentVendor, db: dbSessionDep
 ) -> User | None:
-    
-    
+
     try:
         store = await Store.filter_by(
             filter={"user_id": current_vendor.id},
@@ -146,7 +153,7 @@ async def get_current_store(
                 "payout_info",
                 "shipment_info",
                 "store_info",
-                "wallets"
+                "wallets",
             ],
         )
         if len(store) == 0:

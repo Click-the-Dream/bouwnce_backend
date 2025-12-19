@@ -1,15 +1,24 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import status
+from fastapi import Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_access_token
+from app.core.config import settings
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_data,
+    set_cookies,
+)
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.user import UserResponse
 from app.utils.emails import generate_login_verification_email, send_email
+from app.utils.helper import parse_duration
 from app.utils.responses import response_builder
 
 
@@ -66,11 +75,21 @@ class AuthService:
                 message="Error occured when creating user",
             )
 
-    async def verify_code(self, user_data: dict[str, Any], db: AsyncSession):
+    async def verify_code(
+        self,
+        user_data: dict[str, Any],
+        db: AsyncSession,
+        request: Request,
+        response: Response,
+    ):
 
         try:
-            user = await User.get_by_unique(db=db, email=user_data["email"])
+            # Get request  metadata
+            device_id = request.cookies.get("device_id", None)
+            ip_address = request.client.host if request.client else "unknown"
+            user_agent = request.headers.get("user-agent", "unknown")
 
+            user = await User.get_by_unique(db=db, email=user_data["email"])
             if user is None:
                 return response_builder(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -89,6 +108,34 @@ class AuthService:
 
             user_data = UserResponse(**user.to_dict())
             access_token = create_access_token(subject=user.id)
+
+            # Generate device_id cookie if not exists
+            if not device_id:
+                device_id = str(uuid.uuid4())
+                set_cookies(
+                    response, "device_id", device_id, max_age=31536000
+                )  # Setting the device_id cookie to 1 year
+
+            # generate refresh token
+            refresh_token_expires_at = datetime.now(UTC) + parse_duration(
+                settings.REFRESH_TOKEN_TTL
+            )
+
+            refresh_token = create_refresh_token(subject=user.id)
+            hashed_refresh_token = hash_data(refresh_token)
+            await RefreshToken.create_refresh_token(
+                user_id=user.id,
+                token=hashed_refresh_token,
+                device_id=device_id,
+                user_agent=user_agent,
+                ip_address=ip_address,
+                expires_at=refresh_token_expires_at,
+                db=db,
+            )
+            max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
+
+            set_cookies(response, "refresh_token", refresh_token, max_age)
+
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",

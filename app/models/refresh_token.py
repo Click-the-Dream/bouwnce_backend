@@ -1,28 +1,38 @@
-from datetime import datetime
-from typing import Self
+from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, func, select
+from datetime import datetime
+from typing import TYPE_CHECKING, Self
+from uuid import UUID as UUID_Type
+
+from sqlalchemy import DateTime, ForeignKey, String, func, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.basemodel import BaseModel
+from app.models import BaseModel
+
+if TYPE_CHECKING:
+    from app.models import User
 
 
 class RefreshToken(BaseModel):
     __tablename__ = "refresh_tokens"
 
-    user_id = Column(
+    user_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    token = Column(String, nullable=False, unique=True)
-    device_id = Column(String, nullable=False, unique=True)
-    user_agent = Column(String, nullable=False)
-    ip_address = Column(String, nullable=False)
-    issued_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    token: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    device_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    user_agent: Mapped[str] = mapped_column(String, nullable=False)
+    ip_address: Mapped[str] = mapped_column(String, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
-    user = relationship("User", back_populates="refresh_tokens", uselist=False)
+    user: Mapped[User] = relationship(back_populates="refresh_tokens", uselist=False)
 
     @classmethod
     async def get_token_by_user_and_device(

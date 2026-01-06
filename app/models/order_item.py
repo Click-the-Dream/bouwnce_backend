@@ -1,26 +1,36 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, select
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+from uuid import UUID as UUID_Type
+
+from sqlalchemy import ForeignKey, Integer, String, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.basemodel import BaseModel
+from app.models import BaseModel
+
+if TYPE_CHECKING:
+    from app.models import SubOrder
 
 
 class OrderItem(BaseModel):
     __tablename__ = "order_items"
 
-    product_id = Column(String, nullable=False)  # Mongodb id
-    suborder_id = Column(
+    product_id: Mapped[str] = mapped_column(String, nullable=False)  # Mongodb id
+    suborder_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("suborders.id", ondelete="CASCADE"),
         nullable=False,
     )
-    quantity = Column(Integer, nullable=False)
-    product_snapshot = Column(JSONB, default=dict, nullable=False)
-    unit_price = Column(Integer, default=0, nullable=False)
-    line_price = Column(Integer, default=0, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    product_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    unit_price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    line_price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    suborder = relationship("SubOrder", back_populates="order_items", uselist=False)
+    suborder: Mapped[SubOrder] = relationship(
+        back_populates="order_items", uselist=False
+    )
 
     @classmethod
     async def get_by_suborder_ids(cls, db: AsyncSession, suborder_ids: list[str]):

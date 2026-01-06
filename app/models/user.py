@@ -1,52 +1,66 @@
-from datetime import UTC, datetime, timedelta
-from typing import Self
+from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, String, or_, select, text
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Self
+
+from sqlalchemy import Boolean, DateTime, Enum, String, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.security import genrate_verification_code
 from app.models import BaseModel
+
+if TYPE_CHECKING:
+    from app.models import Cart, Order, Payment, RefreshToken, Store, Verification
 
 
 class User(BaseModel):
     __tablename__ = "users"
 
-    username = Column(String, unique=True, index=True, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    full_name = Column(String, nullable=True)
-    institution = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True)
-    role = Column(
+    username: Mapped[str] = mapped_column(
+        String, unique=True, index=True, nullable=False
+    )
+    email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    full_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    institution: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    role: Mapped[str] = mapped_column(
         Enum("user", "vendor", "admin", name="user_role_enum"), default="user"
     )
-    otp = Column(String(6))
-    otp_time = Column(DateTime(timezone=True))
-    is_store_owner = Column(Boolean, server_default=text("false"), nullable=False)
-    stores = relationship("Store", back_populates="user", cascade="all, delete-orphan")
-
-    verification = relationship(
-        "Verification",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        uselist=False,
+    otp: Mapped[str | None] = mapped_column(String(6))
+    otp_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_store_owner: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), nullable=False
     )
 
-    carts = relationship("Cart", back_populates="user", cascade="all, delete-orphan")
-
-    payments = relationship(
-        "Payment", back_populates="user", cascade="all, delete-orphan"
+    stores: Mapped[list[Store]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
 
-    orders = relationship(
-        "Order",
+    verification: Mapped[Verification] = relationship(
+        back_populates="user", uselist=False, lazy="joined"
+    )
+
+    carts: Mapped[list[Cart]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+    payments: Mapped[list[Payment]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+    orders: Mapped[list[Order]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         foreign_keys="[Order.user_id]",
+        lazy="selectin",
     )
 
-    refresh_tokens = relationship(
-        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    refresh_tokens: Mapped[list[RefreshToken]] = relationship(
+        "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     def to_dict(self):

@@ -12,6 +12,43 @@ class BaseResponse(BaseModel):
     data: dict[str, Any] | list[Any] | None
 
 
+# 400
+class BadRequestResponse(BaseModel):
+    status_code: int = Field(default=400, examples=[400])
+    status: Literal["error"] = Field(default="error", examples=["error"])
+    message: str = Field(default="Bad Request", examples=["Bad Request"])
+
+
+# 401
+class UnauthorizedResponse(BaseModel):
+    status_code: int = Field(default=401, examples=[401])
+    status: Literal["error"] = Field(default="error", examples=["error"])
+    message: str = Field(default="Unauthorized", examples=["Unauthorized"])
+
+
+# 403
+class ForbiddenResponse(BaseModel):
+    status_code: int = Field(default=403, examples=[403])
+    status: Literal["error"] = Field(default="error", examples=["error"])
+    message: str = Field(default="Forbidden", examples=["Forbidden"])
+
+
+# 404
+class NotFoundResponse(BaseModel):
+    status_code: int = Field(default=404, examples=[404])
+    status: Literal["error"] = Field(default="error", examples=["error"])
+    message: str = Field(default="Not Found", examples=["Not Found"])
+
+
+# 500
+class InternalServerErrorResponse(BaseModel):
+    status_code: int = Field(default=500, examples=[500])
+    status: Literal["error"] = Field(default="error", examples=["error"])
+    message: str = Field(
+        default="Internal Server Error", examples=["Internal Server Error"]
+    )
+
+
 def response_builder(
     status_code: int,
     message: str,

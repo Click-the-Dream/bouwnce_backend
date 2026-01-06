@@ -4,6 +4,7 @@ from fastapi import Form
 from pydantic import BaseModel, Field
 
 from app.models.products import Images
+from app.utils.responses import BaseResponse
 
 
 class ProductBase(BaseModel):
@@ -16,13 +17,17 @@ class ProductBase(BaseModel):
     category: Annotated[str, Field(examples=["clothes"])]
 
 
-class ProductResponse(ProductBase):
+class ProductResponseSchema(ProductBase):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     store_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     status: Annotated[str, Field(examples=["draft"])]
     images: list[Images]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
+
+
+class ProductResponse(BaseResponse):
+    data: Annotated[ProductResponseSchema, Field(description="Product response data")]
 
 
 class ProductUpdate(BaseModel):
@@ -42,7 +47,11 @@ class CategoryCreate(BaseModel):
     ]
 
 
-class CategoryResponse(BaseModel):
+class CategoryResponseSchema(BaseModel):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     name: Annotated[str, Field(examples=["clothes"])]
     description: Annotated[str | None, Field(examples=["This is a clothe category"])]
+
+
+class CategoryResponse(BaseResponse):
+    data: Annotated[CategoryResponseSchema, Field(description="Category response data")]

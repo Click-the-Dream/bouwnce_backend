@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field
 from app.schemas.contact_info_crud import ContactInfoResponse
 from app.schemas.payout_info_crud import PayoutInfoResponse
 from app.schemas.shipments_info_crud import ShipmentsInfoResponse
+from app.utils.responses import BaseResponse
 
 
 class Image(BaseModel):
@@ -25,7 +26,7 @@ class StoreCreate(StoreBase):
     pass
 
 
-class StoreResponse(StoreBase):
+class StoreResponseSchema(StoreBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     user_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     is_active: Annotated[bool, Field(examples=["true"])]
@@ -36,10 +37,21 @@ class StoreResponse(StoreBase):
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
 
 
-class StoreFullDetailsResponse(StoreResponse):
+class StoreResponse(BaseResponse):
+    data: Annotated[StoreResponseSchema, Field(description="Store response data")]
+
+
+class StoreFullDetailsResponseSchema(StoreResponseSchema):
     contact_info: ContactInfoResponse | None = None
     payout_info: PayoutInfoResponse | None = None
     shipment_info: list[ShipmentsInfoResponse] | None = None
+
+
+class StoreFullDetailsResponse(BaseResponse):
+    data: Annotated[
+        StoreFullDetailsResponseSchema,
+        Field(description="Store full details response data"),
+    ]
 
 
 class StoreUpdate(BaseModel):

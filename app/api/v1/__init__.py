@@ -15,6 +15,13 @@ from app.api.v1 import (
     waitlist_router,
 )
 from app.core.rate_limiter import rate_limiter
+from app.utils.responses import (
+    BadRequestResponse,
+    ForbiddenResponse,
+    InternalServerErrorResponse,
+    NotFoundResponse,
+    UnauthorizedResponse,
+)
 
 user_api_router = APIRouter(
     prefix="/users",
@@ -48,7 +55,16 @@ waitlist.include_router(waitlist_router.router)
 
 api_router = APIRouter()
 
-api_router.include_router(auth_router.router)
+api_router.include_router(
+    auth_router.router,
+    responses={
+        400: {"model": BadRequestResponse},
+        401: {"model": UnauthorizedResponse},
+        403: {"model": ForbiddenResponse},
+        404: {"model": NotFoundResponse},
+        500: {"model": InternalServerErrorResponse},
+    },
+)
 
 
 api_router.include_router(user_api_router)

@@ -2,6 +2,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
+from app.utils.responses import BaseResponse
+
 
 class PayoutInfoBase(BaseModel):
     account_name: Annotated[str, Field(min_length=2, examples=["John Doe"])]
@@ -20,11 +22,17 @@ class PayoutInfoCreate(PayoutInfoBase):
     pass
 
 
-class PayoutInfoResponse(PayoutInfoBase):
+class PayoutInfoResponseSchema(PayoutInfoBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     store_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
+
+
+class PayoutInfoResponse(BaseResponse):
+    data: Annotated[
+        PayoutInfoResponseSchema, Field(description="Payout info response data")
+    ]
 
 
 class PayoutInfoUpdate(BaseModel):

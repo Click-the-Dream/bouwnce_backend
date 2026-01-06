@@ -2,6 +2,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
+from app.utils.responses import BaseResponse
+
 
 class ShipmentsInfoBase(BaseModel):
     shipping_address: Annotated[
@@ -20,11 +22,18 @@ class ShipmentsInfoCreate(ShipmentsInfoBase):
     pass
 
 
-class ShipmentsInfoResponse(ShipmentsInfoBase):
+class ShipmentsInfoResponseSchema(ShipmentsInfoBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     store_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
+
+
+class ShipmentsInfoResponse(BaseResponse):
+    data: Annotated[
+        list[ShipmentsInfoResponseSchema],
+        Field(description="Shipments info response data"),
+    ]
 
 
 class ShipmentsInfoUpdate(BaseModel):

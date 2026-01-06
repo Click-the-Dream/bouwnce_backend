@@ -3,6 +3,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field
 
 from app.models.products import Images
+from app.utils.responses import BaseResponse
 
 
 class ProductResponse(BaseModel):
@@ -20,13 +21,17 @@ class CartCreate(BaseModel):
     quantity: Annotated[int, Field(gt=0, examples=[2])]
 
 
-class CartResponse(BaseModel):
+class CartResponseSchema(BaseModel):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     user_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     product: ProductResponse
     quantity: Annotated[int, Field(gt=0, examples=[2])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
+
+
+class CartResponse(BaseResponse):
+    data: Annotated[list[CartResponseSchema], Field(description="Cart response data")]
 
 
 class UpdateCart(BaseModel):

@@ -3,6 +3,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.utils.responses import BaseResponse
+
 
 class RoleEnum(Enum):
     USER = "user"
@@ -23,7 +25,7 @@ class UserCreate(UserBase):
     pass
 
 
-class UserResponse(UserBase):
+class UserResponsSchema(UserBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     is_active: Annotated[bool, Field(examples=[True])]
     role: Annotated[str, Field(examples=["user"])]
@@ -31,6 +33,10 @@ class UserResponse(UserBase):
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
     is_store_owner: Annotated[bool, Field(examples=[False])]
+
+
+class UserResponse(BaseResponse):
+    data: Annotated[UserResponsSchema, Field(description="User response data")]
 
 
 class CodeVerification(BaseModel):

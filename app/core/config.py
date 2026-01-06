@@ -6,6 +6,8 @@ class Config(BaseModel):
     # Common settings
     API_STR: str = config("API_STR", default="api/v1")
     PORT: int = config("PORT", 8000, cast=int)
+    ACCESS_TOKEN_TTL: str = config("ACCESS_TOKEN_TTL", default="15m")
+    REFRESH_TOKEN_TTL: str = config("REFRESH_TOKEN_TTL", default="30d")
 
     SQLALCHEMY_DATABASE_URL: str
 

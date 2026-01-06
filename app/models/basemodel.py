@@ -3,10 +3,10 @@ from typing import Any, Self, TypeVar
 from uuid import UUID as UUID_Type
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, and_, func, or_, select
+from sqlalchemy import Boolean, DateTime, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Mapped, mapped_column, selectinload
 from sqlalchemy.sql import text
 
 from app.db.postgres_db_conn import Base
@@ -18,13 +18,19 @@ T = TypeVar("T", bound="BaseModel")
 class BaseModel(Base):
     __abstract__ = True
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
-    updated_at = Column(
+    id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
     )
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
-    is_deleted = Column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     def to_dict(self) -> dict:
 

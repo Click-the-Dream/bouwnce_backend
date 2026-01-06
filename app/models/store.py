@@ -1,55 +1,60 @@
-from typing import Self
+from __future__ import annotations
 
-from sqlalchemy import JSON, Boolean, Column, ForeignKey, String, select
+from typing import TYPE_CHECKING, Self
+from uuid import UUID as UUID_Type
+
+from sqlalchemy import JSON, Boolean, ForeignKey, String, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.basemodel import BaseModel
-from app.models.wallet import Wallet
+from app.models import BaseModel
+
+if TYPE_CHECKING:
+    from app.models import ContactInfo, PayoutInfo, ShipmentInfo, SubOrder, User, Wallet
 
 
 class Store(BaseModel):
     __tablename__ = "stores"
 
-    user_id = Column(
+    user_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
-    name = Column(String, unique=True, nullable=False)
-    address = Column(String, nullable=False)
-    phone_number = Column(String, nullable=False)
-    email = Column(String, nullable=False)
-    store_logo = Column(JSON, nullable=True)
-    store_banner = Column(JSON, nullable=True)
-    store_description = Column(String, nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    address: Mapped[str] = mapped_column(String, nullable=False)
+    phone_number: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    store_logo: Mapped[dict] = mapped_column(JSON, nullable=True)
+    store_banner: Mapped[dict] = mapped_column(JSON, nullable=True)
+    store_description: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    user = relationship("User", back_populates="stores", uselist=False)
+    user: Mapped[User] = relationship(back_populates="stores", uselist=False)
 
-    contact_info = relationship(
-        "ContactInfo",
+    contact_info: Mapped[list[ContactInfo]] = relationship(
         back_populates="store",
         uselist=False,
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
-    payout_info = relationship(
-        "PayoutInfo",
+    payout_info: Mapped[list[PayoutInfo]] = relationship(
         back_populates="store",
         uselist=False,
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
-    shipment_info = relationship(
-        "ShipmentInfo",
-        back_populates="store",
-        cascade="all, delete-orphan",
+    shipment_info: Mapped[list[ShipmentInfo]] = relationship(
+        back_populates="store", cascade="all, delete-orphan", lazy="selectin"
     )
-    suborders = relationship(
-        "SubOrder", back_populates="store", cascade="all, delete-orphan"
+    suborders: Mapped[list[SubOrder]] = relationship(
+        back_populates="store", cascade="all, delete-orphan", lazy="selectin"
     )
 
-    wallets = relationship("Wallet", back_populates="store", uselist=False)
+    wallets: Mapped[Wallet] = relationship(
+        back_populates="store", uselist=False, lazy="joined"
+    )
 
     @classmethod
     async def get_by_user_id(cls, id: str, db: AsyncSession) -> Self:

@@ -1,16 +1,20 @@
-from typing import Any, Self
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Self
+from uuid import UUID as UUID_Type
 
 from pydantic import BaseModel as PydnaticBaseModel
 from redis.asyncio import Redis
-from sqlalchemy import Column, Enum, ForeignKey, Integer, String, select
+from sqlalchemy import Enum, ForeignKey, Integer, String, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.basemodel import BaseModel
-from app.models.cart import Cart
+from app.models import BaseModel
 from app.models.products import product_domain
-from app.models.user import User
+
+if TYPE_CHECKING:
+    from app.models import Cart, Payment, SubOrder, User
 
 
 class ProductMetadata(PydnaticBaseModel):
@@ -28,22 +32,24 @@ class ProductMetadata(PydnaticBaseModel):
 class Order(BaseModel):
     __tablename__ = "orders"
 
-    user_id = Column(
+    user_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    payment_id = Column(
+    payment_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("payments.id", ondelete="CASCADE"),
         nullable=False,
     )
-    total_amount = Column(Integer, nullable=False)
+    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    products = Column(JSONB, nullable=False, default=list)
+    products: Mapped[list[dict]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
 
-    idempotent_key = Column(String, nullable=False, unique=True)
-    reference_token = Column(String, nullable=False, unique=True)
+    idempotent_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    reference_token: Mapped[str] = mapped_column(String, nullable=False, unique=True)
 
-    status = Column(
+    status: Mapped[str] = mapped_column(
         Enum(
             "initiated",
             "failed",
@@ -58,19 +64,16 @@ class Order(BaseModel):
         ),
         default="initiated",
     )
-    username = Column(String, nullable=False)
+    username: Mapped[str] = mapped_column(String, nullable=False)
 
-    user = relationship("User", back_populates="orders", uselist=False)
+    user: Mapped[User] = relationship(back_populates="orders", uselist=False)
 
-    payments = relationship(
-        "Payment",
-        back_populates="order",
-        cascade="all, delete-orphan",
-        single_parent=True,
+    payment: Mapped[Payment] = relationship(
+        back_populates="order", uselist=False, lazy="joined"
     )
 
-    suborders = relationship(
-        "SubOrder", back_populates="order", cascade="all, delete-orphan"
+    suborders: Mapped[list[SubOrder]] = relationship(
+        back_populates="order", cascade="all, delete-orphan", lazy="selectin"
     )
 
     @classmethod

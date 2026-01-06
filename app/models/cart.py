@@ -1,24 +1,30 @@
-from typing import Self
+from __future__ import annotations
 
-from sqlalchemy import Column, ForeignKey, Integer, String, delete, select
+from typing import TYPE_CHECKING, Self
+from uuid import UUID as UUID_TYPE
+
+from sqlalchemy import ForeignKey, Integer, String, delete, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.basemodel import BaseModel
+from app.models import BaseModel
 from app.utils.helper import is_valid_uuid
+
+if TYPE_CHECKING:
+    from app.models import User
 
 
 class Cart(BaseModel):
     __tablename__ = "carts"
 
-    user_id = Column(
+    user_id: Mapped[UUID_TYPE] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    product_id = Column(String, nullable=False)
-    quantity = Column(Integer, nullable=False)
+    product_id: Mapped[str] = mapped_column(String, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    user = relationship("User", back_populates="carts", uselist=False)
+    user: Mapped[User] = relationship(back_populates="carts", uselist=False)
 
     @classmethod
     async def get_by_user_id(

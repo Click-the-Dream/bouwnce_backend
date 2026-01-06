@@ -8,16 +8,22 @@ from fastapi import HTTPException
 from passlib.context import CryptContext
 
 from app.core.config import settings
+from app.utils.helper import parse_duration
 
-pwd = CryptContext(schemes=["bcrypt"], deprecated=["auto"])
+crytp = CryptContext(schemes=["bcrypt"], deprecated=["auto"])
 
 
-def create_access_token(
-    subject: str | Any, expires_delta: timedelta | None = None
+def create_token(
+    subject: str | Any, expires_delta: timedelta | None = None, type: str = "access"
 ) -> str:
 
     now = datetime.now(UTC)
-    to_encode = {"sub": str(subject), "iat": now, "jti": str(uuid.uuid4())}
+    to_encode = {
+        "sub": str(subject),
+        "iat": now,
+        "jti": str(uuid.uuid4()),
+        "type": type,
+    }
     if expires_delta:
         expiry_time = datetime.now(UTC) + expires_delta
         to_encode["exp"] = expiry_time
@@ -27,6 +33,18 @@ def create_access_token(
     )
 
     return encoded_jwt
+
+
+def create_access_token(subject: str | Any) -> str:
+    expires_delta = parse_duration(settings.ACCESS_TOKEN_TTL)
+
+    return create_token(subject=subject, expires_delta=expires_delta, type="access")
+
+
+def create_refresh_token(subject: str | Any) -> str:
+    expires_delta = parse_duration(settings.REFRESH_TOKEN_TTL)
+
+    return create_token(subject=subject, expires_delta=expires_delta, type="refresh")
 
 
 def verify_token(token: str) -> dict[str, Any]:
@@ -42,12 +60,30 @@ def verify_token(token: str) -> dict[str, Any]:
         ) from None
 
 
-def hash_password(password: str) -> str:
-    return pwd.hash(password)
+def hash_data(data: str) -> str:
+    return crytp.hash(data)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd.verify(plain_password, hashed_password)
+def verify_data(plain_data: str, hashed_data: str) -> bool:
+    return crytp.verify(plain_data, hashed_data)
+
+
+def set_cookies(response, key: str, value: str, max_age: int) -> None:
+    if settings.NAME == "production":
+        response.set_cookie(
+            key=key,
+            value=value,
+            httponly=True,
+            max_age=max_age,
+            secure=True,
+            samesite="lax",
+            path="/",
+        )
+
+    else:
+        response.set_cookie(
+            key=key, value=value, httponly=True, max_age=max_age, path="/"
+        )
 
 
 def genrate_verification_code() -> str:

@@ -10,7 +10,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.shipment_info import ShipmentInfo
 from app.models.store import Store
 from app.models.store_info import StoreInfo
-from app.models.suborder import SubOrder
+from app.models.suborder import SubOrder, SubOrderSnapshot
 from app.models.user import User
 from app.models.verification import Verification
 from app.models.waitlist import Waitlist
@@ -36,4 +36,5 @@ __all__ = [
     "WalletTransaction",
     "Waitlist",
     "RefreshToken",
+    "SubOrderSnapshot",
 ]

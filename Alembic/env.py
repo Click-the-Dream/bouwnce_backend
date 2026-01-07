@@ -7,16 +7,15 @@ from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.core.config import config_options
+from app.core.config import settings
 from app.db.postgres_db_conn import Base
 from app.models import *
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
-env = os.getenv("FASTAPI_ENV", "development")
+env = os.getenv("FASTAPI_ENV")
 
-settings = config_options[env]
 print(settings.SQLALCHEMY_DATABASE_URL)
 config = context.config
 

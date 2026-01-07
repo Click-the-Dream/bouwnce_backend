@@ -5,10 +5,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 
-from app.core.config import config_options
-
-env = os.getenv("FASTAPI_ENV", "development")
-settings = config_options[env]
+from app.core.config import settings
 
 Base = declarative_base()
 

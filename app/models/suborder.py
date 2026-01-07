@@ -1,9 +1,10 @@
 from typing import Any
 
-from sqlalchemy import Column, Enum, ForeignKey, Integer, String, distinct, func, select
+from sqlalchemy import Column, Enum, ForeignKey, Integer, String, distinct, func, select, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
+from sqlalchemy import UniqueConstraint
 
 from app.models.basemodel import BaseModel
 
@@ -50,6 +51,20 @@ class SubOrder(BaseModel):
         cascade="all, delete-orphan",
         single_parent=True,
     )
+    
+class SubOrderSnapshot(BaseModel):
+    __tablename__ = "suborder_snapshots"
+    
+    store_id = Column(UUID(as_uuid=True), nullable=False)
+    snapshot_time = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
+    total_orders = Column(Integer, default=0, nullable=False)
+    total_revenue = Column(Integer, default=0, nullable=False)
+    total_customers = Column(Integer, default=0, nullable=False)
+    
+    __table_args__ = (
+        UniqueConstraint("store_id", "snapshot_time", name="uix_store_snapshot_time"),
+    )
+
 
     @classmethod
     async def get_top_products_paginated(

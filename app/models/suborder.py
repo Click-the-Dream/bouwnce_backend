@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, distinct, func, select
 from sqlalchemy import Column, Enum, ForeignKey, Integer, String,  func, select, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession

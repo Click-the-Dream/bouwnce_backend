@@ -1,30 +1,35 @@
-from typing import Any
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+from uuid import UUID as UUID_Type
+
+from sqlalchemy import Enum, ForeignKey, Integer, String, distinct, func, select
 from sqlalchemy import Column, Enum, ForeignKey, Integer, String,  func, select, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models import BaseModel
 from sqlalchemy.orm import relationship
 from sqlalchemy import UniqueConstraint
 
-from app.models.basemodel import BaseModel
+if TYPE_CHECKING:
+    from app.models import Order, OrderItem, Store
 
 
 class SubOrder(BaseModel):
     __tablename__ = "suborders"
 
-    order_id = Column(
+    order_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
     )
-    store_id = Column(
+    store_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stores.id", ondelete="CASCADE"), nullable=False
     )
-    total_amount = Column(Integer, default=0, nullable=False)
-    shipping_fee = Column(Integer, default=0)
+    total_amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    shipping_fee: Mapped[int] = mapped_column(Integer, default=0)
 
-    otp = Column(String)
-    username = Column(String)
-
-    status = Column(
+    status: Mapped[str] = mapped_column(
         Enum(
             "pending",
             "paid",
@@ -38,18 +43,18 @@ class SubOrder(BaseModel):
         default="pending",
         nullable=False,
     )
-    otp = Column(String)
-    username = Column(String, nullable=False)
+    otp: Mapped[str | None] = mapped_column(String, nullable=True)
+    username: Mapped[str] = mapped_column(String, nullable=False)
 
-    order = relationship("Order", back_populates="suborders", uselist=False)
+    order: Mapped[Order] = relationship(back_populates="suborders", uselist=False)
 
-    store = relationship("Store", back_populates="suborders", uselist=False)
+    store: Mapped[Store] = relationship(back_populates="suborders", uselist=False)
 
-    order_items = relationship(
-        "OrderItem",
+    order_items: Mapped[list[OrderItem]] = relationship(
         back_populates="suborder",
         cascade="all, delete-orphan",
         single_parent=True,
+        lazy="selectin",
     )
     
     @classmethod

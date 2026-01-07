@@ -1,19 +1,20 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Column, String, func, select
+from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.basemodel import BaseModel
+from app.models import BaseModel
 
 
 class Waitlist(BaseModel):
     __tablename__ = "waitlists"
 
-    email = Column(String, unique=True, nullable=False)
-    full_name = Column(String, nullable=False)
-    phone_number = Column(String, nullable=False)
-    institution = Column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String, nullable=False)
+    phone_number: Mapped[str] = mapped_column(String, nullable=False)
+    institution: Mapped[str] = mapped_column(String, nullable=False)
 
     @classmethod
     async def get_today_count(cls, db: AsyncSession) -> int:

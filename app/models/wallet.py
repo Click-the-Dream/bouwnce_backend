@@ -1,30 +1,37 @@
-from typing import Self
+from __future__ import annotations
 
-from sqlalchemy import Column, Float, ForeignKey, select
+from typing import TYPE_CHECKING, Self
+from uuid import UUID as UUID_Type
+
+from sqlalchemy import Float, ForeignKey, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.basemodel import BaseModel
+from app.models import BaseModel
+
+if TYPE_CHECKING:
+    from app.models import Store, WalletTransaction
 
 
 class Wallet(BaseModel):
     __tablename__ = "wallets"
 
-    store_id = Column(
+    store_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stores.id", ondelete="CASCADE"), nullable=False
     )
 
-    available_balance = Column(Float, default=0.0)
-    pending_balance = Column(Float, default=0.0)
-    withdrawable_balance = Column(Float, default=0.0)
+    available_balance: Mapped[float] = mapped_column(Float, default=0.0)
+    pending_balance: Mapped[float] = mapped_column(Float, default=0.0)
+    withdrawable_balance: Mapped[float] = mapped_column(Float, default=0.0)
 
-    store = relationship("Store", back_populates="wallets", uselist=False)
-    transactions = relationship(
-        "WalletTransaction",
+    store: Mapped[Store] = relationship(back_populates="wallets", uselist=False)
+
+    transactions: Mapped[list[WalletTransaction]] = relationship(
         back_populates="wallet",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        lazy="selectin",
     )
 
     @classmethod

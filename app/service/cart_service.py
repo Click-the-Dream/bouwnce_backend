@@ -5,13 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cart import Cart
 from app.models.products import product_domain
-from app.schemas.cart import CartResponse
+from app.schemas.cart import CartResponse, CartResponseSchema
 from app.utils.responses import response_builder
 
 
 class CartService:
 
-    async def _formulate_response(self, cart: Cart) -> CartResponse:
+    async def _formulate_response(self, cart: Cart) -> CartResponseSchema:
         product = await product_domain.get_product_by_id(cart.product_id)
         if not product:
             raise ValueError("Product with Id not found")
@@ -21,7 +21,7 @@ class CartService:
         cart_dict = cart.to_dict()
         cart_dict["user_id"] = str(cart.user_id)
         cart_dict["product"] = product_response
-        cart_response = CartResponse(**cart_dict)
+        cart_response = CartResponseSchema(**cart_dict)
 
         return cart_response
 
@@ -52,7 +52,7 @@ class CartService:
             new_data_dict = new_cart.to_dict()
             new_data_dict["product"] = product_response
             new_data_dict["user_id"] = str(new_cart.user_id)
-            cart_response = CartResponse(**new_data_dict)
+            cart_response = CartResponseSchema(**new_data_dict)
 
             return response_builder(
                 status_code=status.HTTP_201_CREATED,

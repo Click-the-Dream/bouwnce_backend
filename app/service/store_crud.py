@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Store, User, Wallet
 from app.models.products import product_domain
 from app.schemas import (
-    ContactInfoResponse,
-    PayoutInfoResponse,
-    ShipmentsInfoResponse,
-    StoreFullDetailsResponse,
-    StoreResponse,
+    ContactInfoResponseSchema,
+    PayoutInfoResponseSchema,
+    ShipmentsInfoResponseSchema,
+    StoreFullDetailsResponseSchema,
+    StoreResponseSchema,
 )
 from app.utils.cloudinary_utils import (
     cleanup_temp_files,
@@ -47,7 +47,7 @@ class StoreCRUDService:
 
             await Wallet.create({"store_id": new_store.id}, db)
 
-            data = StoreResponse(**new_store.to_dict())
+            data = StoreResponseSchema(**new_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
@@ -65,7 +65,7 @@ class StoreCRUDService:
 
     async def get(self, current_store: Store) -> JSONResponse:
         try:
-            data = StoreResponse(**current_store.to_dict())
+            data = StoreResponseSchema(**current_store.to_dict())
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -93,7 +93,7 @@ class StoreCRUDService:
 
             stores = await Store.get_by(filter={"user_id": vendor_id}, db=db)
             store_response = [
-                StoreResponse(**store.to_dict()) for store in stores["data"]
+                StoreResponseSchema(**store.to_dict()) for store in stores["data"]
             ]
 
             return response_builder(
@@ -112,7 +112,7 @@ class StoreCRUDService:
 
     async def get_full_details(self, current_store: Store) -> JSONResponse:
         try:
-            store_full_response = StoreFullDetailsResponse(
+            store_full_response = StoreFullDetailsResponseSchema(
                 id=str(current_store.id),
                 user_id=str(current_store.user_id),
                 name=current_store.name,
@@ -128,18 +128,18 @@ class StoreCRUDService:
             )
 
             if current_store.contact_info:
-                store_full_response.contact_info = ContactInfoResponse(
+                store_full_response.contact_info = ContactInfoResponseSchema(
                     **current_store.contact_info.to_dict()
                 )
 
             if current_store.payout_info:
-                store_full_response.payout_info = PayoutInfoResponse(
+                store_full_response.payout_info = PayoutInfoResponseSchema(
                     **current_store.payout_info.to_dict()
                 )
 
             if current_store.shipment_info:
                 store_full_response.shipment_info = [
-                    ShipmentsInfoResponse(**shipment_info.to_dict())
+                    ShipmentsInfoResponseSchema(**shipment_info.to_dict())
                     for shipment_info in current_store.shipment_info
                 ]
 
@@ -200,7 +200,7 @@ class StoreCRUDService:
 
             stores = await Store.get_by(filter, db, page, page_size)
             store_response = [
-                StoreResponse(**store.to_dict()) for store in stores["data"]
+                StoreResponseSchema(**store.to_dict()) for store in stores["data"]
             ]
 
             return response_builder(
@@ -235,7 +235,7 @@ class StoreCRUDService:
                 )
 
             updated_store = await store.update(db=db, data=data)
-            data = StoreResponse(**updated_store.to_dict())
+            data = StoreResponseSchema(**updated_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -297,7 +297,7 @@ class StoreCRUDService:
 
             await store.update(db=db, data=data)
 
-            store_response = StoreResponse(**store.to_dict())
+            store_response = StoreResponseSchema(**store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -370,7 +370,7 @@ class StoreCRUDService:
             deleted_store = await Store.delete_permanently_by_id(
                 id=str(current_store.id), db=db
             )
-            data = StoreResponse(**deleted_store.to_dict())
+            data = StoreResponseSchema(**deleted_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
@@ -395,7 +395,7 @@ class StoreCRUDService:
             await product_domain.deactivate_stores_products(str(store.id))
 
             await store.save(db)
-            store_response = StoreResponse(**store.to_dict())
+            store_response = StoreResponseSchema(**store.to_dict())
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -420,7 +420,7 @@ class StoreCRUDService:
             await product_domain.activate_stores_prouducts(str(store.id))
 
             await store.save(db)
-            store_response = StoreResponse(**store.to_dict())
+            store_response = StoreResponseSchema(**store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",

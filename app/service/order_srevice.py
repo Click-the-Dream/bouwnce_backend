@@ -77,6 +77,48 @@ class OrderService:
                 message="Error occured while verifying payment",
             )
 
+    async def get_cart_shipping_info(
+        self, user: User, db: AsyncSession
+    ) -> JSONResponse:
+        try:
+            # extract unique store ids from carts
+
+            product_ids = [cart.product_id for cart in user.carts]
+            if not product_ids:
+                return response_builder(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status="error",
+                    message="User has no product in cart",
+                )
+
+            products = await product_domain.get_products_by_ids(product_ids)
+
+            store_ids = {product.store_id for product in products}
+            stores: list[Store] = await Store.get_store_by_ids(list(store_ids), db)
+
+            store_shipping_info = [
+                {
+                    "store_id": str(store.id),
+                    "store_name": store.name,
+                    "shipment_info": store.shipment_info,
+                }
+                for store in stores
+            ]
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully fetched cart shipping info",
+                data=store_shipping_info,
+            )
+        except Exception as e:
+            print("Error occured while fetching cart shipping info: ", str(e))
+            return response_builder(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status="error",
+                message="Error occured while fetching cart shipping info",
+            )
+
     async def checkout(
         self, user: User, redis: Redis, request: Request, db: AsyncSession
     ) -> JSONResponse:
@@ -255,10 +297,6 @@ class OrderService:
 
             body = await request.json()
 
-            data = body["data"]
-            reference = data["reference"]
-            order = await Order.get_by_reference(reference, db)
-
             # Only handle charge.success event
             event = body.get("event")
             if event and event != "charge.success":
@@ -267,6 +305,10 @@ class OrderService:
                     status="success",
                     message="ignore event",
                 )
+
+            data = body["data"]
+            reference = data["reference"]
+            order = await Order.get_by_reference(reference, db)
 
             if not order:
                 return response_builder(

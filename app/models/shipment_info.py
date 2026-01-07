@@ -1,18 +1,26 @@
-from sqlalchemy import UUID, Column, ForeignKey, String
-from sqlalchemy.orm import relationship
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+from uuid import UUID as UUID_Type
+
+from sqlalchemy import UUID, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import BaseModel
+
+if TYPE_CHECKING:
+    from app.models import Store
 
 
 class ShipmentInfo(BaseModel):
     __tablename__ = "shipment_info"
 
-    shipping_address = Column(String, nullable=False)
-    store_id = Column(
+    shipping_address: Mapped[str] = mapped_column(String, nullable=False)
+    store_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stores.id", ondelete="CASCADE"), nullable=False
     )
-    delivery_method = Column(String, nullable=False)
-    delivery_fee = Column(String, nullable=False)
-    delivery_time = Column(String, nullable=False)
+    delivery_method: Mapped[str] = mapped_column(String, nullable=False)
+    delivery_fee: Mapped[str] = mapped_column(String, nullable=False)
+    delivery_time: Mapped[str] = mapped_column(String, nullable=False)
 
-    store = relationship("Store", back_populates="shipment_info")
+    store: Mapped[Store] = relationship(back_populates="shipment_info", uselist=False)

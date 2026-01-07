@@ -14,9 +14,6 @@ from app.models import *
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
-env = os.getenv("FASTAPI_ENV")
-
-print(settings.SQLALCHEMY_DATABASE_URL)
 config = context.config
 
 

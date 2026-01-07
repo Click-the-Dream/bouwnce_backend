@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import Column, Enum, ForeignKey, Integer, String, distinct, func, select, DateTime
+from sqlalchemy import Column, Enum, ForeignKey, Integer, String,  func, select, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
@@ -52,20 +52,6 @@ class SubOrder(BaseModel):
         single_parent=True,
     )
     
-class SubOrderSnapshot(BaseModel):
-    __tablename__ = "suborder_snapshots"
-    
-    store_id = Column(UUID(as_uuid=True), nullable=False)
-    snapshot_time = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
-    total_orders = Column(Integer, default=0, nullable=False)
-    total_revenue = Column(Integer, default=0, nullable=False)
-    total_customers = Column(Integer, default=0, nullable=False)
-    
-    __table_args__ = (
-        UniqueConstraint("store_id", "snapshot_time", name="uix_store_snapshot_time"),
-    )
-
-
     @classmethod
     async def get_top_products_paginated(
         cls, store_id: str, page: int, page_size: int, db: AsyncSession
@@ -110,6 +96,21 @@ class SubOrderSnapshot(BaseModel):
             "items": items_list,
         }
 
+    
+class SubOrderSnapshot(BaseModel):
+    __tablename__ = "suborder_snapshots"
+    
+    store_id = Column(UUID(as_uuid=True), nullable=False)
+    snapshot_time = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
+    total_orders = Column(Integer, default=0, nullable=False)
+    total_revenue = Column(Integer, default=0, nullable=False)
+    total_customers = Column(Integer, default=0, nullable=False)
+    
+    __table_args__ = (
+        UniqueConstraint("store_id", "snapshot_time", name="uix_store_snapshot_time"),
+    )
+
+
     @staticmethod
     async def aggregate_suborders(
         db: AsyncSession,
@@ -119,22 +120,20 @@ class SubOrderSnapshot(BaseModel):
     ) -> dict[str, Any]:
 
         stmt = select(
-            func.count(SubOrder.id).label("total_orders"),
-            func.count(distinct(SubOrder.username)).label("total_customers"),
-            func.sum(SubOrder.total_amount).label("total_revenue"),
+            func.coalesce(func.sum(SubOrderSnapshot.total_orders), 0).label("total_orders"),
+            func.coalesce(func.sum(SubOrderSnapshot.total_revenue), 0.0).label("total_revenue"),
+            func.coalesce(func.sum(SubOrderSnapshot.total_customers), 0).label("total_customers"),
         ).where(
-            SubOrder.store_id == store_id,
-            SubOrder.status == "delivered",
-            SubOrder.created_at >= start_date,
-            SubOrder.created_at < end_date,
+            SubOrderSnapshot.store_id == store_id,
+            SubOrderSnapshot.snapshot_time >= start_date,
+            SubOrderSnapshot.snapshot_time < end_date,
         )
 
-        row = (await db.execute(stmt)).one_or_none()
-        total_orders = int((row.total_orders if row else 0) or 0)
-        total_revenue = float((row.total_revenue if row else 0.0) or 0.0)
-        total_customers = int((row.total_customers if row else 0) or 0)
-
-        aov = float(total_revenue / total_orders) if total_orders else 0.0
+        row = (await db.execute(stmt)).one()
+        total_orders = int(row.total_orders)
+        total_revenue = float(row.total_revenue)
+        total_customers = int(row.total_customers)
+        aov = float(total_revenue / total_orders) if total_orders > 0 else 0.0
 
         return {
             "total_orders": total_orders,

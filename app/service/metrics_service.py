@@ -1,9 +1,9 @@
-from datetime import datetime
+from __future__ import annotations
 from typing import Any, Dict, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Store, SubOrder
+from app.models import SubOrderSnapshot
 from app.utils.helper import build_date_filter
 
 
@@ -36,8 +36,8 @@ class MetricService:
         # previous window with identical duration
         prev_start, prev_end = MetricService._prev_window(cur_start, cur_end)
 
-        current = await SubOrder.aggregate_suborders(db, store_id, cur_start, cur_end)
-        previous = await SubOrder.aggregate_suborders(
+        current = await SubOrderSnapshot.aggregate_suborders(db, store_id, cur_start, cur_end)
+        previous = await SubOrderSnapshot.aggregate_suborders(
             db, store_id, prev_start, prev_end
         )
 

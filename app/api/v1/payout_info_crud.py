@@ -52,7 +52,7 @@ async def update_payout_info(
 @router.delete(
     "/",
     response_model=dict,
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Delete payout information",
 )
 async def delete_payout_info(session: dbSessionDep, current_store: CurrentStore):

@@ -181,11 +181,7 @@ class CartService:
 
             await cart.delete(db)
 
-            return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
-                status="success",
-                message="Deleted cart",
-            )
+            return None
         except ValueError as ve:
             raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
@@ -200,11 +196,7 @@ class CartService:
         try:
             await Cart.delete_by_user_id(user_id, db)
 
-            return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
-                status="success",
-                message="Successfully deleted user carts",
-            )
+            return None
         except Exception as e:
             print("Error occured while deleting user cart: ", str(e))
             raise InternalServerErrorException(

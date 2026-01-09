@@ -79,13 +79,15 @@ async def update_cart(
     )
 
 
-@router.delete("/{id}", summary="Delete a cart by Id", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{id}", summary="Delete a cart by Id", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_cart_by_id(id: str, current_user: CurrentActiveUser, db: dbSessionDep):
     return await cart_service.delete(user_id=current_user.id, cart_id=id, db=db)
 
 
 @router.delete(
-    "/", summary="Delete all cart for a user", status_code=status.HTTP_200_OK
+    "/", summary="Delete all cart for a user", status_code=status.HTTP_204_NO_CONTENT
 )
 async def delete_all_user_cart(current_user: CurrentActiveUser, db: dbSessionDep):
     return await cart_service.delete_all_user_cart(current_user.id, db)

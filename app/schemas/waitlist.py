@@ -32,6 +32,7 @@ class PaginatedWaitlistResponseSchema(BaseModel):
     waitlists: Annotated[
         list[WaitlistResponseSchema], Field(description="List of waitlist response")
     ]
+    today_count: Annotated[int, Field(examples=[10])]
     page: Annotated[int, Field(examples=[2])]
     page_size: Annotated[int, Field(examples=[10])]
     total: Annotated[int, Field(examples=[100])]

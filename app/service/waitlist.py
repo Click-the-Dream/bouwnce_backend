@@ -1,28 +1,23 @@
 from typing import Any
 
 from fastapi import BackgroundTasks, status
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.waitlist import Waitlist
-from app.schemas.waitlist import WaitlistResponse
 from app.utils.emails import generate_waitlist_welcome_email, send_email
+from app.utils.exception import BadRequestException, InternalServerErrorException
 from app.utils.responses import response_builder
 
 
 class WaistlistService:
     async def create(
         self, db: AsyncSession, data: dict[str, Any], background_tasks: BackgroundTasks
-    ) -> WaitlistResponse:
+    ) -> dict[str, Any]:
         # Check if email already exist
         try:
             user = await Waitlist.get_one(db, {"email": data["email"]})
             if user:
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="User already in waitlist",
-                )
+                raise BadRequestException(message="User already in waitlist")
 
             # create waitlist
             user_waitlist = await Waitlist.create(data, db)
@@ -37,20 +32,17 @@ class WaistlistService:
             )
 
             # return response
-            waitlistResponse = WaitlistResponse(**user_waitlist.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Successfully created waitlist",
-                data=waitlistResponse,
+                data=user_waitlist.to_dict(),
             )
         except Exception as e:
             print("Error occured while saving waitlist: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Internal server error",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while saving waitlist"
+            ) from None
 
     async def get_waitlist(
         self,
@@ -58,7 +50,7 @@ class WaistlistService:
         filter: dict[str, Any] | None = None,
         page: int = 1,
         page_size: int = 10,
-    ) -> list[WaitlistResponse]:
+    ) -> dict[str, Any]:
 
         try:
             waitlists_list = await Waitlist.get_by(
@@ -66,8 +58,7 @@ class WaistlistService:
             )
 
             waitlistResponse = [
-                WaitlistResponse(**waitlist.to_dict())
-                for waitlist in waitlists_list["data"]
+                waitlist.to_dict() for waitlist in waitlists_list["data"]
             ]
 
             today_count = await Waitlist.get_today_count(db)
@@ -77,7 +68,7 @@ class WaistlistService:
                 status="success",
                 message="successfully retrieved waitlist",
                 data={
-                    "data": waitlistResponse,
+                    "waitlists": waitlistResponse,
                     "today_count": today_count,
                     "page": waitlists_list["page"],
                     "page_size": waitlists_list["page_size"],
@@ -86,13 +77,11 @@ class WaistlistService:
             )
         except Exception as e:
             print("Error occured while fetching waitlist: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Internal server error",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching waitlist"
+            ) from None
 
-    async def get_today_count(self, db: AsyncSession) -> JSONResponse:
+    async def get_today_count(self, db: AsyncSession) -> dict[str, Any]:
 
         try:
             today_count = await Waitlist.get_today_count(db)
@@ -104,23 +93,28 @@ class WaistlistService:
             )
         except Exception as e:
             print("Error occured while fetching today's count: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Internal server error",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching today's count"
+            ) from None
 
     async def get_intitution_count(
         self, db: AsyncSession, page: int = 1, page_size: int = 10
-    ):
-        all_intitution = await Waitlist.group_by_institution(db, page, page_size)
+    ) -> dict[str, Any]:
+        try:
 
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="successfully fetched all institution count",
-            data=all_intitution,
-        )
+            all_intitution = await Waitlist.group_by_institution(db, page, page_size)
+
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="successfully fetched all institution count",
+                data=all_intitution,
+            )
+        except Exception as e:
+            print("Error occured while computing all institution: ", str(e))
+            raise InternalServerErrorException(
+                message="Error occured while computing all institution"
+            ) from None
 
 
 waitlist_service = WaistlistService()

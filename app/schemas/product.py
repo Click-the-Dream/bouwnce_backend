@@ -30,6 +30,21 @@ class ProductResponse(BaseResponse):
     data: Annotated[ProductResponseSchema, Field(description="Product response data")]
 
 
+class PaginatedProductResponseSchema(BaseModel):
+    products: Annotated[
+        list[ProductResponseSchema], Field(description="List of products data")
+    ]
+    page: Annotated[int, Field(examples=[1])]
+    total: Annotated[int, Field(examples=[100])]
+    page_size: Annotated[int, Field(examples=[10])]
+
+
+class PaginatedProductResponse(BaseResponse):
+    data: Annotated[
+        PaginatedProductResponseSchema, Field(description="Paginated Product data")
+    ]
+
+
 class ProductUpdate(BaseModel):
     name: Annotated[str | None, Form(min_length=2, examples=["Baggy Jeans"])] = None
     description: Annotated[

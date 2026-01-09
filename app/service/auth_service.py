@@ -20,6 +20,12 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.user import UserResponse
 from app.utils.emails import generate_login_verification_email, send_email
+from app.utils.exception import (
+    BadRequestException,
+    InternalServerErrorException,
+    NotFoundException,
+    UnAuthorizedException,
+)
 from app.utils.helper import parse_duration
 from app.utils.responses import response_builder
 
@@ -33,16 +39,10 @@ class AuthService:
         )
         if user:
             if user.email == user_data["email"]:
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="User with the email already exist",
-                )
+                raise BadRequestException(message="User with the email already exist")
             else:
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="User with the username already exist",
+                raise BadRequestException(
+                    message="User with the username already exist"
                 )
 
         try:
@@ -71,11 +71,9 @@ class AuthService:
             )
         except Exception as e:
             print("Error occured creating user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when creating user",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when creating user"
+            ) from None
 
     async def verify_code(
         self,
@@ -93,17 +91,11 @@ class AuthService:
 
             user = await User.get_by_unique(db=db, email=user_data["email"])
             if user is None:
-                return response_builder(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    status="error",
-                    message="User with the email does not exist",
-                )
+                raise NotFoundException(message="User with the email does not exist")
 
             if user.otp != user_data["code"] or user.otp_time < datetime.now(UTC):
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="Invalid or expired verification code",
+                raise BadRequestException(
+                    message="Invalid or expired verification code"
                 )
 
             await user.clear_otp(db)
@@ -132,13 +124,6 @@ class AuthService:
             )
             max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
 
-            response = response_builder(
-                status_code=status.HTTP_200_OK,
-                status="success",
-                message="Successfully logged in",
-                data={"user": user_data, "access_token": access_token},
-            )
-
             if not device_id:
                 set_cookies(
                     response, "device_id", new_device_id, max_age=31536000
@@ -146,27 +131,25 @@ class AuthService:
 
             set_cookies(response, "refresh_token", refresh_token, max_age)
 
-            return response
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Successfully logged in",
+                data={"user": user_data, "access_token": access_token},
+            )
 
         except Exception as e:
             print("Error occured verifying code: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when verifying code",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when verifying code"
+            ) from None
 
     async def login_user(self, user_email: str, db: AsyncSession, background_tasks):
         try:
             user = await User.get_by_unique(db=db, email=user_email)
 
             if user is None:
-                return response_builder(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    status="error",
-                    message="User with the email does not exist",
-                )
-
+                raise NotFoundException(message="User with the email does not exist")
             otp = await user.generate_otp(db)
 
             email_data = generate_login_verification_email(user.username, otp)
@@ -187,11 +170,9 @@ class AuthService:
             )
         except Exception as e:
             print("❌Error occured logging in user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when logging in user",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when logging in user"
+            ) from None
 
     async def logout_user(
         self,
@@ -207,11 +188,8 @@ class AuthService:
             authorization_token = auth.credentials
 
             if not authorization_token:
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="Authorization token is missing",
-                )
+                raise BadRequestException(message="Authorization token is missing")
+
             # Blacklist access token for the remaining time to expire
             payload = verify_token(authorization_token)
             expiry_time = payload.get("exp")
@@ -221,7 +199,6 @@ class AuthService:
                     f"blacklist_{authorization_token}", expiry_datetime, "blacklisted"
                 )
             else:
-                print(authorization_token)
                 expiry_datetime = datetime.fromtimestamp(expiry_time, tz=UTC)
                 remaining_time = expiry_datetime - datetime.now(UTC)
                 await redis_db.setex(
@@ -237,23 +214,19 @@ class AuthService:
                 if refresh_token:
                     await refresh_token.revoke(db)
 
-            response = response_builder(
+            # clear cookies
+            response.delete_cookie("refresh_token", path="/")
+
+            return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully logged out",
             )
-
-            # clear cookies
-            response.delete_cookie("refresh_token", path="/")
-
-            return response
         except Exception as e:
             print("❌Error occured logging out user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when logging out user",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when logging out user"
+            ) from None
 
     async def refresh_access_token(
         self, request: Request, response: Response, db: AsyncSession
@@ -262,68 +235,40 @@ class AuthService:
             # Get device_id from cookies
             device_id = request.cookies.get("device_id", None)
             if not device_id:
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="Device ID is missing in cookies",
-                )
+                raise BadRequestException(message="Device ID is missing in cookies")
 
             # Get refresh_token from cookies
             refresh_token = request.cookies.get("refresh_token", None)
             if not refresh_token:
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="Refresh token is missing in cookies",
-                )
+                raise BadRequestException(message="Refresh token is missing in cookies")
 
             try:
                 payload = verify_token(refresh_token)
             except Exception:
-                return response_builder(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    status="error",
-                    message="Invalid refresh token",
-                )
+                raise UnAuthorizedException(message="Invalid refresh token") from None
 
             user_id: str = payload.get("sub")
             if not user_id:
-                return response_builder(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    status="error",
-                    message="could not validate credentials",
-                )
+                raise UnAuthorizedException(message="could not validate credentials")
 
             type = payload.get("type")
             if type != "refresh":
-                return response_builder(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    status="error",
-                    message="Invalid token type",
-                )
+                raise UnAuthorizedException(message="Invalid token type")
 
             user = await User.get_by_id(user_id, db)
             if not user:
-                return response_builder(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    status="error",
-                    message="Could not validate credentials",
-                )
+                raise UnAuthorizedException(message="Could not validate credentials")
             store_refresh_token = await RefreshToken.get_token_by_user_and_device(
                 user_id, device_id, db
             )
             if not store_refresh_token:
-                return response_builder(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    status="error",
-                    message="Refresh token revoked or not found. Please login again",
+                raise UnAuthorizedException(
+                    message="Refresh token revoked or not found. Please login again"
                 )
 
             if not verify_data(refresh_token, store_refresh_token.token):
-                return response_builder(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    status="error",
-                    message="Invalid refresh token. Please login again",
+                raise UnAuthorizedException(
+                    message="Invalid refresh token. Please login again"
                 )
 
             # Create new access token
@@ -346,25 +291,21 @@ class AuthService:
                 db=db,
             )
 
-            response = response_builder(
+            # Set new refresh token in cookies
+            max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
+            set_cookies(response, "refresh_token", new_refresh_token, max_age)
+
+            return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Access token refreshed successfully",
                 data={"access_token": access_token},
             )
-
-            # Set new refresh token in cookies
-            max_age = int(parse_duration(settings.REFRESH_TOKEN_TTL).total_seconds())
-            set_cookies(response, "refresh_token", new_refresh_token, max_age)
-
-            return response
         except Exception as e:
             print("❌Error occured refreshing access token: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when refreshing access token",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when refreshing access token"
+            ) from None
 
 
 auth_service = AuthService()

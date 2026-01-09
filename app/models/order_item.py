@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import ForeignKey, Integer, String, select
+from sqlalchemy import Enum, ForeignKey, Integer, String, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -27,6 +27,11 @@ class OrderItem(BaseModel):
     product_snapshot: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     unit_price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     line_price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum("pending", "accepted", "declined", name="order_item_status_enum"),
+        default="pending",
+        nullable=False,
+    )
 
     suborder: Mapped[SubOrder] = relationship(
         back_populates="order_items", uselist=False

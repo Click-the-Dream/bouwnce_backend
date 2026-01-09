@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 
 from app.api.dependencies import (
@@ -11,6 +9,7 @@ from app.api.dependencies import (
 from app.core.rate_limiter import rate_limiter
 from app.schemas.user import CodeVerification, LoginUser, UserCreate, UserResponse
 from app.service.auth_service import auth_service
+from app.utils.responses import BaseResponse
 
 router = APIRouter(tags=["Authentication"], prefix="/auth")
 
@@ -53,7 +52,7 @@ async def verify_code(
 @router.post(
     "/resend-otp",
     status_code=status.HTTP_200_OK,
-    response_model=dict[str, Any],
+    response_model=BaseResponse,
     dependencies=[
         Depends(rate_limiter.rate_limit_dependency(ip_times=3, ip_seconds=60))
     ],
@@ -66,7 +65,7 @@ async def login_user(
     return await auth_service.login_user(login_data.email, db, background_tasks)
 
 
-@router.post("/logout", status_code=status.HTTP_200_OK, response_model=dict[str, Any])
+@router.post("/logout", status_code=status.HTTP_200_OK, response_model=BaseResponse)
 async def logout_user(
     auth: TokenDep,
     db: dbSessionDep,
@@ -89,7 +88,7 @@ async def logout_user(
     "/refresh-token",
     summary="Refresh Access Token",
     status_code=status.HTTP_200_OK,
-    response_model=dict[str, Any],
+    response_model=BaseResponse,
 )
 async def refresh_access_token(db: dbSessionDep, request: Request, response: Response):
     return await auth_service.refresh_access_token(

@@ -52,7 +52,7 @@ class PaginateStoreResponseSchema(BaseModel):
         list[StoreResponseSchema], Field(description="List of Store Response")
     ]
     total: Annotated[int, Field(examples=[100])]
-    page: Annotated[int, Field(examples=2)]
+    page: Annotated[int, Field(examples=[2])]
     page_size: Annotated[int, Field(examples=[10])]
 
 

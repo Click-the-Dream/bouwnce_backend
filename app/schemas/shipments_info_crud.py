@@ -29,7 +29,7 @@ class ShipmentsInfoResponseSchema(ShipmentsInfoBase):
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
 
 
-class StoreShipmentsInfoResponseSchema(ShipmentsInfoResponseSchema):
+class StoreShipmentsInfoResponseSchema(BaseModel):
     store_name: Annotated[str, Field(examples=["John's Store"])]
     store_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     shipment_info: Annotated[

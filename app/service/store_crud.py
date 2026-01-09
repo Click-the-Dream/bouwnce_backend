@@ -1,23 +1,21 @@
 from typing import Any
 
 from fastapi import UploadFile, status
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Store, User, Wallet
 from app.models.products import product_domain
-from app.schemas import (
-    ContactInfoResponseSchema,
-    PayoutInfoResponseSchema,
-    ShipmentsInfoResponseSchema,
-    StoreFullDetailsResponseSchema,
-    StoreResponseSchema,
-)
 from app.utils.cloudinary_utils import (
     cleanup_temp_files,
     delete_images,
     save_uploaded_file_temp,
     upload_image,
+)
+from app.utils.exception import (
+    BadRequestException,
+    ConflictException,
+    InternalServerErrorException,
+    NotFoundException,
 )
 from app.utils.helper import is_valid_uuid
 from app.utils.responses import response_builder
@@ -27,7 +25,7 @@ class StoreCRUDService:
 
     async def create(
         self, db: AsyncSession, data: dict[str, Any], user: User
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
 
         try:
             store = await Store.get_by_name(data["name"].lower(), db)
@@ -47,54 +45,41 @@ class StoreCRUDService:
 
             await Wallet.create({"store_id": new_store.id}, db)
 
-            data = StoreResponseSchema(**new_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Store created successfully.",
-                data=data,
+                data=new_store.to_dict(),
             )
 
         except Exception as e:
             print("Error occured while creating store: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="An error occurred while creating the store.",
-            )
+            raise InternalServerErrorException(
+                message="An error occurred while creating the store."
+            ) from None
 
-    async def get(self, current_store: Store) -> JSONResponse:
+    async def get(self, current_store: Store) -> dict[str, Any]:
         try:
-            data = StoreResponseSchema(**current_store.to_dict())
-
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Store retrieved successfully.",
-                data=data,
+                data=current_store.to_dict(),
             )
         except Exception as e:
             print("Error occured while fetching store: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while fetching store",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching store"
+            ) from None
 
     async def get_vendor_store(self, vendor_id: str, db: AsyncSession):
         try:
             print("Vendor ID: ", vendor_id)
             if not is_valid_uuid(vendor_id):
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="Invalid vendor id",
-                )
+                raise NotFoundException(message="Invalid vendor id")
 
-            stores = await Store.get_by(filter={"user_id": vendor_id}, db=db)
-            store_response = [
-                StoreResponseSchema(**store.to_dict()) for store in stores["data"]
-            ]
+            stores = await Store.get_by(filter={"user_id": vendor_id}, db=db, all=True)
+            store_response = [store.to_dict() for store in stores["data"]]
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -104,42 +89,38 @@ class StoreCRUDService:
             )
         except Exception as e:
             print("Error occured while fetching vendor store: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while fetching vendor store",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching vendor store"
+            ) from None
 
-    async def get_full_details(self, current_store: Store) -> JSONResponse:
+    async def get_full_details(self, current_store: Store) -> dict[str, Any]:
         try:
-            store_full_response = StoreFullDetailsResponseSchema(
-                id=str(current_store.id),
-                user_id=str(current_store.user_id),
-                name=current_store.name,
-                address=current_store.address,
-                phone_number=current_store.phone_number,
-                email=current_store.email,
-                store_description=current_store.store_description,
-                store_logo=current_store.store_logo,
-                store_banner=current_store.store_banner,
-                is_active=current_store.is_active,
-                created_at=current_store.created_at.isoformat(),
-                updated_at=current_store.updated_at.isoformat(),
-            )
+            store_full_response = {
+                "id": str(current_store.id),
+                "user_id": str(current_store.user_id),
+                "name": current_store.name,
+                "address": current_store.address,
+                "phone_number": current_store.phone_number,
+                "email": current_store.email,
+                "store_description": current_store.store_description,
+                "store_logo": current_store.store_logo,
+                "store_banner": current_store.store_banner,
+                "is_active": current_store.is_active,
+                "created_at": current_store.created_at.isoformat(),
+                "updated_at": current_store.updated_at.isoformat(),
+            }
 
             if current_store.contact_info:
-                store_full_response.contact_info = ContactInfoResponseSchema(
-                    **current_store.contact_info.to_dict()
+                store_full_response["contact_info"] = (
+                    current_store.contact_info.to_dict()
                 )
 
             if current_store.payout_info:
-                store_full_response.payout_info = PayoutInfoResponseSchema(
-                    **current_store.payout_info.to_dict()
-                )
+                store_full_response["payout_info"] = current_store.payout_info.to_dict()
 
             if current_store.shipment_info:
-                store_full_response.shipment_info = [
-                    ShipmentsInfoResponseSchema(**shipment_info.to_dict())
+                store_full_response["shipment_info"] = [
+                    shipment_info.to_dict()
                     for shipment_info in current_store.shipment_info
                 ]
 
@@ -151,13 +132,11 @@ class StoreCRUDService:
             )
         except Exception as e:
             print("Error occured while fetching store full details: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while fetching store full details",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching store full details"
+            ) from None
 
-    async def get_store_onboarding_status(self, store: Store) -> JSONResponse:
+    async def get_store_onboarding_status(self, store: Store) -> dict[str, Any]:
         try:
             missing_sections = []
 
@@ -176,15 +155,16 @@ class StoreCRUDService:
                 status_code=status.HTTP_200_OK,
                 status="sucess",
                 message="Status fetched successfully",
-                data={"is_onboarded": is_onboarded, "missing_sections": []},
+                data={
+                    "is_onboarded": is_onboarded,
+                    "missing_sections": missing_sections,
+                },
             )
         except Exception as e:
             print("Error occured while fetching store onboarding status: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while fetching store onboarding status",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching store onboarding status"
+            ) from None
 
     async def get_stores(
         self,
@@ -199,9 +179,7 @@ class StoreCRUDService:
                 filter["name"] = f"%{name}%"
 
             stores = await Store.get_by(filter, db, page, page_size)
-            store_response = [
-                StoreResponseSchema(**store.to_dict()) for store in stores["data"]
-            ]
+            store_response = [store.to_dict() for store in stores["data"]]
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -216,40 +194,31 @@ class StoreCRUDService:
             )
         except Exception as e:
             print("Error occured while fetching all stores data: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error fetching stores",
-            )
+            raise InternalServerErrorException(
+                message="Error fetching stores"
+            ) from None
 
     async def update(
         self, db: AsyncSession, data: dict[str, Any], store: Store
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
 
         try:
             if not store:
-                return response_builder(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    status="error",
-                    message="Store not found.",
-                )
+                raise NotFoundException(message="Store not found.")
 
             updated_store = await store.update(db=db, data=data)
-            data = StoreResponseSchema(**updated_store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Store updated successfully.",
-                data=data,
+                data=updated_store.to_dict(),
             )
 
         except Exception as e:
             print("Error occured while updating store: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="An error occurred while updating the store.",
-            )
+            raise InternalServerErrorException(
+                message="An error occurred while updating the store."
+            ) from None
 
     async def update_store_branding(
         self,
@@ -258,7 +227,7 @@ class StoreCRUDService:
         store_description: str | None = None,
         store_logo: UploadFile | None = None,
         store_banner: UploadFile | None = None,
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
         try:
             data = {}
             if store_description:
@@ -275,8 +244,8 @@ class StoreCRUDService:
                         previous_image_id = store.store_logo["public_id"]
                         delete_images([previous_image_id])
 
-                except Exception as e:
-                    raise Exception("Something went wrong: ", str(e)) from None
+                except Exception:
+                    raise InternalServerErrorException("Something went wrong") from None
                 finally:
                     await cleanup_temp_files(path)
 
@@ -290,27 +259,26 @@ class StoreCRUDService:
                     if store.store_banner:
                         previous_image_id = store.store_banner["public_id"]
                         delete_images([previous_image_id])
-                except Exception as e:
-                    raise Exception("Something went wrong: ", str(e)) from None
+                except Exception:
+                    raise InternalServerErrorException(
+                        "Error occured while uplaoding store banner/logo."
+                    ) from None
                 finally:
                     await cleanup_temp_files(path)
 
             await store.update(db=db, data=data)
 
-            store_response = StoreResponseSchema(**store.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully update Store branding",
-                data=store_response,
+                data=store.to_dict(),
             )
         except Exception as e:
             print("Error update store branding: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Internal Server Error",
-            )
+            raise InternalServerErrorException(
+                "error occured while updating store branding."
+            ) from None
 
     async def delete_brand_images(
         self,
@@ -344,49 +312,38 @@ class StoreCRUDService:
                         message="Store branding image successfully deleted",
                     )
                 else:
-                    return response_builder(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        status="error",
-                        message="Unable to delete store brand images",
+                    raise BadRequestException(
+                        message="Unable to delete store brand images"
                     )
 
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                status="error",
-                message="Nothing to delete",
-            )
+            raise ConflictException(message="Nothing to delete")
 
         except Exception as e:
             print("Error delete store brand images: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Internal server error",
-            )
+            raise InternalServerErrorException(
+                "Error occured while deleting store brand images"
+            ) from None
 
-    async def delete(self, db: AsyncSession, current_store: Store) -> JSONResponse:
+    async def delete(self, db: AsyncSession, current_store: Store) -> dict[str, Any]:
 
         try:
-            deleted_store = await Store.delete_permanently_by_id(
-                id=str(current_store.id), db=db
-            )
-            data = StoreResponseSchema(**deleted_store.to_dict())
+            await Store.delete_permanently_by_id(id=str(current_store.id), db=db)
+
             return response_builder(
                 status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Store deleted successfully.",
-                data=data,
             )
+        except ValueError as ve:
+            raise NotFoundException(message=str(ve)) from None
 
         except Exception:
             print("Error occured while deleting store")
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="An error occurred while deleting the store.",
-            )
+            raise InternalServerErrorException(
+                message="An error occurred while deleting the store."
+            ) from None
 
-    async def deactivate(self, db: AsyncSession, store: Store) -> JSONResponse:
+    async def deactivate(self, db: AsyncSession, store: Store) -> dict[str, Any]:
 
         try:
             store.is_active = False
@@ -395,23 +352,19 @@ class StoreCRUDService:
             await product_domain.deactivate_stores_products(str(store.id))
 
             await store.save(db)
-            store_response = StoreResponseSchema(**store.to_dict())
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Store is successfully deactivated",
-                data=store_response,
             )
         except Exception as e:
             print("Error occured while deactivating store: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while deactivating store",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while deactivating store"
+            ) from None
 
-    async def activate(self, db: AsyncSession, store: Store) -> JSONResponse:
+    async def activate(self, db: AsyncSession, store: Store) -> dict[str, Any]:
 
         try:
             store.is_active = True
@@ -420,20 +373,17 @@ class StoreCRUDService:
             await product_domain.activate_stores_prouducts(str(store.id))
 
             await store.save(db)
-            store_response = StoreResponseSchema(**store.to_dict())
+
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully activate store",
-                data=store_response,
             )
         except Exception as e:
             print("Error occured while activating store: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while activating store",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while activating store"
+            ) from None
 
 
 store_service = StoreCRUDService()

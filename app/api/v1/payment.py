@@ -9,6 +9,7 @@ from app.api.dependencies import (
     redisSessionDep,
 )
 from app.service.order_srevice import order_service
+from app.utils.responses import BaseResponse
 
 router = APIRouter(prefix="/payment", tags=["Payments"])
 
@@ -19,7 +20,9 @@ async def paystack_webhook(request: Request, db: dbSessionDep, redis: redisSessi
 
 
 @router.get(
-    "/verify", summary="Verify Payment using reference token from payment gateway"
+    "/verify",
+    summary="Verify Payment using reference token from payment gateway",
+    response_model=BaseResponse,
 )
 async def verify_payment(
     db: dbSessionDep,

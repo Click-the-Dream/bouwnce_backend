@@ -5,229 +5,181 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
-from app.schemas.user import UserResponse
+from app.utils.exception import (
+    BadRequestException,
+    InternalServerErrorException,
+    NotFoundException,
+)
 from app.utils.responses import response_builder
 
 
 class UserService:
 
-    async def get_me(self, user: User) -> UserResponse:
-        data = UserResponse(**user.to_dict())
+    async def get_me(self, user: User) -> dict[str, Any]:
+
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Successfully fetched user data",
-            data=data,
+            data=user.to_dict(),
         )
 
-    async def get_user_by_id(self, user_id: str, db: AsyncSession) -> UserResponse:
+    async def get_user_by_id(self, user_id: str, db: AsyncSession) -> dict[str, Any]:
 
         try:
             user = await User.get_by_id(user_id, db)
 
             if not user:
-                return response_builder(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    status="error",
-                    message="User not found",
-                )
+                raise NotFoundException(message="User not found")
 
-            data = UserResponse(**user.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully fetched user data",
-                data=data,
+                data=user.to_dict(),
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
+            raise BadRequestException(message=str(te)) from None
         except Exception as e:
             print("Error occured fetching user by ID: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when fetching user by ID",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when fetching user by ID"
+            ) from None
 
     async def update_user(
         self, user_id: str, user_data: dict[str, Any], db: AsyncSession
-    ) -> UserResponse:
+    ) -> dict[str, Any]:
 
         try:
             user = await User.update_by_id(user_id, user_data, db)
 
-            user_data = UserResponse(**user.to_dict())
-
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully updated user data",
-                data=user_data,
+                data=user.to_dict(),
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
 
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
+            raise BadRequestException(message=str(te)) from None
         except Exception as e:
             print("Error occured updating user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when updating user data",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when updating user data"
+            ) from None
 
     async def update_me(
         self, user: User, user_data: dict[str, Any], db: AsyncSession
-    ) -> UserResponse:
+    ) -> dict[str, Any]:
         try:
             user = await user.update_me(user_data, db)
-
-            user_data = UserResponse(**user.to_dict())
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully updated user data",
-                data=user_data,
+                data=user.to_dict(),
             )
         except Exception as e:
             print("Error occured updating user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when updating user data",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when updating user data"
+            ) from None
 
-    async def deactivate_user(self, user: User, db: AsyncSession) -> UserResponse:
+    async def deactivate_user(self, user: User, db: AsyncSession) -> dict[str, Any]:
         try:
             user.is_active = False
             await user.save()
-
-            user_response = UserResponse(**user.to_dict())
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="User account has be deactivated successfully",
-                data=user_response,
             )
         except Exception as e:
             print("Error occured while deactivating user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while deactivating user account",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while deactivating user account"
+            ) from None
 
-    async def activate_user(self, user: User, db: AsyncSession) -> UserResponse:
+    async def activate_user(self, user: User, db: AsyncSession) -> dict[str, Any]:
         try:
             user.is_active = True
             await user.save()
 
-            user_response = UserResponse(**user.to_dict())
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="User account has been successfully activated",
-                data=user_response,
             )
         except Exception as e:
             print("Error occured while activating user account: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while activating user account",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while activating user account"
+            ) from None
 
-    async def delete_user_by_id(self, user_id: str, db: AsyncSession) -> UserResponse:
+    async def delete_user_by_id(self, user_id: str, db: AsyncSession) -> dict[str, Any]:
 
         try:
-            user = await User.delete_by_id(user_id, db)
-
-            user_data = UserResponse(**user.to_dict())
+            await User.delete_by_id(user_id, db)
 
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Successfully deleted user",
-                data=user_data,
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
+            raise BadRequestException(message=str(te)) from None
         except Exception as e:
             print("Error occured deleting user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured  when deleting user",
-            )
+            raise InternalServerErrorException(
+                message="Error occured  when deleting user"
+            ) from None
 
-    async def delete_me(self, user: User, db: AsyncSession) -> UserResponse:
+    async def delete_me(self, user: User, db: AsyncSession) -> dict[str, Any]:
 
         try:
             user = await user.delete_me(db)
 
-            user_data = UserResponse(**user.to_dict())
-
             return response_builder(
-                status_code=status.HTTP_200_OK,
+                status_code=status.HTTP_204_NO_CONTENT,
                 status="success",
                 message="Successfully deleted user",
-                data=user_data,
             )
         except Exception as e:
             print("Error occured deleting user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when deleting user",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when deleting user"
+            ) from None
 
-    async def undelete_user_by_id(self, user_id: str, db: AsyncSession) -> UserResponse:
+    async def undelete_user_by_id(
+        self, user_id: str, db: AsyncSession
+    ) -> dict[str, Any]:
 
         try:
             user = await User.undelete_by_id(user_id, db)
-
-            user_data = UserResponse(**user.to_dict())
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully undeleted user",
-                data=user_data,
+                data=user.to_dict(),
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
+            raise BadRequestException(message=str(te)) from None
         except Exception as e:
             print("Error occured undeleting user: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when undeleting user",
-            )
+            raise InternalServerErrorException(
+                message="Error occured when undeleting user"
+            ) from None
 
     async def list_users(
         self,
@@ -235,7 +187,7 @@ class UserService:
         search: str | None = None,
         page: int | None = 1,
         page_size: int | None = 10,
-    ) -> UserResponse:
+    ) -> dict[str, Any]:
 
         try:
             filter = {}
@@ -249,7 +201,7 @@ class UserService:
                 filter=filter, db=db, page=page, page_size=page_size
             )
 
-            users_data = [UserResponse(**user.to_dict()) for user in users["data"]]
+            users_data = [user.to_dict() for user in users["data"]]
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -264,11 +216,9 @@ class UserService:
             )
         except Exception as e:
             print("Error occured fetching users: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured when fetching users",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching users"
+            ) from None
 
 
 user_service = UserService()

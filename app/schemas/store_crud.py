@@ -41,6 +41,27 @@ class StoreResponse(BaseResponse):
     data: Annotated[StoreResponseSchema, Field(description="Store response data")]
 
 
+class ListStoreResponse(BaseResponse):
+    data: Annotated[
+        list[StoreResponseSchema], Field(description="List of Store response")
+    ]
+
+
+class PaginateStoreResponseSchema(BaseModel):
+    stores: Annotated[
+        list[StoreResponseSchema], Field(description="List of Store Response")
+    ]
+    total: Annotated[int, Field(examples=[100])]
+    page: Annotated[int, Field(examples=2)]
+    page_size: Annotated[int, Field(examples=[10])]
+
+
+class PaginatStoreResponse(BaseResponse):
+    data: Annotated[
+        PaginateStoreResponseSchema, Field(description="Paginated Store response")
+    ]
+
+
 class StoreFullDetailsResponseSchema(StoreResponseSchema):
     contact_info: ContactInfoResponseSchema | None = None
     payout_info: PayoutInfoResponseSchema | None = None

@@ -2,8 +2,14 @@ from fastapi import APIRouter, status
 from fastapi.requests import Request
 
 from app.api.dependencies import CurrentActiveUser, dbSessionDep, redisSessionDep
-from app.schemas.cart import CartCreate, CartResponse, UpdateCart
-from app.schemas.shipments_info_crud import ShipmentsInfoResponse
+from app.schemas.cart import (
+    CartCreate,
+    CartResponse,
+    CheckoutResponse,
+    PaginatedCartResponse,
+    UpdateCart,
+)
+from app.schemas.shipments_info_crud import StoreShipmentsInfoResponse
 from app.service.cart_service import cart_service
 from app.service.order_srevice import order_service
 
@@ -29,7 +35,7 @@ async def create_cart(
     "/",
     summary="Get all user carts",
     status_code=status.HTTP_200_OK,
-    response_model=CartResponse,
+    response_model=PaginatedCartResponse,
 )
 async def get_all_user_carts(
     current_user: CurrentActiveUser,
@@ -43,7 +49,7 @@ async def get_all_user_carts(
 @router.get(
     "/cart-shipping-info",
     summary="Get cart shipping info",
-    response_model=ShipmentsInfoResponse,
+    response_model=StoreShipmentsInfoResponse,
 )
 async def get_cart_shipping_info(current_user: CurrentActiveUser, db: dbSessionDep):
     return await order_service.get_cart_shipping_info(current_user, db)
@@ -85,7 +91,12 @@ async def delete_all_user_cart(current_user: CurrentActiveUser, db: dbSessionDep
     return await cart_service.delete_all_user_cart(current_user.id, db)
 
 
-@router.post("/checkout", summary="Checkout current user cart")
+@router.post(
+    "/checkout",
+    summary="Checkout current user cart",
+    status_code=status.HTTP_200_OK,
+    response_model=CheckoutResponse,
+)
 async def checkout_cart(
     db: dbSessionDep,
     current_user: CurrentActiveUser,

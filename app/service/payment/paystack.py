@@ -2,11 +2,11 @@ import hashlib
 import hmac
 from typing import Any
 
-from fastapi import HTTPException, status
 from fastapi.requests import Request
 from paystackapi.paystack import Paystack
 
 from app.core.config import settings
+from app.utils.exception import BadRequestException
 
 
 class PaystackGateWay:
@@ -53,18 +53,14 @@ class PaystackGateWay:
         signature = request.headers.get("x-paystack-signature")
 
         if not signature:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Missing signature"
-            )
+            raise BadRequestException(message="Missing signature")
 
         computed_hash = hmac.new(
             settings.PAYSTACK_API_KEY.encode("utf-8"), body, hashlib.sha512
         ).hexdigest()
 
         if not hmac.compare_digest(computed_hash, signature):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature"
-            )
+            raise BadRequestException(message="Invalid signature")
 
         return True
 

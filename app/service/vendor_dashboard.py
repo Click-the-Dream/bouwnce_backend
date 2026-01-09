@@ -1,25 +1,13 @@
+from typing import Any
+
 from fastapi import status
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import SubOrder, WalletTransaction
-from app.schemas import (
-    OverviewDashboardResponse,
-    PaginatedCustomers,
-    PaginatedOrders,
-    RecentOrder,
-    TopProduct,
-    VendorCustomerItem,
-    VendorCustomersDashboardResponse,
-    VendorOrderItem,
-    VendorOrdersDashboardResponse,
-    WalletDashboardResponse,
-    WithdrawalHistory,
-)
 from app.service.metrics_service import MetricService
+from app.utils.exception import InternalServerErrorException
 from app.utils.helper import build_date_filter
 from app.utils.responses import response_builder
-
 
 
 class VendorDashBoardService:
@@ -33,7 +21,7 @@ class VendorDashBoardService:
         date_range_type: str = "month",
         start_date=None,
         end_date=None,
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
 
         start_date, end_date = build_date_filter(date_range_type, start_date, end_date)
 
@@ -59,12 +47,12 @@ class VendorDashBoardService:
             )
 
             recent_orders = [
-                RecentOrder(
-                    order_id=o.order_id,
-                    customer_name=o.username,
-                    amount=float(o.amount or 0),
-                    status=o.status,
-                )
+                {
+                    "order_id": o.order_id,
+                    "customer_name": o.username,
+                    "amount": float(o.amount or 0),
+                    "status": o.status,
+                }
                 for o in orders
             ]
 
@@ -75,19 +63,19 @@ class VendorDashBoardService:
                 db=session,
             )
 
-            top_products = [TopProduct(**item) for item in top_products["items"]]
+            top_products = [item for item in top_products["items"]]
 
-            dashboard = OverviewDashboardResponse(
-                total_revenue=metrics["total_revenue"],
-                total_orders=metrics["total_orders"],
-                total_customers=metrics["total_customers"],
-                avg_order_value=metrics["aov"],
-                revenue_change_percent=metrics["revenue_change_percentage"],
-                orders_change_percent=metrics["orders_change_percentage"],
-                customers_change_percent=metrics["customers_change_percentage"],
-                recent_orders=recent_orders,
-                top_products=top_products,
-            ).model_dump()
+            dashboard = {
+                "total_revenue": metrics["total_revenue"],
+                "total_orders": metrics["total_orders"],
+                "total_custmoers": metrics["total_customers"],
+                "avg_order_value": metrics["aov"],
+                "revenue_change_percent": metrics["revenue_change_percentage"],
+                "orders_change_percent": metrics["orders_change_percentage"],
+                "customers_change_percent": metrics["customers_change_percentage"],
+                "recent_orders": recent_orders,
+                "top_products": top_products,
+            }
 
             dashboard["pagination"] = {
                 "page": page,
@@ -103,12 +91,10 @@ class VendorDashBoardService:
                 status_code=status.HTTP_200_OK,
             )
 
-        except Exception as e:
-            return response_builder(
-                status="error",
-                message=f"Error fetching dashboard data: {str(e)}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        except Exception:
+            raise InternalServerErrorException(
+                message="Error fetching dashboard data"
+            ) from None
 
     @staticmethod
     async def get_dashboard_wallet(
@@ -116,9 +102,8 @@ class VendorDashBoardService:
         current_store,
         page: int = 1,
         page_size: int = 10,
-    ) -> JSONResponse:
-        
-        
+    ) -> dict[str, Any]:
+
         try:
             wallet = current_store.wallets
 
@@ -131,7 +116,7 @@ class VendorDashBoardService:
             )
 
             items = []
-            
+
             for txn in withdrawals_page.get("data", []):
                 items.append(
                     {
@@ -142,18 +127,19 @@ class VendorDashBoardService:
                         "date": txn.created_at.strftime("%b %d, %Y, %I:%M%p"),
                     }
                 )
-            data = WalletDashboardResponse(
-                available_balance=float(wallet.available_balance or 0),
-                pending_balance=float(wallet.pending_balance or 0),
-                withdrawable_balance=float(wallet.withdrawable_balance or 0),
-                withdrawal_history=WithdrawalHistory(
-                    items=items,
-                    page=withdrawals_page.get("page", 1),
-                    page_size=withdrawals_page.get("page_size", page_size),
-                    total=withdrawals_page.get("total", 0),
-                    total_pages=withdrawals_page.get("total_pages", 1),
-                ),
-            ).model_dump()
+
+            data = {
+                "available_balance": float(wallet.available_balance or 0),
+                "pending_balance": float(wallet.pending_balance or 0),
+                "withdrawable_balance": float(wallet.withdrawable_balance or 0),
+                "withdrawal_history": {
+                    "items": items,
+                    "page": withdrawals_page.get("page", 1),
+                    "page_size": withdrawals_page.get("page_size", page_size),
+                    "total": withdrawals_page.get("total", 0),
+                    "total_pages": withdrawals_page.get("total_pages", 1),
+                },
+            }
 
             return response_builder(
                 status="Success",
@@ -162,12 +148,10 @@ class VendorDashBoardService:
                 status_code=status.HTTP_200_OK,
             )
 
-        except Exception as e:
-            return response_builder(
-                status="Failed",
-                message=f"Error fetching wallet data: {str(e)}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        except Exception:
+            raise InternalServerErrorException(
+                message="Error fetching wallet data"
+            ) from None
 
     @staticmethod
     async def get_vendor_orders(
@@ -178,7 +162,7 @@ class VendorDashBoardService:
         search: str = None,
         order_by: str = "date",
         order_dir: str = "desc",
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
 
         try:
             filters = {"store_id": store_id}
@@ -206,29 +190,29 @@ class VendorDashBoardService:
             orders = page_result.get("data", [])
 
             order_items = [
-                VendorOrderItem(
-                    id=str(o.id),
-                    buyer_name=getattr(o, "username", "Unknown"),
-                    date=o.created_at.strftime("%d-%m-%Y") if o.created_at else None,
-                    amount=float(o.amount or 0),
-                    status=o.status,
-                )
+                {
+                    "id": str(o.id),
+                    "buyer_name": getattr(o, "username", "Unknown"),
+                    "data": o.created_at.strftime("%d-%m-%Y") if o.created_at else None,
+                    "amount": float(o.amount or 0),
+                    "status": o.status,
+                }
                 for o in orders
             ]
 
-            data = VendorOrdersDashboardResponse(
-                total_orders=page_result.get("total", 0),
-                completed_orders=sum(o.status == "completed" for o in orders),
-                pending_orders=sum(o.status == "pending" for o in orders),
-                processing_orders=sum(o.status == "processing" for o in orders),
-                orders=PaginatedOrders(
-                    items=order_items,
-                    page=page_result.get("page", 1),
-                    page_size=page_result.get("page_size", page_size),
-                    total=page_result.get("total", 0),
-                    total_pages=page_result.get("total_pages", 1),
-                ),
-            )
+            data = {
+                "total_orders": page_result.get("total", 0),
+                "completed_orders": sum(o.status == "completed" for o in orders),
+                "pending_orders": sum(o.status == "pending" for o in orders),
+                "processing_orders": sum(o.status == "processing" for o in orders),
+                "orders": {
+                    "items": order_items,
+                    "page": page_result.get("page", 1),
+                    "page_size": page_result.get("page_size", page_size),
+                    "total": page_result.get("total", 0),
+                    "total_page": page_result.get("total_page", 1),
+                },
+            }
 
             return response_builder(
                 status="Success",
@@ -238,11 +222,9 @@ class VendorDashBoardService:
             )
 
         except Exception:
-            return response_builder(
-                status="Failed",
-                message=f"Error fetching vendor orders {e}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            raise InternalServerErrorException(
+                message="Error fetching vendor orders"
+            ) from None
 
     @staticmethod
     async def get_vendor_customers(
@@ -250,7 +232,7 @@ class VendorDashBoardService:
         store_id: str,
         page: int = 1,
         page_size: int = 10,
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
         """
         Fetch vendor customers with pagination using schemas.
         """
@@ -279,30 +261,26 @@ class VendorDashBoardService:
                     sub.amount or 0.0
                 )
 
-            customer_items = [
-                VendorCustomerItem(**c) for c in customer_model_dump.values()
-            ]
+            customer_items = [c for c in customer_model_dump.values()]
 
-            data = VendorCustomersDashboardResponse(
-                customers=PaginatedCustomers(
-                    items=customer_items,
-                    page=page,
-                    page_size=page_size,
-                    total=total_count,
-                    total_pages=(total_count + page_size - 1) // page_size,
-                )
-            )
+            data = {
+                "customers": {
+                    "items": customer_items,
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total_count,
+                    "total_pages": (total_count + page_size - 1) // page_size,
+                }
+            }
 
             return response_builder(
                 status="Success",
                 message="Customers fetched successfully",
                 status_code=status.HTTP_200_OK,
-                data=data.model_dump(),
+                data=data,
             )
 
         except Exception:
-            return response_builder(
-                status="Failed",
-                message=f"Error fetching customer data: {str(e)}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching customers data"
+            ) from None

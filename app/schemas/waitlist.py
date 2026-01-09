@@ -26,3 +26,19 @@ class WaitlistResponseSchema(WaitlistBase):
 
 class WaitlistResponse(BaseResponse):
     data: Annotated[WaitlistResponseSchema, Field(description="Waitlist response data")]
+
+
+class PaginatedWaitlistResponseSchema(BaseModel):
+    waitlists: Annotated[
+        list[WaitlistResponseSchema], Field(description="List of waitlist response")
+    ]
+    page: Annotated[int, Field(examples=[2])]
+    page_size: Annotated[int, Field(examples=[10])]
+    total: Annotated[int, Field(examples=[100])]
+
+
+class PaginatedWaitlistResponse(BaseResponse):
+    data: Annotated[
+        PaginatedWaitlistResponseSchema,
+        Field(description="Paginated waitlist response"),
+    ]

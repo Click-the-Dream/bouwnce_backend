@@ -1,7 +1,5 @@
 from typing import Annotated, Any, Literal
 
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 
@@ -61,6 +59,8 @@ def response_builder(
     if data is not None:
         response_data["data"] = data
 
-    return JSONResponse(
-        status_code=status_code, content=jsonable_encoder(response_data)
-    )
+    # return JSONResponse(
+    #     status_code=status_code, content=jsonable_encoder(response_data)
+    # )
+
+    return response_data

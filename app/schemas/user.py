@@ -39,6 +39,17 @@ class UserResponse(BaseResponse):
     data: Annotated[UserResponsSchema, Field(description="User response data")]
 
 
+class LoginUserResponseSchema(BaseModel):
+    user: Annotated[UserResponsSchema, Field(description="User Response data")]
+    access_token: Annotated[str, Field(description="Access token to login")]
+
+
+class LoginUserResponse(BaseResponse):
+    data: Annotated[
+        LoginUserResponseSchema, Field(description="Login user response data")
+    ]
+
+
 class PaginatedUserResponseSchema(BaseModel):
     uses: Annotated[list[UserResponsSchema], Field(description="List of User response")]
     page: Annotated[int, Field(examples=[2])]

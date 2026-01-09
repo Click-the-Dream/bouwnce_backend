@@ -7,7 +7,13 @@ from app.api.dependencies import (
     redisSessionDep,
 )
 from app.core.rate_limiter import rate_limiter
-from app.schemas.user import CodeVerification, LoginUser, UserCreate, UserResponse
+from app.schemas.user import (
+    CodeVerification,
+    LoginUser,
+    LoginUserResponse,
+    UserCreate,
+    UserResponse,
+)
 from app.service.auth_service import auth_service
 from app.utils.responses import BaseResponse
 
@@ -36,7 +42,7 @@ async def register_user(
 @router.post(
     "/verify-code",
     status_code=status.HTTP_200_OK,
-    response_model=UserResponse,
+    response_model=LoginUserResponse,
     dependencies=[
         Depends(rate_limiter.rate_limit_dependency(ip_times=5, ip_seconds=60))
     ],

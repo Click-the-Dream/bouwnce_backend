@@ -100,7 +100,7 @@ class AuthService:
 
             await user.clear_otp(db)
 
-            user_data = UserResponse(**user.to_dict())
+            # user_data = UserResponse(**user.to_dict())
             access_token = create_access_token(subject=user.id)
 
             # Generate device_id cookie if not exists
@@ -135,7 +135,7 @@ class AuthService:
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully logged in",
-                data={"user": user_data, "access_token": access_token},
+                data={"user": user.to_dict(), "access_token": access_token},
             )
 
         except Exception as e:

@@ -232,6 +232,7 @@ class OverviewDashboardResponse(BaseModel):
     revenue_change_percent: Annotated[float, Field(examples=[12.5])]
     orders_change_percent: Annotated[float, Field(examples=[8.2])]
     customers_change_percent: Annotated[float, Field(examples=[15.3])]
+    avg_order_value_change_percent: Annotated[float, Field(examples=[5.0])]
     recent_orders: Annotated[
         list[RecentOrder],
         Field(

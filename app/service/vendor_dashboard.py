@@ -18,7 +18,7 @@ class VendorDashBoardService:
         store_id: str,
         page: int = 1,
         page_size: int = 5,
-        date_range_type: str = "month",
+        date_range_type: str = "this_month",
         start_date=None,
         end_date=None,
     ) -> dict[str, Any]:

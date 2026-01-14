@@ -66,7 +66,7 @@ class AuthService:
         user_data = new_user.to_dict()
 
         # Temporarily for before email service works perfectly
-        user_data.otp = otp
+        user_data["otp"] = otp
 
         return response_builder(
             status_code=status.HTTP_201_CREATED,

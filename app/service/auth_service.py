@@ -11,9 +11,9 @@ from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
-    hash_data,
+    hash_token,
     set_cookies,
-    verify_data,
+    verify_hashed_token,
     verify_token,
 )
 from app.models.refresh_token import RefreshToken
@@ -109,7 +109,7 @@ class AuthService:
         )
 
         refresh_token = create_refresh_token(subject=user.id)
-        hashed_refresh_token = hash_data(refresh_token[:32])
+        hashed_refresh_token = hash_token(refresh_token)
         await RefreshToken.create_refresh_token(
             user_id=user.id,
             token=hashed_refresh_token,
@@ -244,7 +244,7 @@ class AuthService:
                 message="Refresh token revoked or not found. Please login again"
             )
 
-        if not verify_data(refresh_token, store_refresh_token.token):
+        if not verify_hashed_token(refresh_token, store_refresh_token.token):
             raise UnAuthorizedException(
                 message="Invalid refresh token. Please login again"
             )
@@ -257,7 +257,7 @@ class AuthService:
             settings.REFRESH_TOKEN_TTL
         )
         new_refresh_token = create_refresh_token(subject=user.id)
-        hashed_refresh_token = hash_data(new_refresh_token)
+        hashed_refresh_token = hash_token(new_refresh_token)
 
         await RefreshToken.create_refresh_token(
             user_id=user.id,

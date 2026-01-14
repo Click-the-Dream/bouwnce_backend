@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,11 @@ from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
 from app.models.store import Store
 from app.models.user import User
+from app.utils.exception import (
+    BadRequestException,
+    ForbiddenException,
+    UnAuthorizedException,
+)
 
 oauth2_scheme = HTTPBearer()
 
@@ -53,43 +58,25 @@ async def get_current_user(
     is_blacklisted = await redis_db.get(f"blacklist_{token}")
 
     if is_blacklisted:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise UnAuthorizedException("Token has been revoked")
     try:
         payload = verify_token(token)
         type = payload.get("type")
         if type != "access":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type",
-                headers={"WWW-Authenticate": "Bearer"},
+            raise UnAuthorizedException(
+                "Invalid token type",
             )
 
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise UnAuthorizedException("Could not validate credentials")
         user = await User.get_by_id(user_id, db)
         if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise UnAuthorizedException("Could not validate credentials")
         return user
 
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
+        raise UnAuthorizedException("Could not validate credentials") from None
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -98,11 +85,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 async def get_current_active_user(current_user: CurrentUser) -> User | None:
 
     if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ForbiddenException("Account is deactivated")
     return current_user
 
 
@@ -113,11 +96,7 @@ async def get_current_vendor(
     current_user: CurrentActiveUser,
 ) -> User | None:
     if current_user.role != "vendor":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The user doesn't have enough privileges",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ForbiddenException("The user doesn't have enough privileges")
     return current_user
 
 
@@ -128,11 +107,7 @@ async def get_current_admin(
     current_user: CurrentActiveUser,
 ) -> User | None:
     if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The user doesn't have enough privileges",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ForbiddenException("The user doesn't have enough privileges")
     return current_user
 
 
@@ -160,11 +135,7 @@ async def get_current_store(
             raise ValueError("User doesn't have a store")
         return store[0]
     except ValueError as ve:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(ve),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
+        raise BadRequestException(str(ve)) from None
 
 
 CurrentStore = Annotated[Store, Depends(get_current_store)]
@@ -172,11 +143,7 @@ CurrentStore = Annotated[Store, Depends(get_current_store)]
 
 async def get_current_active_store(current_store: CurrentStore):
     if not current_store.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Store is not active",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ForbiddenException("Store is not active")
     return current_store
 
 

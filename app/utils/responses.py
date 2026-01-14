@@ -7,7 +7,7 @@ class BaseResponse(BaseModel):
     status_code: Annotated[int, Field(examples=[200])]
     status: Annotated[Literal["success", "error"], Field(examples=["success", "error"])]
     message: Annotated[str, Field(examples=["message is successful"])]
-    data: dict[str, Any] | list[Any] | None
+    data: dict[str, Any] | list[Any] | None = None
 
 
 # 400

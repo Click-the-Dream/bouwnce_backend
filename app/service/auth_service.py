@@ -109,7 +109,7 @@ class AuthService:
         )
 
         refresh_token = create_refresh_token(subject=user.id)
-        hashed_refresh_token = hash_data(refresh_token)
+        hashed_refresh_token = hash_data(refresh_token[:32])
         await RefreshToken.create_refresh_token(
             user_id=user.id,
             token=hashed_refresh_token,

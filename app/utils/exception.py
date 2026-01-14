@@ -16,7 +16,7 @@ class BadRequestException(ApiException):
     def __init__(self, message: str, data: Any | None = None):
 
         super().__init__(
-            status_code=status.HTTP_400_BAD_REQUEST, messag=message, data=data
+            status_code=status.HTTP_400_BAD_REQUEST, message=message, data=data
         )
 
 

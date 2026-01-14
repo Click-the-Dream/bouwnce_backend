@@ -68,11 +68,6 @@ class CartService:
             raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
-        except Exception as e:
-            print("Error occured while creating a new cart: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occurred while creating cart"
-            ) from None
 
     async def get_all_by_user(
         self,
@@ -109,11 +104,6 @@ class CartService:
             raise BadRequestException(message=str(te)) from None
         except ValueError as ve:
             raise NotFoundException(message=str(ve)) from None
-        except Exception as e:
-            print("Error occured while retrieving cart data: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while retrieving cart data"
-            ) from None
 
     async def get_by_id(self, id: str, db: AsyncSession) -> CartResponse:
         try:
@@ -135,11 +125,6 @@ class CartService:
             raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
-        except Exception as e:
-            print("Error occurred while retrieving cart: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while retrieving cart data"
-            ) from None
 
     async def update(
         self, user_id: str, cart_id: str, update_data: dict[str, Any], db: AsyncSession
@@ -162,11 +147,6 @@ class CartService:
             raise BadRequestException(message=str(te)) from None
         except ValueError as ve:
             raise NotFoundException(message=str(ve)) from None
-        except Exception as e:
-            print("Error occurred while updating cart data: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while updating cart"
-            ) from None
 
     async def delete(self, user_id: str, cart_id: str, db: AsyncSession):
         try:
@@ -186,11 +166,6 @@ class CartService:
             raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
-        except Exception as e:
-            print("Error deleting cart by id: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured deleting cart"
-            ) from None
 
     async def delete_all_user_cart(self, user_id: str, db: AsyncSession):
         try:

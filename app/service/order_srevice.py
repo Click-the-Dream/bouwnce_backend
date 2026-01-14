@@ -34,76 +34,64 @@ class OrderService:
     async def verify_payment(
         self, current_user: User, referenceToken: str, redis: Redis, db: AsyncSession
     ):
-        try:
-            # Verirfy payment using reference token
-            is_success, response = paystack_service.callback(referenceToken)
-            if is_success:
-                return response_builder(
-                    status_code=status.HTTP_200_OK,
-                    status="success",
-                    message="Payment  successful",
-                    data=response,
-                )
+        # Verirfy payment using reference token
+        is_success, response = paystack_service.callback(referenceToken)
+        if is_success:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Payment  successful",
+                data=response,
+            )
 
-            # Check if order is present, then update the order and payment as failed
-            order = await Order.get_by_reference(referenceToken, db)
-            if not order:
-                raise ConflictException(message="order attached to reference not found")
+        # Check if order is present, then update the order and payment as failed
+        order = await Order.get_by_reference(referenceToken, db)
+        if not order:
+            raise ConflictException(message="order attached to reference not found")
 
-            # Verify order is for user
-            if str(current_user.id) != str(order.user_id):
-                raise ForbiddenException(message="Order not yours")
+        # Verify order is for user
+        if str(current_user.id) != str(order.user_id):
+            raise ForbiddenException(message="Order not yours")
 
-            await order.update(db, {"status": "failed"})
-            await Payment.update_by_id(str(order.payment_id), {"status": "failed"}, db)
+        await order.update(db, {"status": "failed"})
+        await Payment.update_by_id(str(order.payment_id), {"status": "failed"}, db)
 
-            # Release reserved products
-            products = [ProductMetadata(**product) for product in order.products]
-            await Order.release_reserved_products(products, str(order.user_id), redis)
+        # Release reserved products
+        products = [ProductMetadata(**product) for product in order.products]
+        await Order.release_reserved_products(products, str(order.user_id), redis)
 
-            raise BadRequestException(message="Payment failed of incomplete")
-
-        except Exception as e:
-            print("Error occured while verifying payment: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while verifying payment"
-            ) from None
+        raise BadRequestException(message="Payment failed of incomplete")
 
     async def get_cart_shipping_info(
         self, user: User, db: AsyncSession
     ) -> dict[str, Any]:
-        try:
-            # extract unique store ids from carts
 
-            product_ids = [cart.product_id for cart in user.carts]
-            if not product_ids:
-                raise BadRequestException(message="User has no product in cart")
+        # extract unique store ids from carts
 
-            products = await product_domain.get_products_by_ids(product_ids)
+        product_ids = [cart.product_id for cart in user.carts]
+        if not product_ids:
+            raise BadRequestException(message="User has no product in cart")
 
-            store_ids = {product.store_id for product in products}
-            stores: list[Store] = await Store.get_store_by_ids(list(store_ids), db)
+        products = await product_domain.get_products_by_ids(product_ids)
 
-            store_shipping_info = [
-                {
-                    "store_id": str(store.id),
-                    "store_name": store.name,
-                    "shipment_info": store.shipment_info,
-                }
-                for store in stores
-            ]
+        store_ids = {product.store_id for product in products}
+        stores: list[Store] = await Store.get_store_by_ids(list(store_ids), db)
 
-            return response_builder(
-                status_code=status.HTTP_200_OK,
-                status="success",
-                message="Successfully fetched cart shipping info",
-                data=store_shipping_info,
-            )
-        except Exception as e:
-            print("Error occured while fetching cart shipping info: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while fetching cart shipping info"
-            ) from None
+        store_shipping_info = [
+            {
+                "store_id": str(store.id),
+                "store_name": store.name,
+                "shipment_info": store.shipment_info,
+            }
+            for store in stores
+        ]
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Successfully fetched cart shipping info",
+            data=store_shipping_info,
+        )
 
     async def checkout(
         self, user: User, redis: Redis, request: Request, db: AsyncSession
@@ -159,30 +147,47 @@ class OrderService:
                 await Order.check_cart_availability(carts, redis)
             )
 
-            # Reserve those available products
-            reserved_product, cannot_reserve_products = await Order.reserve_products(
-                avaialble_products, str(user.id), redis
-            )
-
-            # Add all the products that cannot be reserved to unvailable products
-            unavailable_products.extend(cannot_reserve_products)
-
-            if not reserved_product:
-                raise GoneException(
-                    message="No product in user cart is available anymore",
-                    data={
-                        "available_products": [],
-                        "unavailable_products": unavailable_products,
-                    },
+            try:
+                # Reserve those available products
+                reserved_product, cannot_reserve_products = (
+                    await Order.reserve_products(
+                        avaialble_products, str(user.id), redis
+                    )
                 )
 
-            # Compute the total ammount
-            total_price = Order.compute_total_amount(reserved_product)
+                # Add all the products that cannot be reserved to unvailable products
+                unavailable_products.extend(cannot_reserve_products)
 
-            payment_data = {
-                "email": user.email,
-                "amount": total_price * 100,  # convert to kobo
-            }
+                if not reserved_product:
+                    raise GoneException(
+                        message="No product in user cart is available anymore",
+                        data={
+                            "available_products": [],
+                            "unavailable_products": unavailable_products,
+                        },
+                    )
+
+                # Compute the total ammount
+                total_price = Order.compute_total_amount(reserved_product)
+
+                payment_data = {
+                    "email": user.email,
+                    "amount": total_price * 100,  # convert to kobo
+                }
+            except Exception as e:
+                print("Error occured while checking user cart out: ", str(e))
+
+                # Release all the reserved products
+                try:
+                    await Order.release_reserved_products(
+                        reserved_product, str(user.id), redis
+                    )
+                except Exception as e:
+                    print("Error occured while releasing reserved products: ", str(e))
+
+                raise InternalServerErrorException(
+                    message="Error occured while checking out user cart"
+                ) from None
 
             try:
                 authorization_url, referenceToken = (
@@ -239,160 +244,110 @@ class OrderService:
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
 
-        except Exception as e:
-            print("Error occured while checking user cart out: ", str(e))
-
-            # Release all the reserved products
-            try:
-                await Order.release_reserved_products(
-                    reserved_product, str(user.id), redis
-                )
-            except Exception as e:
-                print("Error occured while releasing reserved products: ", str(e))
-
-            raise InternalServerErrorException(
-                message="Error occured while checking out user cart"
-            ) from None
-
     async def handle_successful_payment(
         self, request: Request, db: AsyncSession, redis: Redis
     ) -> dict[str, Any]:
-        try:
-            # Verify paystack webhook signature
-            await paystack_service.verify_webhook_signature(request)
 
-            body = await request.json()
+        # Verify paystack webhook signature
+        await paystack_service.verify_webhook_signature(request)
 
-            # Only handle charge.success event
-            event = body.get("event")
-            if event and event != "charge.success":
-                return response_builder(
-                    status_code=status.HTTP_200_OK,
-                    status="success",
-                    message="ignore event",
-                )
+        body = await request.json()
 
-            data = body["data"]
-            reference = data["reference"]
-            order = await Order.get_by_reference(reference, db)
-
-            if not order:
-                raise BadRequestException(message="Invalid reference Token")
-
-            # If the order status is not initiated or abandoned (for late payment), then the order has been processed in one away or the other
-            if order.status not in ["initiated", "abandoned"]:
-                return response_builder(
-                    status_code=status.HTTP_200_OK,
-                    status="success",
-                    message="Order has been processed",
-                )
-
-            # Confirm the amount paid is eqal to order amount
-            if (order.total_amount * 100) != data[
-                "amount"
-            ]:  # Convert to naira from kobo
-                raise ConflictException(message="amount mismatch")
-
-            # The username of the user is needed for the suborder
-            user = await Order.fetch_owner_of_order(str(order.user_id), db)
-            if not user:
-                raise ConflictException(message="no user for order found")
-
-            products = order.products
-
-            grouped_products_by_store = Order.group_products_by_store(products)
-
-            # Create Suborders and order items
-            for store_id, products_data in grouped_products_by_store.items():
-                # Generate Otp
-                store = await Store.get_by_id(store_id, db)
-                otp = genrate_verification_code()
-
-                suborder_data = {
-                    "store_id": store_id,
-                    "order_id": order.id,
-                    "total_amount": products_data["total_amount"],
-                    "otp": otp,
-                    "username": user.username,
-                    "status": "paid",
-                }
-                suborder = await SubOrder.create(suborder_data, db)
-
-                for product in products_data["products"]:
-                    order_item_data = {
-                        "product_id": product.id,
-                        "suborder_id": suborder.id,
-                        "quantity": product.quantity,
-                        "product_snapshot": {
-                            "name": product.name,
-                            "store_id": product.store_id,
-                            "category": product.category,
-                            "images": product.images,
-                        },
-                        "unit_price": product.amount,
-                        "line_price": product.amount * product.quantity,
-                    }
-                    await OrderItem.create(order_item_data, db)
-
-                    # Decrease the stock and increase total sales of product (can be pushed to worker)
-                    await product_domain.decrease_product_stock_and_increase_total_sales(
-                        product.id, product.quantity
-                    )
-
-                # Release all the reserved products (can be pushed to worker)
-                await Order.release_reserved_products(
-                    products_data["products"], str(user.id), redis
-                )
-
-                # update store's wallet (can be pushed to worker)
-                await store.update_store_wallet(
-                    amount=products_data["total_amount"], db=db
-                )
-
-                # Send email to vendor for order
-                now = datetime.now(UTC)
-                year = now.year
-                context = {
-                    "vendor_name": store.name,
-                    "username": user.username,
-                    "order_id": str(order.id),
-                    "order_link": "#",
-                    "year": year,
-                }
-                template = "vendor_alert_order.html"
-                email_to = store.email
-                subject = "New Order"
-
-                send_email_using_worker.delay(
-                    email_to=email_to,
-                    subject=subject,
-                    context=context,
-                    template_name=template,
-                )
-
-            # Mark Both order and payment paid and successful respectively
-            await order.update(db, {"status": "paid"})
-            await Payment.update_by_id(
-                str(order.payment_id), {"status": "successful"}, db
+        # Only handle charge.success event
+        event = body.get("event")
+        if event and event != "charge.success":
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="ignore event",
             )
 
-            # Clear User cart
-            await Cart.delete_by_user_id(str(user.id), db)
+        data = body["data"]
+        reference = data["reference"]
+        order = await Order.get_by_reference(reference, db)
 
-            # Send an email to buyer that order has been received
-            context = {
-                "customer_name": user.username,
-                "year": year,
-                "order_id": str(order.id),
-                "order_date": now.isoformat(),
-                "currency": "NGN",
-                "total_amount": order.total_amount,
-                "order_link": "#",
-                "item_preview": [],
+        if not order:
+            raise BadRequestException(message="Invalid reference Token")
+
+        # If the order status is not initiated or abandoned (for late payment), then the order has been processed in one away or the other
+        if order.status not in ["initiated", "abandoned"]:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Order has been processed",
+            )
+
+        # Confirm the amount paid is eqal to order amount
+        if (order.total_amount * 100) != data["amount"]:  # Convert to naira from kobo
+            raise ConflictException(message="amount mismatch")
+
+        # The username of the user is needed for the suborder
+        user = await Order.fetch_owner_of_order(str(order.user_id), db)
+        if not user:
+            raise ConflictException(message="no user for order found")
+
+        products = order.products
+
+        grouped_products_by_store = Order.group_products_by_store(products)
+
+        # Create Suborders and order items
+        for store_id, products_data in grouped_products_by_store.items():
+            # Generate Otp
+            store = await Store.get_by_id(store_id, db)
+            otp = genrate_verification_code()
+
+            suborder_data = {
+                "store_id": store_id,
+                "order_id": order.id,
+                "total_amount": products_data["total_amount"],
+                "otp": otp,
+                "username": user.username,
+                "status": "paid",
             }
-            template = "buyer_order_confirmation.html"
-            email_to = user.email
-            subject = "Order Received"
+            suborder = await SubOrder.create(suborder_data, db)
+
+            for product in products_data["products"]:
+                order_item_data = {
+                    "product_id": product.id,
+                    "suborder_id": suborder.id,
+                    "quantity": product.quantity,
+                    "product_snapshot": {
+                        "name": product.name,
+                        "store_id": product.store_id,
+                        "category": product.category,
+                        "images": product.images,
+                    },
+                    "unit_price": product.amount,
+                    "line_price": product.amount * product.quantity,
+                }
+                await OrderItem.create(order_item_data, db)
+
+                # Decrease the stock and increase total sales of product (can be pushed to worker)
+                await product_domain.decrease_product_stock_and_increase_total_sales(
+                    product.id, product.quantity
+                )
+
+            # Release all the reserved products (can be pushed to worker)
+            await Order.release_reserved_products(
+                products_data["products"], str(user.id), redis
+            )
+
+            # update store's wallet (can be pushed to worker)
+            await store.update_store_wallet(amount=products_data["total_amount"], db=db)
+
+            # Send email to vendor for order
+            now = datetime.now(UTC)
+            year = now.year
+            context = {
+                "vendor_name": store.name,
+                "username": user.username,
+                "order_id": str(order.id),
+                "order_link": "#",
+                "year": year,
+            }
+            template = "vendor_alert_order.html"
+            email_to = store.email
+            subject = "New Order"
 
             send_email_using_worker.delay(
                 email_to=email_to,
@@ -401,16 +356,40 @@ class OrderService:
                 template_name=template,
             )
 
-            return response_builder(
-                status_code=status.HTTP_200_OK,
-                status="success",
-                message="Successfully proccessed order",
-            )
-        except Exception as e:
-            print("Error occured while handling order successul: ", str(e))
-            raise InternalServerErrorException(
-                message="Internal server error"
-            ) from None
+        # Mark Both order and payment paid and successful respectively
+        await order.update(db, {"status": "paid"})
+        await Payment.update_by_id(str(order.payment_id), {"status": "successful"}, db)
+
+        # Clear User cart
+        await Cart.delete_by_user_id(str(user.id), db)
+
+        # Send an email to buyer that order has been received
+        context = {
+            "customer_name": user.username,
+            "year": year,
+            "order_id": str(order.id),
+            "order_date": now.isoformat(),
+            "currency": "NGN",
+            "total_amount": order.total_amount,
+            "order_link": "#",
+            "item_preview": [],
+        }
+        template = "buyer_order_confirmation.html"
+        email_to = user.email
+        subject = "Order Received"
+
+        send_email_using_worker.delay(
+            email_to=email_to,
+            subject=subject,
+            context=context,
+            template_name=template,
+        )
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Successfully proccessed order",
+        )
 
 
 order_service = OrderService()

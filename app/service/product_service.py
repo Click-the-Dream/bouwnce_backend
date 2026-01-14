@@ -57,12 +57,6 @@ class ProductService:
                 message=f"Error creating product: {str(ve)}"
             ) from None
 
-        except Exception as e:
-            print("Error occured creating a product: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while creating product"
-            ) from None
-
     async def get_product_by_id(self, product_id: str, redis: Redis) -> dict[str, Any]:
 
         try:
@@ -85,12 +79,6 @@ class ProductService:
 
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
-
-        except Exception as e:
-            print("Error occured while fetching product by id: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while fetching product"
-            ) from None
 
     async def get_products_by_store(
         self,
@@ -215,12 +203,6 @@ class ProductService:
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
 
-        except Exception as e:
-            print("Error updating product: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occurred while updating product"
-            ) from None
-
     async def toggle_current_store_product_state(
         self, store_id: str, product_id: str
     ) -> dict[str, Any]:
@@ -250,12 +232,6 @@ class ProductService:
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
 
-        except Exception as e:
-            print("Error occured while toggling product state: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while toggling product state"
-            ) from None
-
     async def delete_products_by_id(
         self, product_id: str, store_id: str
     ) -> dict[str, Any]:
@@ -282,12 +258,6 @@ class ProductService:
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
 
-        except Exception as e:
-            print("Error occured while deleting product: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while deleting product"
-            ) from None
-
     async def delete_all_store_products(self, store_id: str) -> dict[str, Any]:
         try:
             deleted_count = await product_domain.delete_all_store_products(store_id)
@@ -301,12 +271,6 @@ class ProductService:
 
         except ValueError as ve:
             raise NotFoundException(message=str(ve)) from None
-
-        except Exception as e:
-            print("Error occured while deleting all vendor's producs: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occurred while deleting all vendor's products"
-            ) from None
 
     async def delete_product_image(
         self, product_id: str, image_public_id: str, store_id: str, redis: Redis
@@ -334,12 +298,6 @@ class ProductService:
 
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
-
-        except Exception as e:
-            print("Error occurred while deleting image product: ", str(e))
-            raise InternalServerErrorException(
-                message="Error occured while deleting image product"
-            ) from None
 
     async def get_product_categories(self) -> dict[str, Any]:
         try:
@@ -390,12 +348,6 @@ class ProductService:
 
         except ValueError as ve:
             raise NotFoundException(message=str(ve)) from None
-
-        except Exception:
-            print("Error occured while deleting product category")
-            raise InternalServerErrorException(
-                message="Error occured while deleting product category"
-            ) from None
 
 
 product_service = ProductService()

@@ -5,13 +5,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cart import Cart
 from app.models.products import product_domain
-from app.schemas.cart import CartResponse
+from app.schemas.cart import CartResponse, PaginatedCartResponse
+from app.utils.exception import (
+    BadRequestException,
+    ForbiddenException,
+    InternalServerErrorException,
+    NotFoundException,
+)
 from app.utils.responses import response_builder
 
 
 class CartService:
 
-    async def _formulate_response(self, cart: Cart) -> CartResponse:
+    async def _formulate_response(self, cart: Cart) -> dict[str, Any]:
         product = await product_domain.get_product_by_id(cart.product_id)
         if not product:
             raise ValueError("Product with Id not found")
@@ -21,9 +27,8 @@ class CartService:
         cart_dict = cart.to_dict()
         cart_dict["user_id"] = str(cart.user_id)
         cart_dict["product"] = product_response
-        cart_response = CartResponse(**cart_dict)
 
-        return cart_response
+        return cart_dict
 
     async def create(self, cart_data: dict[str, Any], db: AsyncSession) -> CartResponse:
         try:
@@ -52,29 +57,17 @@ class CartService:
             new_data_dict = new_cart.to_dict()
             new_data_dict["product"] = product_response
             new_data_dict["user_id"] = str(new_cart.user_id)
-            cart_response = CartResponse(**new_data_dict)
 
             return response_builder(
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="product has been added to cart successfully",
-                data=cart_response,
+                data=new_data_dict,
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error occured while creating a new cart: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occurred while creating cart",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def get_all_by_user(
         self,
@@ -82,7 +75,7 @@ class CartService:
         db: AsyncSession,
         page: int | None = 1,
         page_size: int | None = 10,
-    ) -> list[CartResponse]:
+    ) -> PaginatedCartResponse:
 
         try:
             user_carts = await Cart.get_by_user_id(user_id, db, page, page_size)
@@ -108,20 +101,9 @@ class CartService:
                 },
             )
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
+            raise BadRequestException(message=str(te)) from None
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
-        except Exception as e:
-            print("Error occured while retrieving cart data: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while retrieving cart data",
-            )
+            raise NotFoundException(message=str(ve)) from None
 
     async def get_by_id(self, id: str, db: AsyncSession) -> CartResponse:
         try:
@@ -140,20 +122,9 @@ class CartService:
                 data=cart_response,
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error occurred while retrieving cart: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while retrieving cart data",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def update(
         self, user_id: str, cart_id: str, update_data: dict[str, Any], db: AsyncSession
@@ -161,11 +132,7 @@ class CartService:
         try:
             cart = await Cart.get_by_id(cart_id, db)
             if cart.user_id != user_id:
-                return response_builder(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    status="error",
-                    message="You can't update someone else cart",
-                )
+                raise ForbiddenException(message="You can't update someone else cart")
 
             updated_cart = await Cart.update_by_id(cart_id, update_data, db)
             cart_response = await self._formulate_response(updated_cart)
@@ -177,20 +144,9 @@ class CartService:
                 data=cart_response,
             )
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
+            raise BadRequestException(message=str(te)) from None
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
-        except Exception as e:
-            print("Error occurred while updating cart data: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while updating cart",
-            )
+            raise NotFoundException(message=str(ve)) from None
 
     async def delete(self, user_id: str, cart_id: str, db: AsyncSession):
         try:
@@ -205,43 +161,22 @@ class CartService:
 
             await cart.delete(db)
 
-            return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
-                status="success",
-                message="Deleted cart",
-            )
+            return None
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error deleting cart by id: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured deleting cart",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def delete_all_user_cart(self, user_id: str, db: AsyncSession):
         try:
             await Cart.delete_by_user_id(user_id, db)
 
-            return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
-                status="success",
-                message="Successfully deleted user carts",
-            )
+            return None
         except Exception as e:
             print("Error occured while deleting user cart: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while deleting user cart",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while deleting user cart"
+            ) from None
 
 
 cart_service = CartService()

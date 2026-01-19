@@ -31,8 +31,51 @@ class CartResponseSchema(BaseModel):
 
 
 class CartResponse(BaseResponse):
-    data: Annotated[list[CartResponseSchema], Field(description="Cart response data")]
+    data: Annotated[CartResponseSchema, Field(description="Cart response data")]
+
+
+class ListCartResponse(BaseResponse):
+    data: Annotated[list[CartResponseSchema], Field(description="List of carts")]
+
+
+class PaginatedCartResponseSchema(BaseModel):
+    carts: Annotated[list[CartResponseSchema], Field(description="List of carts")]
+    total: Annotated[int, Field(examples=[100])]
+    page: Annotated[int, Field(examples=[1])]
+    page_size: Annotated[int, Field(examples=[10])]
+
+
+class PaginatedCartResponse(BaseResponse):
+    data: Annotated[
+        PaginatedCartResponseSchema, Field(description="Paginated carts data")
+    ]
 
 
 class UpdateCart(BaseModel):
     quantity: Annotated[int, Field(examples=[20])]
+
+
+class ProductCheckoutInfo(BaseModel):
+    id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
+    store_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
+    name: Annotated[str, Field(examples=["Round Neck"])]
+    category: Annotated[str, Field(examples=["Clothing"])]
+    images: list[Images]
+    stock: Annotated[int, Field(examples=[10])]
+    quantity: Annotated[int, Field(examples=[2])]
+    amount: Annotated[int, Field(examples=[25000])]
+    error: Annotated[str | None, Field(examples=["Insufficient stock"])] = None
+
+
+class CheckoutResponseSchema(BaseModel):
+    payment_url: Annotated[str, Field(examples=["https://paymentgateway.com/pay/xyz"])]
+    available_products: Annotated[
+        list[ProductCheckoutInfo], Field(description="List of available products")
+    ]
+    unavailable_products: Annotated[
+        list[ProductCheckoutInfo], Field(description="List of unavailable products")
+    ]
+
+
+class CheckoutResponse(BaseResponse):
+    data: Annotated[CheckoutResponseSchema, Field(description="Checkout response data")]

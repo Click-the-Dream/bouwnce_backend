@@ -2,9 +2,9 @@ from typing import Annotated
 
 from pydantic import BaseModel, EmailStr, Field
 
-from app.schemas.contact_info_crud import ContactInfoResponse
-from app.schemas.payout_info_crud import PayoutInfoResponse
-from app.schemas.shipments_info_crud import ShipmentsInfoResponse
+from app.schemas.contact_info_crud import ContactInfoResponseSchema
+from app.schemas.payout_info_crud import PayoutInfoResponseSchema
+from app.schemas.shipments_info_crud import ShipmentsInfoResponseSchema
 from app.utils.responses import BaseResponse
 
 
@@ -41,10 +41,31 @@ class StoreResponse(BaseResponse):
     data: Annotated[StoreResponseSchema, Field(description="Store response data")]
 
 
+class ListStoreResponse(BaseResponse):
+    data: Annotated[
+        list[StoreResponseSchema], Field(description="List of Store response")
+    ]
+
+
+class PaginateStoreResponseSchema(BaseModel):
+    stores: Annotated[
+        list[StoreResponseSchema], Field(description="List of Store Response")
+    ]
+    total: Annotated[int, Field(examples=[100])]
+    page: Annotated[int, Field(examples=[2])]
+    page_size: Annotated[int, Field(examples=[10])]
+
+
+class PaginatStoreResponse(BaseResponse):
+    data: Annotated[
+        PaginateStoreResponseSchema, Field(description="Paginated Store response")
+    ]
+
+
 class StoreFullDetailsResponseSchema(StoreResponseSchema):
-    contact_info: ContactInfoResponse | None = None
-    payout_info: PayoutInfoResponse | None = None
-    shipment_info: list[ShipmentsInfoResponse] | None = None
+    contact_info: ContactInfoResponseSchema | None = None
+    payout_info: PayoutInfoResponseSchema | None = None
+    shipment_info: list[ShipmentsInfoResponseSchema] | None = None
 
 
 class StoreFullDetailsResponse(BaseResponse):

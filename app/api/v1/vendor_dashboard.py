@@ -16,7 +16,7 @@ router = APIRouter(tags=["Dashboard Information"], prefix="/dashboard")
 @router.get(
     "/overview",
     status_code=status.HTTP_200_OK,
-    summary="Get vendor dashboard overview if date range is not provided, last 7 days will be used",
+    summary="Get vendor dashboard overview if date range is not provided, the current month will be used",
     response_model=OverviewDashboardResponse,
 )
 async def get_vendor_dashboard_overview(
@@ -27,14 +27,16 @@ async def get_vendor_dashboard_overview(
     date_range: str = Query(
         None,
         description="Date range for the overview",
-        regex="^(yesterday|last_7_days|last_30_days|this_month|custom)$",
+        regex="^(today|yesterday|last_7_days|last_30_days|this_month|custom)$",
     ),
-    start_date: str = Query(None, description="Start date for the overview", example="2023-01-01"),
-    end_date: str = Query(None, description="End date for the overview", example="2023-01-31"),
+    start_date: str = Query(
+        None, description="Start date for the overview", example="2023-01-01"
+    ),
+    end_date: str = Query(
+        None, description="End date for the overview", example="2023-01-31"
+    ),
 ) -> JSONResponse:
 
-    if not date_range:
-        date_range = "last_7_days"
     if date_range == "custom":
         if not start_date or not end_date:
             return JSONResponse(

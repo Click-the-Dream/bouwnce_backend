@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
@@ -8,7 +8,8 @@ from app.api.dependencies import (
     CurrentUser,
     dbSessionDep,
 )
-from app.schemas import (
+from app.schemas.store_crud import (
+    PaginatStoreResponse,
     StoreCreate,
     StoreFullDetailsResponse,
     StoreResponse,
@@ -36,7 +37,7 @@ async def create_store(
 
 @router.get(
     "/",
-    response_model=StoreResponse,
+    response_model=PaginatStoreResponse,
     status_code=status.HTTP_200_OK,
     summary="Get all Available with search filters (name)",
 )
@@ -119,7 +120,7 @@ async def update_store_brand(
 
 @router.put(
     "/deactivate",
-    response_model=StoreResponse,
+    response_model=BaseResponse,
     status_code=status.HTTP_200_OK,
     summary="Deactivate Store account",
 )
@@ -129,7 +130,7 @@ async def deactivate_store(current_store: CurrentActiveStore, db: dbSessionDep):
 
 @router.put(
     "/activate",
-    response_model=StoreResponse,
+    response_model=BaseResponse,
     status_code=status.HTTP_200_OK,
     summary="Activate Store account",
 )
@@ -139,7 +140,7 @@ async def activate_store(current_store: CurrentActiveStore, db: dbSessionDep):
 
 @router.delete(
     "/",
-    response_model=dict[str, Any],
+    response_model=BaseResponse,
     status_code=status.HTTP_200_OK,
     summary="Delete store rmation",
 )
@@ -151,6 +152,7 @@ async def delete_store(session: dbSessionDep, current_store: CurrentActiveStore)
     "/brand-image",
     status_code=status.HTTP_200_OK,
     summary="delete Store brand logo or banner",
+    response_model=BaseResponse,
 )
 async def delete_store_brand_images(
     db: dbSessionDep,

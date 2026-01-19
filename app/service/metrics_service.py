@@ -53,7 +53,10 @@ class MetricService:
             "customers_change_percentage": MetricService._pct_change(
                 current["total_customers"], previous["total_customers"]
             ),
-            "aov": MetricService._pct_change(current["aov"], previous["aov"]),
+            "aov_change_percentage": MetricService._pct_change(
+                current["aov"], previous["aov"]
+            ),
+            "aov": current["aov"],
             "period": {"start": cur_start, "end": cur_end},
             "prev_period": {"start": prev_start, "end": prev_end},
         }

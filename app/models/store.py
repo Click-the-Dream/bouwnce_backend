@@ -87,3 +87,14 @@ class Store(BaseModel):
         wallet.pending_balance = wallet.pending_balance + amount
 
         await wallet.save(db)
+
+    @classmethod
+    async def get_store_by_ids(
+        cls, store_ids: list[str], db: AsyncSession
+    ) -> list[Self]:
+        stmt = select(cls).where(cls.id.in_(store_ids))
+
+        result = await db.execute(stmt)
+        stores = result.scalars().all()
+
+        return stores

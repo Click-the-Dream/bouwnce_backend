@@ -29,6 +29,21 @@ class ShipmentsInfoResponseSchema(ShipmentsInfoBase):
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
 
 
+class StoreShipmentsInfoResponseSchema(BaseModel):
+    store_name: Annotated[str, Field(examples=["John's Store"])]
+    store_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
+    shipment_info: Annotated[
+        list[ShipmentsInfoResponseSchema], Field(description="Shipment info list")
+    ]
+
+
+class StoreShipmentsInfoResponse(BaseResponse):
+    data: Annotated[
+        list[StoreShipmentsInfoResponseSchema],
+        Field(description="Store shipments info response data"),
+    ]
+
+
 class ShipmentsInfoResponse(BaseResponse):
     data: Annotated[
         list[ShipmentsInfoResponseSchema],

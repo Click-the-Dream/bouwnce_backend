@@ -8,7 +8,12 @@ from app.api.dependencies import (
     dbSessionDep,
     redisSessionDep,
 )
-from app.schemas.product import CategoryCreate, CategoryResponse, ProductResponse
+from app.schemas.product import (
+    CategoryCreate,
+    CategoryResponse,
+    PaginatedProductResponse,
+    ProductResponse,
+)
 from app.service.product_service import product_service
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -83,7 +88,7 @@ async def create_product(
     "/",
     summary="Get all product optionally by filter",
     status_code=status.HTTP_200_OK,
-    response_model=list[ProductResponse],
+    response_model=PaginatedProductResponse,
 )
 async def get_all_products(
     redis: redisSessionDep,
@@ -109,7 +114,7 @@ async def get_all_products(
     "/me",
     summary="Get all current logged vendor product",
     status_code=status.HTTP_200_OK,
-    response_model=list[ProductResponse],
+    response_model=PaginatedProductResponse,
 )
 async def get_all_vendor_products(
     current_store: CurrentStore,
@@ -137,7 +142,7 @@ async def get_all_vendor_products(
     "/store/{id}",
     summary="Get all products of a store",
     status_code=status.HTTP_200_OK,
-    response_model=list[ProductResponse],
+    response_model=PaginatedProductResponse,
 )
 async def get_all_vendor_products_by_id(
     id: str,

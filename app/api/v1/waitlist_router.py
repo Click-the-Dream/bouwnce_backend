@@ -1,7 +1,11 @@
 from fastapi import APIRouter, BackgroundTasks, Query, status
 
 from app.api.dependencies import dbSessionDep
-from app.schemas.waitlist import WaitlistCreate, WaitlistResponse
+from app.schemas.waitlist import (
+    PaginatedWaitlistResponse,
+    WaitlistCreate,
+    WaitlistResponse,
+)
 from app.service.waitlist import waitlist_service
 from app.utils.responses import BaseResponse
 
@@ -25,7 +29,7 @@ async def create(
 @router.get(
     "/",
     summary="Get all the waitlist",
-    response_model=list[WaitlistResponse],
+    response_model=PaginatedWaitlistResponse,
     status_code=status.HTTP_200_OK,
 )
 async def get_all(

@@ -39,6 +39,30 @@ class UserResponse(BaseResponse):
     data: Annotated[UserResponsSchema, Field(description="User response data")]
 
 
+class LoginUserResponseSchema(BaseModel):
+    user: Annotated[UserResponsSchema, Field(description="User Response data")]
+    access_token: Annotated[str, Field(description="Access token to login")]
+
+
+class LoginUserResponse(BaseResponse):
+    data: Annotated[
+        LoginUserResponseSchema, Field(description="Login user response data")
+    ]
+
+
+class PaginatedUserResponseSchema(BaseModel):
+    uses: Annotated[list[UserResponsSchema], Field(description="List of User response")]
+    page: Annotated[int, Field(examples=[2])]
+    page_size: Annotated[int, Field(examples=[10])]
+    total: Annotated[int, Field(examples=[100])]
+
+
+class PaginatedUserResponse(BaseResponse):
+    data: Annotated[
+        PaginatedUserResponseSchema, Field(description="Paginated user response")
+    ]
+
+
 class CodeVerification(BaseModel):
     email: Annotated[EmailStr, Field(examples=["johndoe@example.com"])]
     code: Annotated[str, Field(min_length=6, max_length=6, examples=["123456"])]

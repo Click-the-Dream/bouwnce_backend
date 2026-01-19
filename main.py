@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
@@ -70,6 +71,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Add Global Error handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+
+    message = str(exc) if settings.FASTAPI_ENV == "dev" else "Internal server Error"
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "status": "error",
+            "message": message,
+        },
+    )
+
 
 app.include_router(api_router, prefix=settings.API_STR)
 

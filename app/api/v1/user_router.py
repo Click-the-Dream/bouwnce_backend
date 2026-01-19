@@ -6,7 +6,12 @@ from app.api.dependencies import (
     CurrentUser,
     dbSessionDep,
 )
-from app.schemas.user import UpdateUser, UserResponse
+from app.schemas.user import (
+    BaseResponse,
+    PaginatedUserResponse,
+    UpdateUser,
+    UserResponse,
+)
 from app.service.user_service import user_service
 
 router = APIRouter(prefix="", tags=["User"])
@@ -29,7 +34,7 @@ async def get_user_by_id(
 @router.get(
     "/",
     summary="List users with search and pagination",
-    response_model=list[UserResponse],
+    response_model=PaginatedUserResponse,
 )
 async def list_users(
     db: dbSessionDep,
@@ -39,7 +44,7 @@ async def list_users(
         default=10, gt=0, description="The number of products in a page"
     ),
     search: str | None = Query(default=None, description="Search query"),
-) -> list[UserResponse]:
+) -> PaginatedUserResponse:
 
     return await user_service.list_users(db, search, page, per_page)
 
@@ -55,16 +60,16 @@ async def update_me(
 
 
 @router.put(
-    "/me/deactivate", summary="Deactivate user account", response_model=UserResponse
+    "/me/deactivate", summary="Deactivate user account", response_model=BaseResponse
 )
-async def deactivate_user(current_user: CurrentUser, db: dbSessionDep) -> UserResponse:
+async def deactivate_user(current_user: CurrentUser, db: dbSessionDep) -> BaseResponse:
     return await user_service.deactivate_user(current_user, db)
 
 
 @router.put(
-    "/me/activate", summary="Activate User account", response_model=UserResponse
+    "/me/activate", summary="Activate User account", response_model=BaseResponse
 )
-async def activate_user(current_user: CurrentUser, db: dbSessionDep) -> UserResponse:
+async def activate_user(current_user: CurrentUser, db: dbSessionDep) -> BaseResponse:
     return await user_service.activate_user(current_user, db)
 
 
@@ -82,16 +87,16 @@ async def update_user_by_id(
     return await user_service.update_user(user_id, user_data, db)
 
 
-@router.delete("/me", summary="Delete current user", response_model=UserResponse)
-async def delete_me(current_user: CurrentUser, db: dbSessionDep) -> UserResponse:
+@router.delete("/me", summary="Delete current user", response_model=BaseResponse)
+async def delete_me(current_user: CurrentUser, db: dbSessionDep) -> BaseResponse:
 
     return await user_service.delete_me(current_user, db)
 
 
 @router.delete(
-    "/{user_id}", summary="Delete user by ID, only admin", response_model=UserResponse
+    "/{user_id}", summary="Delete user by ID, only admin", response_model=BaseResponse
 )
-async def delete_user(_: CurrentAdmin, user_id: str, db: dbSessionDep) -> UserResponse:
+async def delete_user(_: CurrentAdmin, user_id: str, db: dbSessionDep) -> BaseResponse:
 
     return await user_service.delete_user_by_id(user_id, db)
 
@@ -99,10 +104,10 @@ async def delete_user(_: CurrentAdmin, user_id: str, db: dbSessionDep) -> UserRe
 @router.post(
     "/undelete/{user_id}",
     summary="Undelete user by ID, only admin",
-    response_model=UserResponse,
+    response_model=BaseResponse,
 )
 async def undelete_user(
     user_id: str, db: dbSessionDep, _: CurrentAdmin
-) -> UserResponse:
+) -> BaseResponse:
 
     return await user_service.undelete_user_by_id(user_id, db)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models import BaseModel
 
 if TYPE_CHECKING:
-    from app.models import Store, WalletTransaction
+    from app.models import Store, WalletTransaction, User
 
 
 class Wallet(BaseModel):
@@ -42,3 +42,15 @@ class Wallet(BaseModel):
         wallet = result.scalar_one_or_none()
 
         return wallet
+
+
+class UserWallet(BaseModel):
+    __tablename__ = "user_wallets"
+
+    user_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+
+    balance: Mapped[float] = mapped_column(Float, default=0.0)
+
+    user: Mapped[User] = relationship(back_populates="wallet", uselist=False)

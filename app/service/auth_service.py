@@ -18,6 +18,7 @@ from app.core.security import (
 )
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.models.wallet import UserWallet
 from app.schemas.user import UserResponse
 from app.utils.emails import generate_login_verification_email, send_email
 from app.utils.helper import parse_duration
@@ -47,7 +48,8 @@ class AuthService:
 
         try:
             new_user = await User.create(user_data, db)
-
+            
+            await UserWallet.create(user_id=new_user.id, db=db)
             otp = await new_user.generate_otp(db)
 
             email_data = generate_login_verification_email(new_user.username, otp)

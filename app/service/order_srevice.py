@@ -5,6 +5,7 @@ from fastapi import status
 from fastapi.requests import Request
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import timedelta
 
 from app.core.security import genrate_verification_code
 from app.models.cart import Cart
@@ -15,6 +16,7 @@ from app.models.products import product_domain
 from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.models.user import User
+from app.models.wallet import UserWallet, Refund
 from app.service.payment.paystack import paystack_service
 from app.utils.exception import (
     BadRequestException,
@@ -24,7 +26,8 @@ from app.utils.exception import (
     InternalServerErrorException,
 )
 from app.utils.responses import response_builder
-from app.worker.tasks.email import send_email_using_worker
+from app.worker.tasks.email import send_email_using_worker 
+from app.core.config import settings
 
 
 class OrderService:
@@ -391,5 +394,55 @@ class OrderService:
             message="Successfully proccessed order",
         )
 
+    async def cancel_order(
+        self, request_data: dict[str, Any], db: AsyncSession, wallet_id: str
+    ) -> dict[str, Any]:
+        
+        product = await OrderItem.filter_by(db, **request_data)
+        if not product:
+            raise BadRequestException(message="No order item found matching criteria")
+        product = product[0]
+        
+        product.status = "declined"
+        
+        await product.save(db)
+        await Refund.create({
+            "wallet_id": wallet_id,
+            "order_item_id": str(product.id),
+            "amount": product.line_price,
+            "release_at": datetime.now(UTC) + timedelta(hours=24),
+        }, db)
+        
+        await product.suborder.subtract_total_amount(product.line_price, db)
+        
+        order_items_rows = ""
+
+        for item in product.suborder.order_items:
+            order_items_rows += f"""
+            <tr class="table-row">
+                <td>{item.product_snapshot['name']}</td>
+                <td>{item.quantity}</td>
+                <td>{item.line_price}</td>
+            </tr>
+            """
+
+        send_email_using_worker(email_to=product.suborder.store.email, 
+                                subject="Your Order Was Cancelled - Refund In Progress",
+                                context={
+                                    "project_name": settings.PROJECT_NAME,
+                                    "customer_name": product.suborder.username,
+                                    "year": datetime.now(UTC).year,
+                                    "order_items_rows": order_items_rows,
+                                    "order_total": product.suborder.total_amount,
+                                    "wallet_link": "#",
+                                },
+                                template_name="buyer_order_cancelled.html"
+                                )
+    
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Order item successfully cancelled",
+        )
 
 order_service = OrderService()

@@ -200,63 +200,12 @@ class VendorDashBoardService:
             },
         }
 
-<<<<<<< HEAD
-            page_result = await SubOrder.get_by(
-                db=session,
-                filter=filters,
-                order_by=ordering,
-                page=page,
-                page_size=page_size,
-            )
-
-            orders = page_result.get("data", [])
-
-            order_items = [
-                VendorOrderItem(
-                    id=str(o.id),
-                    buyer_name=getattr(o, "username", "Unknown"),
-                    date=o.created_at.strftime("%d-%m-%Y") if o.created_at else None,
-                    amount=float(o.amount or 0),
-                    status=o.status,
-                )
-                for o in orders
-            ]
-
-            data = VendorOrdersDashboardResponse(
-                total_orders=page_result.get("total", 0),
-                completed_orders=sum(o.status == "completed" for o in orders),
-                pending_orders=sum(o.status == "pending" for o in orders),
-                processing_orders=sum(o.status == "processing" for o in orders),
-                orders=PaginatedOrders(
-                    items=order_items,
-                    page=page_result.get("page", 1),
-                    page_size=page_result.get("page_size", page_size),
-                    total=page_result.get("total", 0),
-                    total_pages=page_result.get("total_pages", 1),
-                ),
-            )
-
-            return response_builder(
-                status="Success",
-                message="Orders fetched successfully",
-                data=data,
-                status_code=status.HTTP_200_OK,
-            )
-
-        except Exception as e:
-            return response_builder(
-                status="Failed",
-                message=f"Error fetching vendor orders {e}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-=======
         return response_builder(
             status="Success",
             message="Orders fetched successfully",
             data=data,
             status_code=status.HTTP_200_OK,
         )
->>>>>>> b635b5486a54db319b861a1cb16a272ac7860067
 
     @staticmethod
     async def get_vendor_customers(
@@ -302,25 +251,9 @@ class VendorDashBoardService:
             }
         }
 
-<<<<<<< HEAD
-            return response_builder(
-                status="Success",
-                message="Customers fetched successfully",
-                status_code=status.HTTP_200_OK,
-                data=data.model_dump(),
-            )
-
-        except Exception as e:
-            return response_builder(
-                status="Failed",
-                message=f"Error fetching customer data: {str(e)}",
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-=======
         return response_builder(
             status="Success",
             message="Customers fetched successfully",
             status_code=status.HTTP_200_OK,
             data=data,
         )
->>>>>>> b635b5486a54db319b861a1cb16a272ac7860067

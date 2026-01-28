@@ -16,7 +16,7 @@ from app.models.products import product_domain
 from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.models.user import User
-from app.models.wallet import UserWallet, Refund
+from app.models.wallet import Refund
 from app.service.payment.paystack import paystack_service
 from app.utils.exception import (
     BadRequestException,
@@ -395,10 +395,10 @@ class OrderService:
         )
 
     async def cancel_order(
-        self, request_data: dict[str, Any], db: AsyncSession, wallet_id: str
+        self, order_item_id: str, db: AsyncSession, wallet_id: str
     ) -> dict[str, Any]:
         
-        product = await OrderItem.filter_by(db, **request_data)
+        product = await OrderItem.filter_by(db, id=order_item_id)
         if not product:
             raise BadRequestException(message="No order item found matching criteria")
         product = product[0]
@@ -443,6 +443,24 @@ class OrderService:
             status_code=status.HTTP_200_OK,
             status="success",
             message="Order item successfully cancelled",
+        )
+
+    async def accept_order(
+        self, order_item_id: str, db: AsyncSession) -> dict[str, Any]:
+        
+        product = await OrderItem.filter_by(db, id=order_item_id)
+        if not product:
+            raise BadRequestException(message="No order item found matching criteria")
+        product = product[0]
+
+        product.status = "accepted"
+
+        await product.save(db)
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Order item successfully accepted",
         )
 
 order_service = OrderService()

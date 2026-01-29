@@ -12,10 +12,8 @@ from datetime import datetime, timezone
 
 
 from app.models import BaseModel
-from app.models import OrderItem
-
 if TYPE_CHECKING:
-    from app.models import Store, WalletTransaction, User
+    from app.models import Store, WalletTransaction, User, OrderItem
 
 
 class Wallet(BaseModel):
@@ -64,7 +62,7 @@ class UserWallet(BaseModel):
 class Refund(BaseModel):
     __tablename__ = "refunds"
     
-    wallet_id = Mapped[UUID_Type] = mapped_column(
+    wallet_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user_wallets.id", ondelete="CASCADE"), nullable=False)
     order_item_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("order_items.id", ondelete="SET NULL"), nullable=False
@@ -73,8 +71,8 @@ class Refund(BaseModel):
     status: Mapped[str] = mapped_column(Enum("pending", "released", "failed", name="refund_status"), default="pending", nullable=False)
     release_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     
-    wallet = Mapped[UserWallet] = relationship(back_populates="refunds", uselist=False)
-    order_item = Mapped[OrderItem] = relationship(back_populates="refunds", uselist=False)
+    wallet: Mapped[UserWallet] = relationship(back_populates="refunds", uselist=False)
+    order_item: Mapped[OrderItem] = relationship(back_populates="refunds", uselist=False)
     
     
     async def release_refund(db: AsyncSession, wallet_id: str):

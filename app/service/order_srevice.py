@@ -398,69 +398,79 @@ class OrderService:
         self, order_item_id: str, db: AsyncSession, wallet_id: str
     ) -> dict[str, Any]:
         
-        product = await OrderItem.filter_by(db, id=order_item_id)
-        if not product:
-            raise BadRequestException(message="No order item found matching criteria")
-        product = product[0]
-        
-        product.status = "declined"
-        
-        await product.save(db)
-        await Refund.create({
-            "wallet_id": wallet_id,
-            "order_item_id": str(product.id),
-            "amount": product.line_price,
-            "release_at": datetime.now(UTC) + timedelta(hours=24),
-        }, db)
-        
-        await product.suborder.subtract_total_amount(product.line_price, db)
-        
-        order_items_rows = ""
+        try:
+            product = await OrderItem.filter_by(db, id=order_item_id)
+            if not product:
+                raise BadRequestException(message="No order item found matching criteria")
+            product = product[0]
+            
+            product.status = "declined"
+            
+            await product.save(db)
+            await Refund.create({
+                "wallet_id": wallet_id,
+                "order_item_id": str(product.id),
+                "amount": product.line_price,
+                "release_at": datetime.now(UTC) + timedelta(hours=24),
+            }, db)
+            
+            await product.suborder.subtract_total_amount(product.line_price, db)
+            
+            order_items_rows = ""
 
-        for item in product.suborder.order_items:
-            order_items_rows += f"""
-            <tr class="table-row">
-                <td>{item.product_snapshot['name']}</td>
-                <td>{item.quantity}</td>
-                <td>{item.line_price}</td>
-            </tr>
-            """
+            for item in product.suborder.order_items:
+                order_items_rows += f"""
+                <tr class="table-row">
+                    <td>{item.product_snapshot['name']}</td>
+                    <td>{item.quantity}</td>
+                    <td>{item.line_price}</td>
+                </tr>
+                """
 
-        send_email_using_worker(email_to=product.suborder.store.email, 
-                                subject="Your Order Was Cancelled - Refund In Progress",
-                                context={
-                                    "project_name": settings.PROJECT_NAME,
-                                    "customer_name": product.suborder.username,
-                                    "year": datetime.now(UTC).year,
-                                    "order_items_rows": order_items_rows,
-                                    "order_total": product.suborder.total_amount,
-                                    "wallet_link": "#",
-                                },
-                                template_name="buyer_order_cancelled.html"
-                                )
-    
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Order item successfully cancelled",
-        )
+            send_email_using_worker(email_to=product.suborder.store.email, 
+                                    subject="Your Order Was Cancelled - Refund In Progress",
+                                    context={
+                                        "project_name": settings.PROJECT_NAME,
+                                        "customer_name": product.suborder.username,
+                                        "year": datetime.now(UTC).year,
+                                        "order_items_rows": order_items_rows,
+                                        "order_total": product.suborder.total_amount,
+                                        "wallet_link": "#",
+                                    },
+                                    template_name="buyer_order_cancelled.html"
+                                    )
+        
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Order item successfully cancelled",
+            )
+        except Exception as e:
+            raise InternalServerErrorException(
+                message="An error occurred while cancelling the order item."
+            ) from e
 
     async def accept_order(
         self, order_item_id: str, db: AsyncSession) -> dict[str, Any]:
         
-        product = await OrderItem.filter_by(db, id=order_item_id)
-        if not product:
-            raise BadRequestException(message="No order item found matching criteria")
-        product = product[0]
+        try:
+            product = await OrderItem.filter_by(db, id=order_item_id)
+            if not product:
+                raise BadRequestException(message="No order item found matching criteria")
+            product = product[0]
 
-        product.status = "accepted"
+            product.status = "accepted"
 
-        await product.save(db)
+            await product.save(db)
 
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Order item successfully accepted",
-        )
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Order item successfully accepted",
+            )
+        except Exception as e:
+            raise InternalServerErrorException(
+                message="An error occurred while accepting the order item."
+            ) from e
 
 order_service = OrderService()

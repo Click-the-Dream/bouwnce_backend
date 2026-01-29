@@ -11,6 +11,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.rate_limiter import rate_limiter
+from app.core.logger import log_internal_error
 from app.db.mongo import mongo_conn
 from app.db.postgres_db_conn import engine
 from app.worker.jobs import (
@@ -78,6 +79,13 @@ app.add_middleware(
 async def global_exception_handler(request: Request, exc: Exception):
 
     message = str(exc) if settings.FASTAPI_ENV == "dev" else "Internal server Error"
+
+    log_internal_error(
+        exc=exc,
+        message="Unhandled Exception Occurred",
+        context={"message": message},
+    )
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -86,6 +94,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": message,
         },
     )
+
 
 
 app.include_router(api_router, prefix=settings.API_STR)

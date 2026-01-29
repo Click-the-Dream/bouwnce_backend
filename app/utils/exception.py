@@ -57,12 +57,6 @@ class GoneException(ApiException):
 class InternalServerErrorException(ApiException):
     def __init__(self, message: str, data: Any | None = None):
 
-        log_internal_error(
-            exc=self,
-            message="Internal Server Error Occurred",
-            context={"message": message, "data": data},
-        )
-
         super().__init__(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=message,

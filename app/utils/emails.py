@@ -45,7 +45,7 @@ def render_email_templates(*, template_name: str, context: dict[str, Any]) -> st
 
 async def send_email_using_resend(
     *, email_to: str, subject: str = "", html_content: str = ""
-) -> resend.Emails.SendResponse | bool:
+) -> bool:
 
     params: resend.Emails.SendParams = {
         "from": f"{settings.PROJECT_NAME} <{settings.RESEND_EMAIL}>",
@@ -59,7 +59,7 @@ async def send_email_using_resend(
         email = resend.Emails.send(params)
         print("✅email sent to: ", email_to)
         print(email)
-        return email
+        return True
     except Exception as e:
         print("❌email not sent to: ", email_to)
         print("❌error: ", e)
@@ -98,6 +98,9 @@ async def send_email(
         return await send_email_using_smtp(
             email_to=email_to, subject=subject, html_content=html_content
         )
+    else:
+        print("No email service configured for production yet.")
+        return False
 
 
 def generate_test_email(email_to: str) -> EmailData:

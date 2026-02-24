@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID as UUID_Type
 
 from pydantic import BaseModel as PydnaticBaseModel
 from redis.asyncio import Redis
-from sqlalchemy import Enum, ForeignKey, Integer, String, select
+from sqlalchemy import Enum, ForeignKey, Integer, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
 from app.models import BaseModel
 from app.models.products import product_domain
@@ -64,6 +65,9 @@ class Order(BaseModel):
         ),
         default="initiated",
     )
+
+    track_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
     username: Mapped[str] = mapped_column(String, nullable=False)
 
     user: Mapped[User] = relationship(back_populates="orders", uselist=False)
@@ -194,19 +198,22 @@ class Order(BaseModel):
     ) -> bool:
 
         for prod in products:
+            if isinstance(prod, dict):
+                prod = ProductMetadata(**prod)
             await product_domain.release_product(prod.id, user_id, redis)
 
         return True
 
     @staticmethod
     def group_products_by_store(
-        products: list[dict[str, Any]],
+        products: list[ProductMetadata] | list[dict[str, Any]],
     ) -> dict[str, dict[str, Any]]:
 
         grouped_products = {}
 
         for product in products:
-            product = ProductMetadata(**product)
+            if isinstance(product, dict):
+                product = ProductMetadata(**product)
             store_id = product.store_id
 
             # add the store to grouped_product if not present
@@ -214,9 +221,9 @@ class Order(BaseModel):
                 grouped_products[store_id] = {"products": [], "total_amount": 0}
 
             # Then add the product to the store key and compute the total amount
-            grouped_products[store_id]["products"].append(product)
+            grouped_products[store_id]["products"].append(product.model_dump())
 
-            amount = product.quantity * product.amount
+            amount = Decimal(product.quantity) * product.amount
             grouped_products[store_id]["total_amount"] += amount
 
         return grouped_products
@@ -225,4 +232,66 @@ class Order(BaseModel):
     async def fetch_owner_of_order(cls, user_id: str, db: AsyncSession) -> User | None:
         result = await db.execute(select(User).where(User.id == user_id))
 
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def fetch_user_orders(
+        cls, user_id: str, db: AsyncSession, page: int = 1, page_size: int = 10
+    ) -> dict[str, Any]:
+
+        page = max(1, page)
+        page_size = max(1, page_size)
+        offset = (page - 1) * page_size
+
+        smt = (
+            select(cls)
+            .where(cls.user_id == user_id)
+            .options(selectinload(Order.suborders).selectinload(SubOrder.order_items))
+            .offset(offset)
+            .limit(page_size)
+        )
+
+        count_query = (
+            select(func.count()).select_from(cls).where(cls.user_id == user_id)
+        )
+        count_result = await db.execute(count_query)
+        total_count = count_result.scalar() or 0
+
+        result = await db.execute(smt)
+        orders = result.scalars().all()
+
+        return {
+            "orders": orders,
+            "page": page,
+            "page_size": page_size,
+            "total": total_count,
+        }
+
+    @classmethod
+    async def fetch_user_order_by_id(
+        cls,
+        id: str,
+        db: AsyncSession,
+    ) -> Self | None:
+
+        smt = (
+            select(cls)
+            .where(cls.id == id)
+            .options(selectinload(cls.suborders).selectinload(SubOrder.order_items))
+        )
+        result = await db.execute(smt)
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def fetch_user_order_by_track_id(
+        cls, track_id: str, db: AsyncSession
+    ) -> Self | None:
+
+        smt = (
+            select(cls)
+            .where(cls.track_id == track_id)
+            .options(selectinload(cls.suborders).selectinload(SubOrder.order_items))
+        )
+
+        result = await db.execute(smt)
         return result.scalar_one_or_none()

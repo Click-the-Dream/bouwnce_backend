@@ -111,7 +111,7 @@ class AuthService:
         refresh_token = create_refresh_token(subject=user.id)
         hashed_refresh_token = hash_token(refresh_token)
         await RefreshToken.create_refresh_token(
-            user_id=user.id,
+            user_id=str(user.id),
             token=hashed_refresh_token,
             device_id=new_device_id,
             user_agent=user_agent,

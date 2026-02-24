@@ -207,7 +207,7 @@
                             "
                           >
                             Thank you for your order
-                            <strong>#{{ order_id }}</strong>. Your order has
+                            <strong>#{{ track_id }}</strong>. Your order has
                             been received and sent to the vendor.
                           </div>
                         </td>
@@ -280,59 +280,14 @@
                               color: #444444;
                             "
                           >
-                            Order ID: <strong>{{ order_id }}</strong><br />
+                            Track ID: <strong>{{ track_id }}</strong><br />
                             Placed on: <strong>{{ order_date }}</strong><br />
                             Total Amount:
                             <strong>{{ currency }} {{ total_amount }}</strong>
                           </div>
                         </td>
                       </tr>
-                      <!-- Optional: short list of items -->
-                      <tr>
-                        <td
-                          align="left"
-                          style="
-                            font-size: 0px;
-                            padding: 10px 25px 5px;
-                            word-break: break-word;
-                          "
-                        >
-                          <div
-                            style="
-                              font-family: Arial, Helvetica, sans-serif;
-                              font-size: 14px;
-                              line-height: 1;
-                              text-align: left;
-                              color: #555555;
-                            "
-                          >
-                            Items in this order include:
-                          </div>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td
-                          align="left"
-                          style="
-                            font-size: 0px;
-                            padding: 0 25px 10px;
-                            word-break: break-word;
-                          "
-                        >
-                          <div
-                            style="
-                              font-family: Arial, Helvetica, sans-serif;
-                              font-size: 14px;
-                              line-height: 1;
-                              text-align: left;
-                              color: #555555;
-                            "
-                          >
-                            {{ items_preview }}
-                            <!-- e.g. "2 × Burger, 1 × Fries, 1 × Drink" -->
-                          </div>
-                        </td>
-                      </tr>
+                      
                       <!-- CTA -->
                       <tr>
                         <td

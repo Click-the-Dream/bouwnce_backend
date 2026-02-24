@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, Self, TypeVar
 from uuid import UUID as UUID_Type
@@ -81,6 +82,13 @@ class BaseModel(Base):
         return obj
 
     @classmethod
+    async def get_by_ids(cls, ids: list[str], db: AsyncSession) -> Sequence[Self]:
+        stmt = select(cls).where(cls.id.in_(ids))
+        result = await db.execute(stmt)
+
+        return result.scalars().all()
+
+    @classmethod
     async def delete_by_id(cls, id: str, db: AsyncSession) -> Self:
 
         result = await db.execute(select(cls).where(cls.id == id))
@@ -137,7 +145,7 @@ class BaseModel(Base):
         return obj
 
     @classmethod
-    async def get_one(cls, db: AsyncSession, filter: dict | None = None) -> Self:
+    async def get_one(cls, db: AsyncSession, filter: dict | None = None) -> Self | None:
 
         query = select(cls)
 
@@ -245,7 +253,7 @@ class BaseModel(Base):
         filter: dict[str, Any],
         db: AsyncSession,
         preload: list[str] | bool | None = None,
-    ) -> list[T]:
+    ) -> Sequence[T]:
         if preload is None:
             preload = []
 
@@ -254,10 +262,10 @@ class BaseModel(Base):
             preload = [relation.key for relation in cls.__mapper__.relationships]
 
         query = select(cls)
-
-        for relation in preload:
-            if hasattr(cls, relation):
-                query = query.options(selectinload(getattr(cls, relation)))
+        if isinstance(preload, list):
+            for relation in preload:
+                if hasattr(cls, relation):
+                    query = query.options(selectinload(getattr(cls, relation)))
 
         for key, value in filter.items():
             if hasattr(cls, key):

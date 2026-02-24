@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from fastapi import status
@@ -15,6 +16,7 @@ from app.models.products import product_domain
 from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.models.user import User
+from app.schemas.order import CheckoutInputSchema
 from app.service.payment.paystack import paystack_service
 from app.utils.exception import (
     BadRequestException,
@@ -22,7 +24,9 @@ from app.utils.exception import (
     ForbiddenException,
     GoneException,
     InternalServerErrorException,
+    NotFoundException,
 )
+from app.utils.helper import generate_order_track_id, generate_suborder_track_id
 from app.utils.responses import response_builder
 from app.worker.tasks.email import send_email_using_worker
 
@@ -94,7 +98,12 @@ class OrderService:
         )
 
     async def checkout(
-        self, user: User, redis: Redis, request: Request, db: AsyncSession
+        self,
+        user: User,
+        shipment_infos: list[CheckoutInputSchema],
+        redis: Redis,
+        request: Request,
+        db: AsyncSession,
     ) -> dict[str, Any]:
         """Create a checkout for user and return payment url
 
@@ -167,13 +176,63 @@ class OrderService:
                         },
                     )
 
+                # Group reserved product by store
+                grouped_products = Order.group_products_by_store(reserved_product)
+
+                # Fetch all stores for the products
+
+                store_ids = [key for key in grouped_products]
+                stores = await Store.get_by_ids(store_ids, db)
+                if len(stores) != len(store_ids):
+                    raise BadRequestException("One or more stores are not found")
+
+                store_dict = {str(store.id): store for store in stores}
+
+                # Total shipping fee
+                total_shipping_fee = 0
+
+                # Flatten Shipment info
+                shipment_info_dict = {
+                    shipment.store_id: shipment.shipment_id
+                    for shipment in shipment_infos
+                }
+
+                for store_id, store in store_dict.items():
+                    if store_id not in shipment_info_dict:
+                        raise BadRequestException(
+                            "User has Product from store but has not selected shipping option for store"
+                        )
+
+                    shipment_id = shipment_info_dict[store_id]
+                    matched_shipment = next(
+                        (s for s in store.shipment_info if str(s.id) == shipment_id),
+                        None,
+                    )
+                    if not matched_shipment:
+                        raise BadRequestException(
+                            f"Shipment: {shipment_id} doesn't belong to store: {store_id}"
+                        )
+
+                    grouped_products[store_id]["shipping_info"] = {
+                        "fee": matched_shipment.delivery_fee,
+                        "shipping_id": matched_shipment.id,
+                    }
+
+                    total_shipping_fee += int(matched_shipment.delivery_fee)
+
                 # Compute the total ammount
-                total_price = Order.compute_total_amount(reserved_product)
+                total_price = (
+                    Order.compute_total_amount(reserved_product) + total_shipping_fee
+                )
 
                 payment_data = {
                     "email": user.email,
                     "amount": total_price * 100,  # convert to kobo
                 }
+            except BadRequestException:
+                raise
+            except GoneException:
+                raise
             except Exception as e:
                 print("Error occured while checking user cart out: ", str(e))
 
@@ -223,9 +282,10 @@ class OrderService:
                 "payment_id": payment.id,
                 "total_amount": total_price,
                 "username": user.username,
-                "products": [product.model_dump() for product in reserved_product],
+                "products": grouped_products,
                 "idempotent_key": idempotent_key,
                 "reference_token": referenceToken,
+                "track_id": generate_order_track_id(),
             }
 
             await Order.create(order_data, db)
@@ -286,12 +346,14 @@ class OrderService:
         if not user:
             raise ConflictException(message="no user for order found")
 
-        products = order.products
+        grouped_products_by_store = order.products
 
-        grouped_products_by_store = Order.group_products_by_store(products)
+        now = datetime.now(UTC)
+        year = now.year
 
         # Create Suborders and order items
-        for store_id, products_data in grouped_products_by_store.items():
+        for store_product in grouped_products_by_store:
+            store_id, products_data = next(iter(store_product.items()))
             # Generate Otp
             store = await Store.get_by_id(store_id, db)
             otp = genrate_verification_code()
@@ -303,28 +365,29 @@ class OrderService:
                 "otp": otp,
                 "username": user.username,
                 "status": "paid",
+                "track_id": generate_suborder_track_id(),
             }
             suborder = await SubOrder.create(suborder_data, db)
 
             for product in products_data["products"]:
                 order_item_data = {
-                    "product_id": product.id,
+                    "product_id": product["id"],
                     "suborder_id": suborder.id,
-                    "quantity": product.quantity,
+                    "quantity": product["quantity"],
                     "product_snapshot": {
-                        "name": product.name,
-                        "store_id": product.store_id,
-                        "category": product.category,
-                        "images": product.images,
+                        "name": product["name"],
+                        "store_id": product["store_id"],
+                        "category": product["category"],
+                        "images": product["images"],
                     },
-                    "unit_price": product.amount,
-                    "line_price": product.amount * product.quantity,
+                    "unit_price": product["amount"],
+                    "line_price": Decimal(product["amount"]) * product["quantity"],
                 }
                 await OrderItem.create(order_item_data, db)
 
                 # Decrease the stock and increase total sales of product (can be pushed to worker)
                 await product_domain.decrease_product_stock_and_increase_total_sales(
-                    product.id, product.quantity
+                    product["id"], product["quantity"]
                 )
 
             # Release all the reserved products (can be pushed to worker)
@@ -336,12 +399,10 @@ class OrderService:
             await store.update_store_wallet(amount=products_data["total_amount"], db=db)
 
             # Send email to vendor for order
-            now = datetime.now(UTC)
-            year = now.year
             context = {
                 "vendor_name": store.name,
                 "username": user.username,
-                "order_id": str(order.id),
+                "track_id": str(suborder.track_id),
                 "order_link": "#",
                 "year": year,
             }
@@ -367,12 +428,11 @@ class OrderService:
         context = {
             "customer_name": user.username,
             "year": year,
-            "order_id": str(order.id),
+            "track_id": str(order.track_id),
             "order_date": now.isoformat(),
             "currency": "NGN",
             "total_amount": order.total_amount,
             "order_link": "#",
-            "item_preview": [],
         }
         template = "buyer_order_confirmation.html"
         email_to = user.email
@@ -389,6 +449,106 @@ class OrderService:
             status_code=status.HTTP_200_OK,
             status="success",
             message="Successfully proccessed order",
+        )
+
+    async def fetch_user_orders(
+        self, user_id: str, db: AsyncSession, page: int = 1, page_size: int = 10
+    ) -> dict[str, Any]:
+
+        # Get paginated user order
+
+        orders_data = await Order.fetch_user_orders(user_id, db, page, page_size)
+        orders: list[Order] = orders_data["orders"]
+
+        orders_dicts = []
+
+        for order in orders:
+            order_dict = order.to_dict()
+            order_suborders = []
+
+            suborders = order.suborders
+            for suborder in suborders:
+                suborder_dict = suborder.to_dict()
+                order_items = suborder.order_items
+
+                order_items_dicts = [order_item.to_dict() for order_item in order_items]
+
+                suborder_dict["order_items"] = order_items_dicts
+
+                order_suborders.append(suborder_dict)
+
+            order_dict["suborders"] = order_suborders
+
+            orders_dicts.append(order_dict)
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="successfully fetch user orders",
+            data={
+                "orders": orders_dicts,
+                "page": orders_data["page"],
+                "page_size": orders_data["page_size"],
+                "total": orders_data["total"],
+            },
+        )
+
+    async def fetch_user_order_by_id(
+        self, order_id: str, db: AsyncSession
+    ) -> dict[str, Any]:
+
+        order = await Order.fetch_user_order_by_id(order_id, db)
+        if not order:
+            raise NotFoundException("Order not found")
+
+        order_dict = order.to_dict()
+        suborders = order.suborders
+        suborder_dicts = []
+        for suborder in suborders:
+            suborder_dict = suborder.to_dict()
+
+            order_items = suborder.order_items
+            order_items_dict = [order_item.to_dict() for order_item in order_items]
+
+            suborder_dict["order_items"] = order_items_dict
+            suborder_dicts.append(suborder_dict)
+
+        order_dict["suborders"] = suborder_dicts
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="successfully fetch order data",
+            data=order_dict,
+        )
+
+    async def fetch_user_order_by_track_id(
+        self, track_id: str, db: AsyncSession
+    ) -> dict[str, Any]:
+
+        order = await Order.fetch_user_order_by_track_id(track_id, db)
+        if not order:
+            raise NotFoundException("Order not found")
+
+        order_dict = order.to_dict()
+        suborders = order.suborders
+        suborder_dicts = []
+        for suborder in suborders:
+            suborder_dict = suborder.to_dict()
+
+            order_items = suborder.order_items
+            order_items_dict = [order_item.to_dict() for order_item in order_items]
+
+            suborder_dict["order_items"] = order_items_dict
+            suborder_dicts.append(suborder_dict)
+
+        order_dict["suborders"] = suborder_dicts
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="successfully fetch order data",
+            data=order_dict,
         )
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any
 from uuid import UUID as UUID_TYPE
 
 from sqlalchemy import ForeignKey, Integer, String, delete, select
@@ -31,10 +31,10 @@ class Cart(BaseModel):
         cls,
         user_id: str,
         db: AsyncSession,
-        page: int | None = 1,
-        page_size: int | None = 10,
+        page: int = 1,
+        page_size: int = 10,
         all: bool = False,
-    ) -> list[Self]:
+    ) -> dict[str, Any]:
 
         if not is_valid_uuid(user_id):
             raise TypeError("Invalid user Id")

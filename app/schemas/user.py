@@ -32,7 +32,6 @@ class UserResponsSchema(UserBase):
     otp: Annotated[str | None, Field(examples=["123456"])] = None
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
-    is_store_owner: Annotated[bool, Field(examples=[False])]
 
 
 class UserResponse(BaseResponse):

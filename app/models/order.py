@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID as UUID_Type
 
 from pydantic import BaseModel as PydnaticBaseModel
 from redis.asyncio import Redis
-from sqlalchemy import Enum, ForeignKey, Integer, String, func, select
+from sqlalchemy import Enum, ForeignKey, Float, Integer, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
@@ -41,7 +40,7 @@ class Order(BaseModel):
         ForeignKey("payments.id", ondelete="CASCADE"),
         nullable=False,
     )
-    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_amount: Mapped[float] = mapped_column(Float, nullable=False)
 
     products: Mapped[list[dict]] = mapped_column(
         JSONB, nullable=False, default=list, server_default="[]"
@@ -223,7 +222,7 @@ class Order(BaseModel):
             # Then add the product to the store key and compute the total amount
             grouped_products[store_id]["products"].append(product.model_dump())
 
-            amount = Decimal(product.quantity) * product.amount
+            amount = float(product.quantity) * product.amount
             grouped_products[store_id]["total_amount"] += amount
 
         return grouped_products

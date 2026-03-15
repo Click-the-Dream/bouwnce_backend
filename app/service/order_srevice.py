@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Any
 
 from fastapi import status
@@ -85,7 +84,7 @@ class OrderService:
             {
                 "store_id": str(store.id),
                 "store_name": store.name,
-                "shipment_info": store.shipment_info,
+                "shipment_info": [shipment_info.to_dict() for shipment_info in store.shipment_info],
             }
             for store in stores
         ]
@@ -178,7 +177,6 @@ class OrderService:
 
                 # Group reserved product by store
                 grouped_products = Order.group_products_by_store(reserved_product)
-
                 # Fetch all stores for the products
 
                 store_ids = [key for key in grouped_products]
@@ -215,16 +213,16 @@ class OrderService:
 
                     grouped_products[store_id]["shipping_info"] = {
                         "fee": matched_shipment.delivery_fee,
-                        "shipping_id": matched_shipment.id,
+                        "shipping_id": str(matched_shipment.id),
                     }
 
-                    total_shipping_fee += int(matched_shipment.delivery_fee)
+                    total_shipping_fee += float(matched_shipment.delivery_fee)
 
                 # Compute the total ammount
                 total_price = (
                     Order.compute_total_amount(reserved_product) + total_shipping_fee
                 )
-
+                
                 payment_data = {
                     "email": user.email,
                     "amount": total_price * 100,  # convert to kobo
@@ -287,6 +285,8 @@ class OrderService:
                 "reference_token": referenceToken,
                 "track_id": generate_order_track_id(),
             }
+            
+            print(order_data)
 
             await Order.create(order_data, db)
 
@@ -381,7 +381,7 @@ class OrderService:
                         "images": product["images"],
                     },
                     "unit_price": product["amount"],
-                    "line_price": Decimal(product["amount"]) * product["quantity"],
+                    "line_price": float(product["amount"]) * product["quantity"],
                 }
                 await OrderItem.create(order_item_data, db)
 

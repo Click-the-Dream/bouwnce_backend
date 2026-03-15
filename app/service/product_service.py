@@ -63,7 +63,7 @@ class ProductService:
 
             product = await product_domain.get_product_by_id(product_id)
 
-            if product.state != "live" or product.status != "active":
+            if product.state != "live":
                 raise NotFoundException(message="product with specified ID not found")
 
             product_response = await product_domain.to_dict(product, redis)
@@ -88,7 +88,7 @@ class ProductService:
         category: str | None = None,
         page: int | None = 1,
         per_page: int | None = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         try:
             filter = {}
 
@@ -114,7 +114,7 @@ class ProductService:
                     "products": products,
                     "total": products_data["total"],
                     "page": products_data["page"],
-                    "per_page": products_data["per_page"],
+                    "page_size": products_data["per_page"],
                 },
             )
         except Exception as e:
@@ -130,7 +130,7 @@ class ProductService:
         produdct_category: str | None = None,
         page: int | None = 1,
         per_page: int | None = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         filter_dict = {}
 
         if product_name:
@@ -156,7 +156,7 @@ class ProductService:
                     "products": products,
                     "total": product_data["total"],
                     "page": product_data["page"],
-                    "per_page": product_data["per_page"],
+                    "page_size": product_data["per_page"],
                 },
             )
         except Exception as e:

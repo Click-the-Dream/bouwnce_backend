@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from redis import Redis
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import verify_token
@@ -76,7 +76,7 @@ async def get_current_user(
         return user
 
     except Exception:
-        raise UnAuthorizedException("Could not validate credentials") from None
+        raise UnAuthorizedException("Invalid or expired token") from None
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

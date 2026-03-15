@@ -115,7 +115,7 @@ def generate_track_id() -> str:
 
 
 def generate_order_track_id():
-    return f"#ord-{generate_order_track_id()}"
+    return f"#ord-{generate_track_id()}"
 
 
 def generate_suborder_track_id():

@@ -82,8 +82,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
     log_internal_error(
         exc=exc,
-        message="Unhandled Exception Occurred",
-        context={"message": message, "path": request.url.path, "method": request.method},
+        message=message,
+        context={"path": request.url.path, "method": request.method},
     )
 
     return JSONResponse(

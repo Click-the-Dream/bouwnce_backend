@@ -1,6 +1,12 @@
-import traceback
+import logging
 from typing import Any, Mapping
-from logger import logger
+
+logging.basicConfig(
+    level=logging.ERROR,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
+
+logger = logging.getLogger("justclick")
 
 
 def log_internal_error(
@@ -9,7 +15,6 @@ def log_internal_error(
     message: str,
     context: Mapping[str, Any] | None = None,
 ) -> None:
-
     logger.error(
         message,
         exc_info=exc,

@@ -49,11 +49,10 @@ class AuthService:
         try:
             new_user = await User.create(user_data, db)
             
-            await UserWallet.create(user_id=new_user.id, db=db)
+            await UserWallet.create({"user_id": new_user.id}, db=db)
             otp = await new_user.generate_otp(db)
 
         except Exception as e:
-            print("Error occured creating user: ", str(e))
             raise InternalServerErrorException(
                 message="Error occured when creating user"
             ) from None

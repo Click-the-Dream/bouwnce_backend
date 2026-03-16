@@ -67,7 +67,7 @@ async def create_product(
     ],
     amount: Annotated[int, Form(ge=0, examples=[25000])],
     stock: Annotated[int, Form(ge=0, examples=[20])],
-    category: Annotated[str, Form(examples=["clothes"])],
+    category: Annotated[str, Form(examples=["cloth"])],
     images: ImageCreate,
     db: dbSessionDep,
 ):

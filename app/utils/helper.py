@@ -1,8 +1,10 @@
 import re
+import secrets
+import string
 import uuid
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def build_date_filter(
@@ -93,7 +95,7 @@ def parse_duration(duration: str) -> timedelta:
     elif unit == "d":
         return timedelta(days=value)
 
-    return ValueError(f"Unsupported duration unit: {unit}")
+    raise ValueError(f"Unsupported duration unit: {unit}")
 
 
 def compute_remaining_time(time: datetime) -> float:
@@ -103,3 +105,18 @@ def compute_remaining_time(time: datetime) -> float:
     remaining_time_seconds = (time - now).total_seconds()
 
     return max(0, remaining_time_seconds)
+
+
+def generate_track_id() -> str:
+    alphabet = string.ascii_letters + string.digits
+
+    track_id = "".join(secrets.choice(alphabet) for _ in range(15))
+    return track_id
+
+
+def generate_order_track_id():
+    return f"#ord-{generate_track_id()}"
+
+
+def generate_suborder_track_id():
+    return f"#subord-{generate_order_track_id()}"

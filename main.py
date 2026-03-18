@@ -18,6 +18,7 @@ from app.worker.jobs import (
     call_health_endpoint_cron_task,
     mark_order_and_payment_abandoned,
     product_reservation,
+    warn_vendor_to_accept_order,
 )
 
 # Not going to be used in production
@@ -37,6 +38,7 @@ async def fastapi_lifespan(app: FastAPI):
         scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
     scheduler.add_job(product_reservation, CronTrigger(minute="*/1"))
     scheduler.add_job(mark_order_and_payment_abandoned, CronTrigger(minute="*/2"))
+    scheduler.add_job(warn_vendor_to_accept_order, CronTrigger(day="*"))
 
     scheduler.start()
 

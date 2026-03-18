@@ -9,6 +9,7 @@ from app.schemas.cart import (
     PaginatedCartResponse,
     UpdateCart,
 )
+from app.schemas.order import CheckoutInputSchema
 from app.schemas.shipments_info_crud import StoreShipmentsInfoResponse
 from app.service.cart_service import cart_service
 from app.service.order_srevice import order_service
@@ -100,13 +101,14 @@ async def delete_all_user_cart(current_user: CurrentActiveUser, db: dbSessionDep
     response_model=CheckoutResponse,
 )
 async def checkout_cart(
+    shipment_list: list[CheckoutInputSchema],
     db: dbSessionDep,
     current_user: CurrentActiveUser,
     request: Request,
     redis: redisSessionDep,
 ):
     return await order_service.checkout(
-        user=current_user, redis=redis, request=request, db=db
+        user=current_user, shipment_infos=shipment_list, redis=redis, request=request, db=db
     )
 
 @router.patch(

@@ -63,12 +63,27 @@ async def verify_code(
         Depends(rate_limiter.rate_limit_dependency(ip_times=3, ip_seconds=60))
     ],
 )
-async def login_user(
+async def resend_otp(
     login_data: LoginUser,
     background_tasks: BackgroundTasks,
     db: dbSessionDep,
 ):
     return await auth_service.login_user(login_data.email, db, background_tasks)
+
+
+@router.post(
+    "/login",
+    status_code=status.HTTP_200_OK,
+    response_model=BaseResponse,
+    dependencies=[
+        Depends(rate_limiter.rate_limit_dependency(ip_times=3, ip_seconds=60))
+    ],
+    description="Login user by sending otp to user provided email",
+)
+async def login_user(
+    login_data: LoginUser, background_task: BackgroundTasks, db: dbSessionDep
+):
+    return await auth_service.login_user(login_data.email, db, background_task)
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK, response_model=BaseResponse)
@@ -95,6 +110,7 @@ async def logout_user(
     summary="Refresh Access Token",
     status_code=status.HTTP_200_OK,
     response_model=BaseResponse,
+    description="Get a new access token, by using refresh token in request cookies",
 )
 async def refresh_access_token(db: dbSessionDep, request: Request, response: Response):
     return await auth_service.refresh_access_token(

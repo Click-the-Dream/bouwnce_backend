@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cart import Cart
 from app.models.products import product_domain
-from app.schemas.cart import CartResponse, PaginatedCartResponse
 from app.utils.exception import (
     BadRequestException,
     ForbiddenException,
@@ -30,7 +29,9 @@ class CartService:
 
         return cart_dict
 
-    async def create(self, cart_data: dict[str, Any], db: AsyncSession) -> CartResponse:
+    async def create(
+        self, cart_data: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
         try:
             product = await product_domain.get_product_by_id(cart_data["product_id"])
             if not product:
@@ -75,7 +76,7 @@ class CartService:
         db: AsyncSession,
         page: int | None = 1,
         page_size: int | None = 10,
-    ) -> PaginatedCartResponse:
+    ) -> dict[str, Any]:
 
         try:
             user_carts = await Cart.get_by_user_id(user_id, db, page, page_size)
@@ -105,7 +106,7 @@ class CartService:
         except ValueError as ve:
             raise NotFoundException(message=str(ve)) from None
 
-    async def get_by_id(self, id: str, db: AsyncSession) -> CartResponse:
+    async def get_by_id(self, id: str, db: AsyncSession) -> dict[str, Any]:
         try:
             cart = await Cart.get_by_id(id, db)
             if not cart:
@@ -128,7 +129,7 @@ class CartService:
 
     async def update(
         self, user_id: str, cart_id: str, update_data: dict[str, Any], db: AsyncSession
-    ) -> CartResponse:
+    ) -> dict[str, Any]:
         try:
             cart = await Cart.get_by_id(cart_id, db)
             if cart.user_id != user_id:

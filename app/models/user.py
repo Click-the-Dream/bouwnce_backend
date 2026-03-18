@@ -12,7 +12,14 @@ from app.models import BaseModel
 from app.models.wallet import UserWallet
 
 if TYPE_CHECKING:
-    from app.models import Cart, Order, Payment, RefreshToken, Store, Verification
+    from app.models import (
+        Cart,
+        Order,
+        Payment,
+        RefreshToken,
+        Store,
+        Verification,
+    )
 
 
 class User(BaseModel):
@@ -74,14 +81,14 @@ class User(BaseModel):
         return data_dict
 
     @classmethod
-    async def get_by_email(cls, email: str, db: AsyncSession) -> Self:
+    async def get_by_email(cls, email: str, db: AsyncSession) -> Self | None:
 
         result = await db.execute(select(cls).where(cls.email == email))
 
         return result.scalar_one_or_none()
 
     @classmethod
-    async def get_by_username(cls, username: str, db: AsyncSession) -> Self:
+    async def get_by_username(cls, username: str, db: AsyncSession) -> Self | None:
 
         result = await db.execute(select(cls).where(cls.username == username))
 
@@ -94,7 +101,7 @@ class User(BaseModel):
         db: AsyncSession,
         email: str | None = None,
         username: str | None = None,
-    ) -> Self:
+    ) -> Self | None:
 
         if email and username:
             query = select(cls).where(or_(cls.email == email, cls.username == username))

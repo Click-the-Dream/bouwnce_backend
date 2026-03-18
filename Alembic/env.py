@@ -15,11 +15,14 @@ from app.models import *
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
+env = os.getenv("FASTAPI_ENV", "staging")
+
+settings = config_options[env]
+print(settings.SQLALCHEMY_DATABASE_URL)
 config = context.config
 
-
 DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL
-
+print(DATABASE_URL)
 
 if DATABASE_URL is None:
     raise ValueError("SQLALCHEMY_DATABASE_URL is not set in .env file")

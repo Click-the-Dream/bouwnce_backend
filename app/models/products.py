@@ -77,7 +77,7 @@ class ProductDomain:
         quantity: int,
         available_quantity: int,
         redis: Redis,
-    ) -> bool:
+    ) -> tuple[bool, str | None]:
         """Reserve stock by adding to temporarily adding to redis"""
         product_key = self._compute_reserved_product_key(product_id)
         product_user_key = self._compute_reserved_product_user_key(product_id, user_id)
@@ -124,6 +124,8 @@ class ProductDomain:
 
                     await pipe.unwatch()
                     raise e
+
+            return False, "Error occured"
 
     async def release_product(self, product_id: str, user_id: str, redis: Redis):
         """Releases all the products that has been reserved"""

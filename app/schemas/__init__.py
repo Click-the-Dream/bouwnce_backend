@@ -1,22 +1,27 @@
 from app.schemas.contact_info_crud import (
     ContactInfoCreate,
     ContactInfoResponse,
+    ContactInfoResponseSchema,
     ContactInfoUpdate,
 )
 from app.schemas.payout_info_crud import (
     PayoutInfoCreate,
     PayoutInfoResponse,
+    PayoutInfoResponseSchema,
     PayoutInfoUpdate,
 )
 from app.schemas.shipments_info_crud import (
     ShipmentsInfoCreate,
     ShipmentsInfoResponse,
+    ShipmentsInfoResponseSchema,
     ShipmentsInfoUpdate,
 )
 from app.schemas.store_crud import (
     StoreCreate,
     StoreFullDetailsResponse,
+    StoreFullDetailsResponseSchema,
     StoreResponse,
+    StoreResponseSchema,
     StoreUpdate,
 )
 from app.schemas.vendor_dashboard import (
@@ -39,16 +44,21 @@ __all__ = [
     "BusinessInfoUpdate",
     "ContactInfoCreate",
     "ContactInfoResponse",
+    "ContactInfoResponseSchema",
     "ContactInfoUpdate",
     "PayoutInfoCreate",
     "PayoutInfoResponse",
+    "PayoutInfoResponseSchema",
     "PayoutInfoUpdate",
     "ShipmentsInfoCreate",
     "ShipmentsInfoResponse",
+    "ShipmentsInfoResponseSchema",
     "ShipmentsInfoUpdate",
     "StoreCreate",
     "StoreFullDetailsResponse",
+    "StoreFullDetailsResponseSchema",
     "StoreResponse",
+    "StoreResponseSchema",
     "StoreUpdate",
     "OverviewDashboardResponse",
     "RecentOrder",

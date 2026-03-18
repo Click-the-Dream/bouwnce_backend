@@ -3,7 +3,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
@@ -16,6 +17,7 @@ from app.worker.jobs import (
     call_health_endpoint_cron_task,
     mark_order_and_payment_abandoned,
     product_reservation,
+    warn_vendor_to_accept_order,
 )
 
 # Not going to be used in production
@@ -35,6 +37,7 @@ async def fastapi_lifespan(app: FastAPI):
         scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
     scheduler.add_job(product_reservation, CronTrigger(minute="*/1"))
     scheduler.add_job(mark_order_and_payment_abandoned, CronTrigger(minute="*/2"))
+    scheduler.add_job(warn_vendor_to_accept_order, CronTrigger(day="*"))
 
     scheduler.start()
 
@@ -70,6 +73,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Add Global Error handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+
+    message = str(exc) if settings.FASTAPI_ENV == "dev" else "Internal server Error"
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "status": "error",
+            "message": message,
+        },
+    )
+
 
 app.include_router(api_router, prefix=settings.API_STR)
 

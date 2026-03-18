@@ -1,6 +1,8 @@
 from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from uuid import UUID
+from datetime import datetime
 
 from app.utils.responses import BaseResponse
 
@@ -16,6 +18,7 @@ class ShipmentsInfoBase(BaseModel):
     delivery_time: Annotated[
         str, Field(min_length=2, examples=["3-5 business days", "1-2 business days"])
     ]
+    
 
 
 class ShipmentsInfoCreate(ShipmentsInfoBase):
@@ -27,6 +30,21 @@ class ShipmentsInfoResponseSchema(ShipmentsInfoBase):
     store_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
+
+
+class StoreShipmentsInfoResponseSchema(BaseModel):
+    store_name: Annotated[str, Field(examples=["John's Store"])]
+    store_id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
+    shipment_info: Annotated[
+        list[ShipmentsInfoResponseSchema], Field(description="Shipment info list")
+    ]
+
+
+class StoreShipmentsInfoResponse(BaseResponse):
+    data: Annotated[
+        list[StoreShipmentsInfoResponseSchema],
+        Field(description="Store shipments info response data"),
+    ]
 
 
 class ShipmentsInfoResponse(BaseResponse):

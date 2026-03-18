@@ -8,6 +8,7 @@ class Config(BaseModel):
     PORT: int = config("PORT", 8000, cast=int)
     ACCESS_TOKEN_TTL: str = config("ACCESS_TOKEN_TTL", default="15m")
     REFRESH_TOKEN_TTL: str = config("REFRESH_TOKEN_TTL", default="30d")
+    FASTAPI_ENV: str = config("FASTAPI_ENV", default="dev")
 
     SQLALCHEMY_DATABASE_URL: str
 

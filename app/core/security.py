@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -60,11 +62,22 @@ def verify_token(token: str) -> dict[str, Any]:
         ) from None
 
 
-def hash_data(data: str) -> str:
+def hash_token(token: str) -> str:
+    return hmac.new(
+        settings.SECRET_KEY.encode(), token.encode(), hashlib.sha256
+    ).hexdigest()
+
+
+def verify_hashed_token(new_token: str, hashed_token: str) -> bool:
+    new_hashed_token = hash_token(new_token)
+    return new_hashed_token == hashed_token
+
+
+def hash_password(data: str) -> str:
     return crytp.hash(data)
 
 
-def verify_data(plain_data: str, hashed_data: str) -> bool:
+def verify_password(plain_data: str, hashed_data: str) -> bool:
     return crytp.verify(plain_data, hashed_data)
 
 

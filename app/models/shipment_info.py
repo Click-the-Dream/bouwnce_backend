@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import UUID, ForeignKey, String
+from sqlalchemy import UUID, ForeignKey, Float, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import BaseModel
@@ -20,7 +20,7 @@ class ShipmentInfo(BaseModel):
         UUID(as_uuid=True), ForeignKey("stores.id", ondelete="CASCADE"), nullable=False
     )
     delivery_method: Mapped[str] = mapped_column(String, nullable=False)
-    delivery_fee: Mapped[str] = mapped_column(String, nullable=False)
+    delivery_fee: Mapped[float] = mapped_column(Float, nullable=False)
     delivery_time: Mapped[str] = mapped_column(String, nullable=False)
 
     store: Mapped[Store] = relationship(back_populates="shipment_info", uselist=False)

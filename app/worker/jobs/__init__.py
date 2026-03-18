@@ -3,9 +3,11 @@ from app.worker.jobs.product_reservation import (
     mark_order_and_payment_abandoned,
     product_reservation,
 )
+from app.worker.jobs.warn_vendor_about_order import warn_vendor_to_accept_order
 
 __all__ = [
     "call_health_endpoint_cron_task",
     "product_reservation",
     "mark_order_and_payment_abandoned",
+    "warn_vendor_to_accept_order",
 ]

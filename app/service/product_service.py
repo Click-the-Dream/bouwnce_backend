@@ -7,6 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.inventory import Inventory
 from app.models.products import product_domain
 from app.utils.cloudinary_utils import cleanup_temp_files, save_uploaded_file_temp
+from app.utils.exception import (
+    BadRequestException,
+    ForbiddenException,
+    InternalServerErrorException,
+    NotFoundException,
+)
 from app.utils.responses import response_builder
 
 
@@ -20,10 +26,8 @@ class ProductService:
     ) -> dict[str, Any]:
         try:
             if not images or len(images) == 0:
-                return response_builder(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    status="error",
-                    message="Product image is required to create a product",
+                raise BadRequestException(
+                    message="Product image is required to create a product"
                 )
 
             product_data["image_paths"] = await save_uploaded_file_temp(images)
@@ -49,18 +53,9 @@ class ProductService:
                 data=product_response,
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                status="error",
-                message=f"Error creating product: {str(ve)}",
-            )
-        except Exception as e:
-            print("Error occured creating a product: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while creating product",
-            )
+            raise BadRequestException(
+                message=f"Error creating product: {str(ve)}"
+            ) from None
 
     async def get_product_by_id(self, product_id: str, redis: Redis) -> dict[str, Any]:
 
@@ -68,12 +63,8 @@ class ProductService:
 
             product = await product_domain.get_product_by_id(product_id)
 
-            if product.state != "live" or product.status != "active":
-                return response_builder(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    status="error",
-                    message="product with specified ID not found",
-                )
+            if product.state != "live":
+                raise NotFoundException(message="product with specified ID not found")
 
             product_response = await product_domain.to_dict(product, redis)
 
@@ -84,20 +75,10 @@ class ProductService:
                 data=product_response,
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
+
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error occured while fetching product by id: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while fetching product",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def get_products_by_store(
         self,
@@ -107,7 +88,7 @@ class ProductService:
         category: str | None = None,
         page: int | None = 1,
         per_page: int | None = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         try:
             filter = {}
 
@@ -133,16 +114,14 @@ class ProductService:
                     "products": products,
                     "total": products_data["total"],
                     "page": products_data["page"],
-                    "per_page": products_data["per_page"],
+                    "page_size": products_data["per_page"],
                 },
             )
         except Exception as e:
             print("Error occured while fetching all product for vendor: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occurred while fetching all vendor products",
-            )
+            raise InternalServerErrorException(
+                message="Error occurred while fetching all vendor products"
+            ) from None
 
     async def get_products(
         self,
@@ -151,7 +130,7 @@ class ProductService:
         produdct_category: str | None = None,
         page: int | None = 1,
         per_page: int | None = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         filter_dict = {}
 
         if product_name:
@@ -177,16 +156,14 @@ class ProductService:
                     "products": products,
                     "total": product_data["total"],
                     "page": product_data["page"],
-                    "per_page": product_data["per_page"],
+                    "page_size": product_data["per_page"],
                 },
             )
         except Exception as e:
             print(f"Error occurred while fetching products: {str(e)}")
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occurred while fetching products",
-            )
+            raise InternalServerErrorException(
+                message="Error occurred while fetching products"
+            ) from None
 
     async def update_products(
         self,
@@ -200,11 +177,7 @@ class ProductService:
         try:
             product = await product_domain.get_product_by_id(product_id)
             if product.store_id != store_id:
-                return response_builder(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    status="error",
-                    message="Product doesn't belong to this store",
-                )
+                raise ForbiddenException(message="Product doesn't belong to this store")
 
             product = await product_domain.update_product(update_data, product_id)
 
@@ -228,16 +201,7 @@ class ProductService:
                 status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
             )
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error updating product: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occurred while updating product",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def toggle_current_store_product_state(
         self, store_id: str, product_id: str
@@ -246,10 +210,8 @@ class ProductService:
             product = await product_domain.get_product_by_id(product_id)
 
             if product.store_id != str(store_id):
-                return response_builder(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    status="error",
-                    message="Product doesn't belong the this store",
+                raise ForbiddenException(
+                    message="Product doesn't belong the this store"
                 )
 
             state = product.state
@@ -265,20 +227,10 @@ class ProductService:
                 status_code=status.HTTP_200_OK, status="error", message=message
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
+
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error occured while toggling product state: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while toggling product state",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def delete_products_by_id(
         self, product_id: str, store_id: str
@@ -286,10 +238,8 @@ class ProductService:
         try:
             product = await product_domain.get_product_by_id(product_id)
             if product.store_id != store_id:
-                return response_builder(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    status="error",
-                    message="Store cannot delete someone else product",
+                raise ForbiddenException(
+                    message="Store cannot delete someone else product"
                 )
 
             is_deleted = await product_domain.delete_product(product_id)
@@ -300,26 +250,13 @@ class ProductService:
                     message="successfully deleted product",
                 )
             else:
-                return response_builder(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    status="error",
-                    message="cannot delete product",
-                )
+                raise InternalServerErrorException(message="cannot delete product")
+
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
+
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error occured while deleting product: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="errro",
-                message="Error occured while deleting product",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def delete_all_store_products(self, store_id: str) -> dict[str, Any]:
         try:
@@ -333,16 +270,7 @@ class ProductService:
             )
 
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
-        except Exception as e:
-            print("Error occured while deleting all vendor's producs: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occurred while deleting all vendor's products",
-            )
+            raise NotFoundException(message=str(ve)) from None
 
     async def delete_product_image(
         self, product_id: str, image_public_id: str, store_id: str, redis: Redis
@@ -351,10 +279,8 @@ class ProductService:
 
             product = await product_domain.get_product_by_id(product_id)
             if product.store_id != store_id:
-                return response_builder(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    status="error",
-                    message="You cannot delete someone else product image",
+                raise ForbiddenException(
+                    message="You cannot delete someone else product image"
                 )
 
             product = await product_domain.delete_product_image(
@@ -368,20 +294,10 @@ class ProductService:
                 data=product_response,
             )
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
+            raise NotFoundException(message=str(ve)) from None
+
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
-        except Exception as e:
-            print("Error occurred while deleting image product: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while deleting image product",
-            )
+            raise BadRequestException(message=str(te)) from None
 
     async def get_product_categories(self) -> dict[str, Any]:
         try:
@@ -397,11 +313,9 @@ class ProductService:
             )
         except Exception as e:
             print("Error retrieving product categories: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while fetching product categories",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while fetching product categories"
+            ) from None
 
     async def create_product_category(self, data: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -417,11 +331,9 @@ class ProductService:
             )
         except Exception as e:
             print("Error occurred while creating category: ", str(e))
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while creating a category",
-            )
+            raise InternalServerErrorException(
+                message="Error occured while creating a category"
+            ) from None
 
     async def delete_product_category(self, id: str) -> dict[str, Any]:
         try:
@@ -432,20 +344,10 @@ class ProductService:
                 message="successfully deleted category",
             )
         except TypeError as te:
-            return response_builder(
-                status_code=status.HTTP_400_BAD_REQUEST, status="error", message=str(te)
-            )
+            raise BadRequestException(message=str(te)) from None
+
         except ValueError as ve:
-            return response_builder(
-                status_code=status.HTTP_404_NOT_FOUND, status="error", message=str(ve)
-            )
-        except Exception:
-            print("Error occured while deleting product category")
-            return response_builder(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                status="error",
-                message="Error occured while deleting product category",
-            )
+            raise NotFoundException(message=str(ve)) from None
 
 
 product_service = ProductService()

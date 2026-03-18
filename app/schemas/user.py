@@ -32,11 +32,34 @@ class UserResponsSchema(UserBase):
     otp: Annotated[str | None, Field(examples=["123456"])] = None
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
-    is_store_owner: Annotated[bool, Field(examples=[False])]
 
 
 class UserResponse(BaseResponse):
     data: Annotated[UserResponsSchema, Field(description="User response data")]
+
+
+class LoginUserResponseSchema(BaseModel):
+    user: Annotated[UserResponsSchema, Field(description="User Response data")]
+    access_token: Annotated[str, Field(description="Access token to login")]
+
+
+class LoginUserResponse(BaseResponse):
+    data: Annotated[
+        LoginUserResponseSchema, Field(description="Login user response data")
+    ]
+
+
+class PaginatedUserResponseSchema(BaseModel):
+    uses: Annotated[list[UserResponsSchema], Field(description="List of User response")]
+    page: Annotated[int, Field(examples=[2])]
+    page_size: Annotated[int, Field(examples=[10])]
+    total: Annotated[int, Field(examples=[100])]
+
+
+class PaginatedUserResponse(BaseResponse):
+    data: Annotated[
+        PaginatedUserResponseSchema, Field(description="Paginated user response")
+    ]
 
 
 class CodeVerification(BaseModel):

@@ -42,6 +42,7 @@ class SubOrder(BaseModel):
     )
     otp: Mapped[str | None] = mapped_column(String, nullable=True)
     username: Mapped[str] = mapped_column(String, nullable=False)
+    track_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
 
     order: Mapped[Order] = relationship(back_populates="suborders", uselist=False)
 

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Mbi7O1DavyPdl8kWdMKE4dxjRlQMH1ziOFK3q4CQwB785FZ75rWHfqChQXUKKSa
+\restrict YmiczFA2mmpfMd3Egb7F1SR2YOpb3lDEZaB9MfoSOTFEQ5sbWvJwda0PEbdMwJf
 
 -- Dumped from database version 17.2
 -- Dumped by pg_dump version 17.7 (Ubuntu 17.7-3.pgdg24.04+1)
@@ -18,29 +18,6 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
---
--- Name: waitlists; Type: TABLE; Schema: public; Owner: prisma_migration
---
-
-CREATE TABLE public.waitlists (
-    email character varying NOT NULL,
-    full_name character varying NOT NULL,
-    phone_number character varying NOT NULL,
-    institution character varying NOT NULL,
-    id uuid NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    deleted_at timestamp with time zone,
-    is_deleted boolean NOT NULL
-);
-
-
-ALTER TABLE public.waitlists OWNER TO prisma_migration;
 
 --
 -- Data for Name: waitlists; Type: TABLE DATA; Schema: public; Owner: prisma_migration
@@ -149,28 +126,58 @@ styledby1505@gmail.com	Abiodun Fathia Ayomide 	07085812883	Olabisi Onabanjo Univ
 aolawumi442@gmail.com	OLAWUMI AISHAT ABIDEMI	09122425847	Ladoke Akintola University of Technology, Ogbomoso	c923a3d9-3de8-40da-872e-4af66e218e3e	2025-12-22 04:36:02.354022+00	2025-12-22 04:36:02.354022+00	\N	f
 johnolaoluwaekundayo@gmail.com	Ekundayo John 	08162782636	Federal University of Technology, Akure	c0b6fdba-70a8-4204-96d9-2eabde3c688c	2025-12-24 19:22:25.887551+00	2025-12-24 19:22:25.887551+00	\N	f
 halimatamzat001@gmail.com	Amzat Halimat Omowunmi 	08101811538	University of Lagos	c8f02285-c53b-4a01-aa49-21a36d3a216b	2025-12-28 09:00:10.152595+00	2025-12-28 09:00:10.152595+00	\N	f
+stommy133@hotmail.com	Victorious Victor	08152161484	Olabisi Onabanjo University, Ago Iwoye	8e0c2da9-48cd-4e26-8ae9-fda3cf8eff9b	2026-01-09 20:28:48.61874+00	2026-01-09 20:28:48.61874+00	\N	f
+Ajayihabeeb997@gmail.com	Habeeb Ajayi	09036977142	Olabisi Onabanjo University, Ago Iwoye	15adf02a-21ad-458b-999d-486cfcb28f59	2026-01-09 21:53:50.346971+00	2026-01-09 21:53:50.346971+00	\N	f
+salaudeenabdulazeez077@gmail.com	Salaudeen Abdulazeez	08024768339	Olabisi Onabanjo University	e551107d-3f7e-43d8-ad14-38111f3ef0f9	2026-01-11 20:52:01.45575+00	2026-01-11 20:52:01.45575+00	\N	f
+mosesobayomi2@gmail.com	OBAYOMI MOSES BOLUWATIFE 	09025678625	Olabisi Onabanjo University, Ago Iwoye	2e2cb22e-ca9c-4e5b-a620-d25f39152201	2026-01-13 10:51:20.188233+00	2026-01-13 10:51:20.188233+00	\N	f
+abiolaolamilekan797@gmail.com	Abiola Olamilekan	09041156313	Olabisi Onabanjo University, Ago Iwoye	1b78b701-0215-4a23-bf11-b384e5986bce	2026-01-13 10:53:58.400724+00	2026-01-13 10:53:58.400724+00	\N	f
+odukoyafemi5@gmail.com	Odukoya Olabode Oluwafemi 	08050235818	Olabisi Onabanjo University, Ago Iwoye	507db4a4-cfa2-472d-b4b9-f0db3f747fc0	2026-01-13 10:55:48.935538+00	2026-01-13 10:55:48.935538+00	\N	f
+samueloluwafemi162@gmail.com	Olayeye Samuel 	07026000226	Olabisi Onabanjo University, Ago Iwoye	249a57f1-edf3-4719-bb5c-fef3d8d2a46d	2026-01-13 11:08:04.496779+00	2026-01-13 11:08:04.496779+00	\N	f
+olugbengadaniel130@gmail.com	Olugbenga Daniel	08157927623	Olabisi Onabanjo University, Ago Iwoye	c3934ec5-96bc-4629-bddf-856aadac37f0	2026-01-13 15:19:43.132185+00	2026-01-13 15:19:43.132185+00	\N	f
+mayorfox9@gmail.com	Okeshola Desmond	07039165368	Olabisi Onabanjo University, Ago Iwoye	2bf1df44-bab4-4a5d-a018-939660500e59	2026-01-13 15:28:03.995334+00	2026-01-13 15:28:03.995334+00	\N	f
+davidbabatunde484@gmail.com	Babatunde David Itunuoluwa	07016458993	Olabisi Onabanjo University, Ago Iwoye	51491739-8c64-4183-98f9-802eb4328f60	2026-01-13 15:36:37.662457+00	2026-01-13 15:36:37.662457+00	\N	f
+emmanueldekunle0@gmail.com	Alao 	08064698403	Olabisi Onabanjo University, Ago Iwoye	bb70b48d-a0bb-45a6-a8f2-12529ef651ba	2026-01-13 15:38:21.159683+00	2026-01-13 15:38:21.159683+00	\N	f
+osundairoazeezat@gmail.com	Azeezat Osundairo	09048916658	Olabisi Onabanjo University, Ago Iwoye	95f2a72f-1938-481e-a705-b7a6542fb40f	2026-01-14 12:57:18.740018+00	2026-01-14 12:57:18.740018+00	\N	f
+olunusimiracle@gmail.com	Olunusi Miracle Obaloluwa 	08134674447	Olabisi Onabanjo University, Ago Iwoye	44c43ddb-0b60-47d2-8ce3-578070a1a2b5	2026-01-14 13:25:55.582425+00	2026-01-14 13:25:55.582425+00	\N	f
+ojuolapelawal9@gmail.com	Lawal Temitayo 	08167888832	Olabisi Onabanjo University, Ago Iwoye	13d45611-f4ef-4a49-bbb2-769adb2d05f4	2026-01-14 13:38:29.999176+00	2026-01-14 13:38:29.999176+00	\N	f
+oluwaferanmidaniel15@gmail.com	Oluwaferanmi Daniel	09158543066	Olabisi Onabanjo University, Ago Iwoye	8d654739-8eda-4ea9-9185-eaba9bdcaf41	2026-01-14 14:01:45.704824+00	2026-01-14 14:01:45.704824+00	\N	f
+essajoe001@gmail.com	Esther Joseph 	09151874719	Olabisi Onabanjo University, Ago Iwoye	4589b04f-c38a-4975-a479-8c85699a6933	2026-01-14 18:54:00.207741+00	2026-01-14 18:54:00.207741+00	\N	f
+hikmateniola912@gmail.com	Eniola 	07066362375	Olabisi Onabanjo University, Ago Iwoye	076852d0-d6b3-4a54-80a5-92e7822829a2	2026-01-14 18:55:50.169097+00	2026-01-14 18:55:50.169097+00	\N	f
+ikeanyichidera400@gmail.com	Ikeanyi Chidera	07050340391	Olabisi Onabanjo University	a0133a55-8336-40e3-b6f1-50aa4031e7a9	2026-01-14 19:17:13.314277+00	2026-01-14 19:17:13.314277+00	\N	f
+osariemensuccessomere@gmail.com	Omere success osariemen	09050287633	Olabisi Onabanjo University, Ago Iwoye	1a32ae96-a9b0-48d6-ba70-4568c131442a	2026-01-14 19:24:13.72763+00	2026-01-14 19:24:13.72763+00	\N	f
+isnailtaiwo85@gmail.com	Ismail taiwo	08164238608	Olabisi Onabanjo University	50bb2fe9-4122-4d46-a1b1-3534324715df	2026-01-14 19:25:49.213625+00	2026-01-14 19:25:49.213625+00	\N	f
+jlucifer149@gmail.com	Samuel 	07059471598	Olabisi Onabanjo University, Ago Iwoye	b5bd3219-3649-47d3-8e7a-b4fdfcd3f155	2026-01-14 19:31:50.172261+00	2026-01-14 19:31:50.172261+00	\N	f
+boyejooluwatosin19@gmail.com	Boyejo oluwatosin Ayomide	08123015611	Abdu Gusau Polytechnic, Talata-Mafara	25a8b128-f330-480e-b9a6-74ccb96f5b2e	2026-01-17 08:46:21.644581+00	2026-01-17 08:46:21.644581+00	\N	f
+omolarasenami7@gmail.com	Amusa Omolara	09026896790	Olabisi Onabanjo University, Ago Iwoye	6075849e-bab5-4145-a6b6-e2a89e4569d1	2026-01-21 13:10:55.347236+00	2026-01-21 13:10:55.347236+00	\N	f
+oreoluwaadefowora8@gmail.com	Adefowora Ganiyat Oreoluwa	07054733155	Olabisi Onabanjo University, Ago Iwoye	30a25188-6e30-416b-821f-54a2183a6228	2026-02-04 19:26:18.091436+00	2026-02-04 19:26:18.091436+00	\N	f
+abbiebarbie67@gmail.com	Abigael Oluwafunmilayo 	07078781458	Olabisi Onabanjo University, Ago Iwoye	9a50112b-58e0-4a45-a051-b464d10f9ced	2026-02-04 20:09:21.087993+00	2026-02-04 20:09:21.087993+00	\N	f
+favourpatrick131@gmail.com	Favour Patrick	08127313597	Chukwuemeka Odumegwu Ojukwu University, Uli	b7e4520c-aeec-4da9-b01a-af997abc2627	2026-02-06 07:42:22.165546+00	2026-02-06 07:42:22.165546+00	\N	f
+chukwumapraise84@gmail.com	Praise Chukwuma	08067173592	Chukwuemeka Odumegwu Ojukwu University, Uli	9024c3e6-e009-4fbb-bca6-af147fc7da72	2026-02-06 07:42:23.791869+00	2026-02-06 07:42:23.791869+00	\N	f
+michellechibunkem@gmail.com	Chibunkem Michelle	2349011792118	Chukwuemeka Odumegwu Ojukwu University, Uli	112153c5-10ca-4f7b-856a-11e83bf80922	2026-02-06 07:42:26.584305+00	2026-02-06 07:42:26.584305+00	\N	f
+izuchukwuhenry@gmail.com	Nduakpo izuchukwu henry	07085086523	Chukwuemeka Odumegwu Ojukwu University, Uli	5741740c-2338-48ce-b6ef-9c10b2574d5b	2026-02-06 09:51:04.232088+00	2026-02-06 09:51:04.232088+00	\N	f
+eniolabasira93@gmail.com	Jimoh Eniola Basira 	09042297441	Olabisi Onabanjo University, Ago Iwoye	52ce691b-d833-4430-aa84-23ab028a8144	2026-02-06 11:43:46.022973+00	2026-02-06 11:43:46.022973+00	\N	f
+festusprecious45@gmail.com	festus precious	09124160687	Nnamdi Azikiwe University, Awka	34acd8a0-0030-4e05-a2a9-51f5b36e590b	2026-02-08 15:02:30.729799+00	2026-02-08 15:02:30.729799+00	\N	f
+janefranceschioma248@gmail.com	Nwabuike chioma janefrances 	08146970865	Chukwuemeka Odumegwu Ojukwu University, Uli	4ba0cddb-fa16-46df-8883-4bc7432b1a5c	2026-02-19 08:25:19.826533+00	2026-02-19 08:25:19.826533+00	\N	f
+oluebubemirabel515@gmail.com	Oluebube Mirabel	08146295991	Chukwuemeka Odumegwu Ojukwu University, Uli	839d3eab-84c5-494b-af38-d2323be4ae46	2026-02-19 09:32:30.638084+00	2026-02-19 09:32:30.638084+00	\N	f
+chinemelemfavour@gmail.com	Favourite 	07035103498	Chukwuemeka Odumegwu Ojukwu University, Uli	bd69ee69-aa16-4def-a3f5-b5d063b6e240	2026-02-19 09:35:26.622484+00	2026-02-19 09:35:26.622484+00	\N	f
+praisechikezie57@gmail.com	CHIKEZIE TOCHUKWU PRAISE 	09113568572	Chukwuemeka Odumegwu Ojukwu University, Uli	ef811498-95f0-4dda-8bdf-abdd1825d7cd	2026-02-19 10:21:31.209794+00	2026-02-19 10:21:31.209794+00	\N	f
+mannyfrosh26@gmail.com	Nweke Francis chiemerie 	09160282567	Chukwuemeka Odumegwu Ojukwu University, Uli	d1e0c9d6-9180-436c-bef3-3da5870fa105	2026-02-19 11:08:19.811745+00	2026-02-19 11:08:19.811745+00	\N	f
+mikaillawal87@gmail.com	Mika'il Muhammad lawal 	09037376628	Federal University of Technology, Minna	a5f04e3f-7d24-4a0e-bfa8-40bab7f1c7c6	2026-02-19 11:38:40.450206+00	2026-02-19 11:38:40.450206+00	\N	f
+idehofaithential@gmail.com	Ideho faith Oghenerukevwe 	09078310514	Chukwuemeka Odumegwu Ojukwu University, Uli	cc05a47e-6508-4fe3-805a-04d6618b6089	2026-02-19 12:05:00.268296+00	2026-02-19 12:05:00.268296+00	\N	f
+chukwuemekap9@gmail.com	Paul Ebuka Chukwuemeka	08144439340	Chukwuemeka Odumegwu Ojukwu University, Uli	92b00b5e-9ecd-4b88-afe8-d9e88ede20e0	2026-02-19 20:50:08.591503+00	2026-02-19 20:50:08.591503+00	\N	f
+ebubechukwuarize@gmail.com	Arize	09061296800	Akwa Ibom State University of Technology, Uyo	f6528b79-b8de-45c7-b515-9d6339bebbf2	2026-02-19 20:58:43.305211+00	2026-02-19 20:58:43.305211+00	\N	f
+scholasticaeze61@gmail.com	Ezejelue kosisochukwu scholastica 	09032575452	Chukwuemeka Odumegwu Ojukwu University, Uli	bbade3c3-36de-40b8-be45-2c6f4f3bf77f	2026-02-20 01:34:29.578186+00	2026-02-20 01:34:29.578186+00	\N	f
+fahvourdice@gmail.com	Okonkwo favour amarachi 	08137425799	Chukwuemeka Odumegwu Ojukwu University, Uli	d23ce91c-07e8-46c4-a90f-d9d15adbf091	2026-02-20 07:42:10.402279+00	2026-02-20 07:42:10.402279+00	\N	f
+umaryannchiamaka@gmail.com	Udoba Maryann Chiamaka 	08027693602	Chukwuemeka Odumegwu Ojukwu University, Uli	0751a7a4-b791-4c57-a3e8-66ff60586ee0	2026-02-20 09:03:47.705891+00	2026-02-20 09:03:47.705891+00	\N	f
+ebubechukwujasper@gmail.com	Arize Ebubechukwu jasper	09061296800	Abia State College of Education (Technical), Arochukwu	b81013e2-6ab5-477e-8609-d2f0c18d7970	2026-02-19 21:00:09.165638+00	2026-02-19 21:00:09.165638+00	\N	f
+stannwoti1@gmail.com	Stan Nwoti	07062402982	Nnamdi Azikiwe University, Awka	00e88e69-f716-40f4-845b-1cff782d5f7d	2026-02-20 16:07:53.927541+00	2026-02-20 16:07:53.927541+00	\N	f
+Okekeonyinyechukwu55@gmail.com	Okeke onyinyechukwu Angela 	07073498981	Nnamdi Azikiwe University, Awka	e0f4666b-b3db-46bc-8bc6-d7bab5a77445	2026-02-20 21:58:58.809469+00	2026-02-20 21:58:58.809469+00	\N	f
 \.
-
-
---
--- Name: waitlists waitlists_email_key; Type: CONSTRAINT; Schema: public; Owner: prisma_migration
---
-
-ALTER TABLE ONLY public.waitlists
-    ADD CONSTRAINT waitlists_email_key UNIQUE (email);
-
-
---
--- Name: waitlists waitlists_pkey; Type: CONSTRAINT; Schema: public; Owner: prisma_migration
---
-
-ALTER TABLE ONLY public.waitlists
-    ADD CONSTRAINT waitlists_pkey PRIMARY KEY (id);
 
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Mbi7O1DavyPdl8kWdMKE4dxjRlQMH1ziOFK3q4CQwB785FZ75rWHfqChQXUKKSa
+\unrestrict YmiczFA2mmpfMd3Egb7F1SR2YOpb3lDEZaB9MfoSOTFEQ5sbWvJwda0PEbdMwJf
 

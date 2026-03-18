@@ -1,16 +1,23 @@
 from typing import Annotated, Any, Literal
 
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from uuid import UUID
+from datetime import datetime
 
 
 class BaseResponse(BaseModel):
     status_code: Annotated[int, Field(examples=[200])]
     status: Annotated[Literal["success", "error"], Field(examples=["success", "error"])]
     message: Annotated[str, Field(examples=["message is successful"])]
-    data: dict[str, Any] | list[Any] | None
+    data: dict[str, Any] | list[Any] | None = None
 
+    
+    model_config = ConfigDict(
+        json_encoders={
+            datetime: lambda v: v.isoformat(),
+            UUID: lambda v: str(v),
+        }
+    )
 
 # 400
 class BadRequestResponse(BaseModel):
@@ -61,6 +68,8 @@ def response_builder(
     if data is not None:
         response_data["data"] = data
 
-    return JSONResponse(
-        status_code=status_code, content=jsonable_encoder(response_data)
-    )
+    # return JSONResponse(
+    #     status_code=status_code, content=jsonable_encoder(response_data)
+    # )
+
+    return response_data

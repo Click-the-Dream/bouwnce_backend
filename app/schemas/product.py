@@ -20,7 +20,7 @@ class ProductBase(BaseModel):
 class ProductResponseSchema(ProductBase):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     store_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
-    status: Annotated[str, Field(examples=["draft"])]
+    state: Annotated[str, Field(examples=["draft"])]
     images: list[Images]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
@@ -28,6 +28,21 @@ class ProductResponseSchema(ProductBase):
 
 class ProductResponse(BaseResponse):
     data: Annotated[ProductResponseSchema, Field(description="Product response data")]
+
+
+class PaginatedProductResponseSchema(BaseModel):
+    products: Annotated[
+        list[ProductResponseSchema], Field(description="List of products data")
+    ]
+    page: Annotated[int, Field(examples=[1])]
+    total: Annotated[int, Field(examples=[100])]
+    page_size: Annotated[int, Field(examples=[10])]
+
+
+class PaginatedProductResponse(BaseResponse):
+    data: Annotated[
+        PaginatedProductResponseSchema, Field(description="Paginated Product data")
+    ]
 
 
 class ProductUpdate(BaseModel):

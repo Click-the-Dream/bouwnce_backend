@@ -14,7 +14,7 @@ class ShipmentsInfoBase(BaseModel):
     delivery_method: Annotated[
         str, Field(min_length=2, examples=["Standard", "Express"])
     ]
-    delivery_fee: Annotated[str, Field(min_length=1, examples=["5.00", "10.00"])]
+    delivery_fee: Annotated[float, Field(examples=[5.0, 10.0])]
     delivery_time: Annotated[
         str, Field(min_length=2, examples=["3-5 business days", "1-2 business days"])
     ]
@@ -61,9 +61,7 @@ class ShipmentsInfoUpdate(BaseModel):
     delivery_method: Annotated[
         str | None, Field(min_length=2, examples=["Standard", "Express"])
     ] = None
-    delivery_fee: Annotated[
-        str | None, Field(min_length=1, examples=["5.00", "10.00"])
-    ] = None
+    delivery_fee: Annotated[float | None, Field(examples=[5.0, 10.0])] = None
     delivery_time: Annotated[
         str | None,
         Field(min_length=2, examples=["3-5 business days", "1-2 business days"]),

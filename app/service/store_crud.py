@@ -127,7 +127,7 @@ class StoreCRUDService:
 
         return response_builder(
             status_code=status.HTTP_200_OK,
-            status="sucess",
+            status="success",
             message="Status fetched successfully",
             data={
                 "is_onboarded": is_onboarded,

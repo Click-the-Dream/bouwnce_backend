@@ -31,7 +31,7 @@ async def create_shipment_info(
 
 @router.get(
     "/",
-    response_model=list[ShipmentsInfoResponse],
+    response_model=ShipmentsInfoResponse,
     status_code=status.HTTP_200_OK,
     summary="Get shipment information by user ID",
 )

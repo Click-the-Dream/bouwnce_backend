@@ -306,7 +306,7 @@ class ProductService:
                 await product_domain.to_dict(category) for category in categories
             ]
             return response_builder(
-                status_code=status.HTTP_204_NO_CONTENT,
+                status_code=status.HTTP_200_OK,
                 status="success",
                 message="Successfully get all available product categories",
                 data=categories_response,

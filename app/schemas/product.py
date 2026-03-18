@@ -70,3 +70,9 @@ class CategoryResponseSchema(BaseModel):
 
 class CategoryResponse(BaseResponse):
     data: Annotated[CategoryResponseSchema, Field(description="Category response data")]
+
+
+class CategoryListResponse(BaseResponse):
+    data: Annotated[
+        list[CategoryResponseSchema], Field(description="Category list response data")
+    ]

@@ -3,6 +3,7 @@ from fastapi.requests import Request
 
 from app.api.dependencies import CurrentActiveUser, dbSessionDep, redisSessionDep
 from app.schemas.cart import (
+    BaseResponse,
     CartCreate,
     CartResponse,
     CheckoutResponse,
@@ -21,7 +22,7 @@ router = APIRouter(prefix="/carts", tags=["Carts"])
     "/",
     summary="Create a new cart for user",
     status_code=status.HTTP_201_CREATED,
-    response_model=CartResponse,
+    response_model=CartResponse | BaseResponse,
 )
 async def create_cart(
     cart_data: CartCreate, current_user: CurrentActiveUser, db: dbSessionDep

@@ -260,7 +260,7 @@ class AuthService:
         hashed_refresh_token = hash_token(new_refresh_token)
 
         await RefreshToken.create_refresh_token(
-            user_id=user.id,
+            user_id=str(user.id),
             token=hashed_refresh_token,
             device_id=device_id,
             user_agent=request.headers.get("user-agent", "unknown"),

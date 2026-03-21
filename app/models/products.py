@@ -13,8 +13,12 @@ from app.utils.cloudinary_utils import delete_folder, delete_images, upload_imag
 
 
 class Images(BaseModel):
-    url: str
-    public_id: str
+    public_id: Annotated[
+        str, Field(examples=["a0e43d-1ccc-4370-a32e-41812280b26e/zjejpt55jhouwwwplllo"])
+    ]
+    url: Annotated[str, Field(examples=["http://image_url.png"])]
+
+
 
 
 class Category(BaseDocument):

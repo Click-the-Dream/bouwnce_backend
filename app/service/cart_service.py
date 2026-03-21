@@ -4,6 +4,7 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cart import Cart
+from app.models.store import Store
 from app.models.products import product_domain
 from app.utils.exception import (
     BadRequestException,
@@ -74,21 +75,55 @@ class CartService:
         self,
         user_id: str,
         db: AsyncSession,
-        page: int | None = 1,
-        page_size: int | None = 10,
+        page: int = 1,
+        page_size: int = 10,
     ) -> dict[str, Any]:
 
         try:
             user_carts = await Cart.get_by_user_id(user_id, db, page, page_size)
+            carts = user_carts["data"]
+       
+            if not carts:
+                return response_builder(
+                    status_code=status.HTTP_200_OK,
+                    status="success",
+                    message="No carts found",
+                    data={
+                        "carts": [],
+                        "total": 0,
+                        "page": page,
+                        "page_size": page_size,
+                    },
+                )
+
+            # Batch fetch products
+            product_ids = {cart.product_id for cart in carts}
+            products = await product_domain.get_products_by_ids(list(product_ids))
+            product_map = {str(product.id): product for product in products}
+
+            # Batch fetch stores
+            store_ids = {product.store_id for product in products}
+            stores = await Store.get_by_ids(list(store_ids), db)
+            store_map = {str(store.id): store for store in stores}
 
             cart_responses = []
 
-            for cart in user_carts["data"]:
-                try:
-                    cart_response = await self._formulate_response(cart)
-                    cart_responses.append(cart_response)
-                except ValueError:
-                    pass
+            for cart in carts:
+                product = product_map.get(str(cart.product_id))
+                
+                if not product:
+                    continue
+
+                store = store_map.get(product.store_id)
+                if not store:
+                    continue
+                
+                cart_dict = cart.to_dict()
+                cart_dict["user_id"] = str(cart.user_id)
+                cart_dict["store"] = store.to_dict()
+                cart_dict["product"] = await product_domain.to_dict(product)
+
+                cart_responses.append(cart_dict)
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -101,6 +136,7 @@ class CartService:
                     "page_size": user_carts["page_size"],
                 },
             )
+
         except TypeError as te:
             raise BadRequestException(message=str(te)) from None
         except ValueError as ve:

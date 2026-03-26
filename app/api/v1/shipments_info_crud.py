@@ -7,6 +7,7 @@ from app.schemas import (
     ShipmentsInfoCreate,
     ShipmentsInfoResponse,
     ShipmentsInfoUpdate,
+    BaseResponse
 )
 from app.service import shipment_info_service
 
@@ -15,7 +16,7 @@ router = APIRouter(tags=["Shipment Information"], prefix="/shipment")
 
 @router.post(
     "/",
-    response_model=ShipmentsInfoResponse,
+    response_model=BaseResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create shipment information",
 )

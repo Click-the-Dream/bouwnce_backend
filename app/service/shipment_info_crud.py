@@ -24,13 +24,12 @@ class ShipmentInfoCRUDService:
         return response_builder(
             status_code=status.HTTP_201_CREATED,
             status="success",
-            message="Shipment info created successfully.",
-            data=new_shipment,
+            message="Shipment info created successfully."
         )
 
     async def get(self, store: Store) -> dict[str, Any]:
 
-        shipments: ShipmentInfo | None = store.shipment_info
+        shipments: list[ShipmentInfo] | None = store.shipment_info
         if not shipments:
             raise NotFoundException(message="Shipment info not found.")
 
@@ -51,7 +50,7 @@ class ShipmentInfoCRUDService:
         self, shipment_id: str, db: AsyncSession, data: dict[str, Any], store: Store
     ) -> dict[str, Any]:
 
-        shipments: ShipmentInfo | None = store.shipment_info
+        shipments: list[ShipmentInfo] | None = store.shipment_info
         if not shipments:
             raise NotFoundException(message="Shipment info not found.")
 

@@ -78,6 +78,7 @@ class ProductService:
             raise NotFoundException(message=str(ve)) from None
 
         except TypeError as te:
+            print(te)
             raise BadRequestException(message=str(te)) from None
 
     async def get_products_by_store(

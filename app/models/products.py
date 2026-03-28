@@ -401,7 +401,6 @@ class ProductDomain:
             raise TypeError(f"Invalid product id: {id}") from None
 
         product = await self.Product.find_one(self.Product.id == ObjectId(id))
-        print("I get here")
         if not product:
             raise ValueError(f"product with product id {id} not found")
         return product

@@ -30,8 +30,8 @@ class CartCreate(BaseModel):
 class CartResponseSchema(BaseModel):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     user_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
-    product: ProductResponse
-    store: StoreResponse
+    product: Annotated[ProductResponse, Field(description="Product detail response")]
+    store: Annotated[StoreResponse | None, Field(description="Store details response")] = None
     quantity: Annotated[int, Field(gt=0, examples=[2])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]

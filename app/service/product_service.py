@@ -62,12 +62,12 @@ class ProductService:
         try:
 
             product = await product_domain.get_product_by_id(product_id)
-
+            print(product)
             if product.state != "live":
                 raise NotFoundException(message="product with specified ID not found")
 
             product_response = await product_domain.to_dict(product, redis)
-
+            print(product_response)
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",
@@ -78,7 +78,6 @@ class ProductService:
             raise NotFoundException(message=str(ve)) from None
 
         except TypeError as te:
-            print(te)
             raise BadRequestException(message=str(te)) from None
 
     async def get_products_by_store(

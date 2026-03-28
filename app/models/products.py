@@ -175,7 +175,7 @@ class ProductDomain:
     async def decrease_product_stock_and_increase_total_sales(
         self, product_id: str, quantity: int
     ) -> bool:
-        await self.Product.find(Product.id == ObjectId(product_id)).update(
+        self.Product.find(Product.id == ObjectId(product_id)).update(
             {"$inc": {"stock": (-quantity), "total_sales": quantity}}
         )
         return True
@@ -401,6 +401,7 @@ class ProductDomain:
             raise TypeError(f"Invalid product id: {id}") from None
 
         product = await self.Product.find_one(self.Product.id == ObjectId(id))
+        print("I get here")
         if not product:
             raise ValueError(f"product with product id {id} not found")
         return product

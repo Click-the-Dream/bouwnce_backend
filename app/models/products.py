@@ -70,7 +70,7 @@ class ProductDomain:
         reserved_stock = await redis.get(redis_key)
         if reserved_stock is None:
             return obj.stock
-        print(reserved_stock)
+        
         avaialble = obj.stock - int(reserved_stock)
         return max(avaialble, 0)
 

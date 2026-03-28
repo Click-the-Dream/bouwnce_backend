@@ -25,7 +25,7 @@ async def get_vendor_dashboard_overview(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     date_range: str = Query(
-        None,
+        "this_month",
         description="Date range for the overview",
         regex="^(today|yesterday|last_7_days|last_30_days|this_month|custom)$",
     ),
@@ -35,7 +35,7 @@ async def get_vendor_dashboard_overview(
     end_date: str = Query(
         None, description="End date for the overview", example="2023-01-31"
     ),
-) -> JSONResponse:
+):
 
     if date_range == "custom":
         if not start_date or not end_date:
@@ -68,7 +68,7 @@ async def get_wallet_dashboard(
     current_store: CurrentStore,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-) -> JSONResponse:
+):
     return await VendorDashBoardService.get_dashboard_wallet(
         session=session, current_store=current_store, page=page, page_size=page_size
     )
@@ -92,7 +92,7 @@ async def vendor_orders_dashboard(
     order_dir: str = Query(
         "desc", regex="^(asc|desc)$", description="Sort direction (asc/desc)"
     ),
-) -> JSONResponse:
+):
     return await VendorDashBoardService.get_vendor_orders(
         session=session,
         store_id=current_user.id,

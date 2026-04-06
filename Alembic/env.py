@@ -14,7 +14,7 @@ from app.models import *
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
-env = os.getenv("FASTAPI_ENV", "development")
+env = os.getenv("FASTAPI_ENV", "staging")
 
 settings = config_options[env]
 print(settings.SQLALCHEMY_DATABASE_URL)

@@ -83,7 +83,7 @@ class VendorDashBoardService:
         }
 
         return response_builder(
-            status="Success",
+            status="success",
             message="Dashboard data fetched successfully.",
             data=dashboard,
             status_code=status.HTTP_200_OK,
@@ -134,7 +134,7 @@ class VendorDashBoardService:
         }
 
         return response_builder(
-            status="Success",
+            status="success",
             message="Dashboard wallet fetched successfully.",
             data=data,
             status_code=status.HTTP_200_OK,
@@ -201,7 +201,7 @@ class VendorDashBoardService:
         }
 
         return response_builder(
-            status="Success",
+            status="success",
             message="Orders fetched successfully",
             data=data,
             status_code=status.HTTP_200_OK,
@@ -252,7 +252,7 @@ class VendorDashBoardService:
         }
 
         return response_builder(
-            status="Success",
+            status="success",
             message="Customers fetched successfully",
             status_code=status.HTTP_200_OK,
             data=data,

@@ -10,6 +10,7 @@ from app.api.dependencies import (
 )
 from app.schemas.product import (
     CategoryCreate,
+    CategoryListResponse,
     CategoryResponse,
     PaginatedProductResponse,
     ProductResponse,
@@ -28,7 +29,7 @@ ImageUpdate = Annotated[list[UploadFile] | None, File(...)]
     summary="List of available product categories that you can choose from when creating a product",
     description="When creating a product, you must only use from the list of available categories",
     status_code=status.HTTP_200_OK,
-    response_model=list[CategoryResponse],
+    response_model=CategoryListResponse,
 )
 async def get_all_product_categories():
     return await product_service.get_product_categories()

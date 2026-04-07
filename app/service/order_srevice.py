@@ -1,5 +1,5 @@
-from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi import status
 from fastapi.requests import Request
@@ -7,16 +7,14 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 
-from app.core.security import genrate_verification_code
 from app.models.cart import Cart
 from app.models.order import Order, ProductMetadata
-from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.products import product_domain
 from app.models.store import Store
-from app.models.suborder import SubOrder
 from app.models.user import User
 from app.schemas.order import CheckoutInputSchema
+from app.schemas.events import PaidOrderEvent
 from app.service.payment.paystack import paystack_service
 from app.utils.exception import (
     BadRequestException,
@@ -26,10 +24,9 @@ from app.utils.exception import (
     InternalServerErrorException,
     NotFoundException,
 )
-from app.utils.helper import generate_order_track_id, generate_suborder_track_id
+from app.utils.helper import generate_order_track_id
 from app.utils.responses import response_builder
-from app.worker.tasks.email import send_email_using_worker 
-from app.core.config import settings
+from app.worker.tasks.order_processor import process_paid_order
 
 
 class OrderService:
@@ -343,114 +340,34 @@ class OrderService:
         if (order.total_amount * 100) != data["amount"]:  # Convert to naira from kobo
             raise ConflictException(message="amount mismatch")
 
-        # The username of the user is needed for the suborder
-        user = await Order.fetch_owner_of_order(str(order.user_id), db)
-        if not user:
-            raise ConflictException(message="no user for order found")
+        queue_key = f"order_processing:queued:{reference}"
+        queued = await redis.set(queue_key, "1", ex=900, nx=True)
 
-        grouped_products_by_store = order.products
-
-        now = datetime.now(UTC)
-        year = now.year
-
-        # Create Suborders and order items
-        for store_product in grouped_products_by_store:
-            store_id, products_data = next(iter(store_product.items()))
-            # Generate Otp
-            store = await Store.get_by_id(store_id, db)
-            otp = genrate_verification_code()
-
-            suborder_data = {
-                "store_id": store_id,
-                "order_id": order.id,
-                "total_amount": products_data["total_amount"],
-                "otp": otp,
-                "username": user.username,
-                "status": "paid",
-                "track_id": generate_suborder_track_id(),
-            }
-            suborder = await SubOrder.create(suborder_data, db)
-
-            for product in products_data["products"]:
-                order_item_data = {
-                    "product_id": product["id"],
-                    "suborder_id": suborder.id,
-                    "quantity": product["quantity"],
-                    "product_snapshot": {
-                        "name": product["name"],
-                        "store_id": product["store_id"],
-                        "category": product["category"],
-                        "images": product["images"],
-                    },
-                    "unit_price": product["amount"],
-                    "line_price": float(product["amount"]) * product["quantity"],
-                }
-                await OrderItem.create(order_item_data, db)
-
-                # Decrease the stock and increase total sales of product (can be pushed to worker)
-                await product_domain.decrease_product_stock_and_increase_total_sales(
-                    product["id"], product["quantity"]
-                )
-
-            # Release all the reserved products (can be pushed to worker)
-            await Order.release_reserved_products(
-                products_data["products"], str(user.id), redis
+        if not queued:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Order processing already queued",
             )
 
-            # update store's wallet (can be pushed to worker)
-            await store.update_store_wallet(amount=products_data["total_amount"], db=db)
-
-            # Send email to vendor for order
-            context = {
-                "vendor_name": store.name,
-                "username": user.username,
-                "track_id": str(suborder.track_id),
-                "order_link": "#",
-                "year": year,
-            }
-            template = "vendor_alert_order.html"
-            email_to = store.email
-            subject = "New Order"
-
-            send_email_using_worker.delay(
-                email_to=email_to,
-                subject=subject,
-                context=context,
-                template_name=template,
+        try:
+            event_payload = PaidOrderEvent(
+                event_id=str(data.get("id") or uuid4()),
+                reference=reference,
+                amount=int(data["amount"]),
             )
 
-        # Mark Both order and payment paid and successful respectively
-        await order.update(db, {"status": "paid"})
-        await Payment.update_by_id(str(order.payment_id), {"status": "successful"}, db)
-
-        # Clear User cart
-        await Cart.delete_by_user_id(str(user.id), db)
-
-        # Send an email to buyer that order has been received
-        context = {
-            "customer_name": user.username,
-            "year": year,
-            "track_id": str(order.track_id),
-            "order_date": now.isoformat(),
-            "currency": "NGN",
-            "total_amount": order.total_amount,
-            "order_link": "#",
-        }
-        template = "buyer_order_confirmation.html"
-        email_to = user.email
-        subject = "Order Received"
-
-        send_email_using_worker.delay(
-            email_to=email_to,
-            subject=subject,
-            context=context,
-            template_name=template,
-        )
+            process_paid_order.delay(event_payload.model_dump(mode="json"))
+        except Exception:
+            await redis.delete(queue_key)
+            raise InternalServerErrorException(
+                message="Error queueing order processing"
+            ) from None
 
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
-            message="Successfully proccessed order",
+            message="Payment accepted and queued for processing",
         )
 
     async def fetch_user_orders(

@@ -6,8 +6,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-import alembic_postgresql_enum
-
+from app.core.config import config_options
 from app.core.config import settings
 from app.db.postgres_db_conn import Base
 from app.models import *
@@ -15,14 +14,16 @@ from app.models import *
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
-env = os.getenv("FASTAPI_ENV", "staging")
-
-settings = config_options[env]
-print(settings.SQLALCHEMY_DATABASE_URL)
+env = (os.getenv("FASTAPI_ENV") or "development").lower()
+env_aliases = {
+    "dev": "development",
+    "prod": "production",
+}
+normalized_env = env_aliases.get(env, env)
+settings = config_options.get(normalized_env, config_options["development"])
 config = context.config
 
 DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL
-print(DATABASE_URL)
 
 if DATABASE_URL is None:
     raise ValueError("SQLALCHEMY_DATABASE_URL is not set in .env file")

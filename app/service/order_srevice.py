@@ -9,6 +9,7 @@ from datetime import timedelta
 
 from app.models.cart import Cart
 from app.models.order import Order, ProductMetadata
+from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.products import product_domain
 from app.models.store import Store
@@ -27,6 +28,13 @@ from app.utils.exception import (
 from app.utils.helper import generate_order_track_id
 from app.utils.responses import response_builder
 from app.worker.tasks.order_processor import process_paid_order
+from app.worker.event_system import (
+    EventNames,
+    OrderCompleteEvent,
+    OrderItemAcceptEvent,
+    OrderItemCancelEvent,
+    dispatch_event,
+)
 
 
 class OrderService:
@@ -368,6 +376,75 @@ class OrderService:
             status_code=status.HTTP_200_OK,
             status="success",
             message="Payment accepted and queued for processing",
+        )
+
+    async def cancel_order(
+        self,
+        order_item_id: str,
+        db: AsyncSession,
+        current_user: User,
+    ) -> dict[str, Any]:
+        order_item = await OrderItem.get_by_id(order_item_id, db)
+        suborder = order_item.suborder
+        order = suborder.order if suborder else None
+
+        if not order or str(order.user_id) != str(current_user.id):
+            raise ForbiddenException(message="You cannot cancel this order item")
+
+        await dispatch_event(
+            EventNames.ORDER_ITEM_CANCEL,
+            OrderItemCancelEvent(order_item_id=order_item_id),
+            db=db,
+            redis=None,
+        )
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Order item cancelled successfully",
+        )
+
+    async def accept_order(
+        self, order_item_id: str, db: AsyncSession, current_user: User
+    ) -> dict[str, Any]:
+        order_item = await OrderItem.get_by_id(order_item_id, db)
+        suborder = order_item.suborder
+        store = suborder.store if suborder else None
+
+        if not store or str(store.user_id) != str(current_user.id):
+            raise ForbiddenException(message="You cannot accept this order item")
+
+        await dispatch_event(
+            EventNames.ORDER_ITEM_ACCEPT,
+            OrderItemAcceptEvent(order_item_id=order_item_id),
+            db=db,
+            redis=None,
+        )
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Order item accepted successfully",
+        )
+
+    async def complete_order(
+        self, order_id: str, db: AsyncSession, current_user: User
+    ) -> dict[str, Any]:
+        order = await Order.get_by_id(order_id, db)
+        if str(order.user_id) != str(current_user.id):
+            raise ForbiddenException(message="You cannot complete this order")
+
+        await dispatch_event(
+            EventNames.ORDER_COMPLETE,
+            OrderCompleteEvent(order_id=order_id),
+            db=db,
+            redis=None,
+        )
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Order marked as completed successfully",
         )
 
     async def fetch_user_orders(

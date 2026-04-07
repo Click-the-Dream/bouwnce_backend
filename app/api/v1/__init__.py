@@ -4,6 +4,7 @@ from app.api.v1 import (
     auth_router,
     cart_router,
     contact_info_crud,
+    order_router,
     payment,
     payout_info_crud,
     product_router,
@@ -35,6 +36,7 @@ user_api_router = APIRouter(
 )
 
 user_api_router.include_router(cart_router.router)
+user_api_router.include_router(order_router.router)
 user_api_router.include_router(user_router.router)
 user_api_router.include_router(verification_router.router)
 

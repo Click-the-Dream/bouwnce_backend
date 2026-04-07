@@ -110,32 +110,3 @@ async def checkout_cart(
     return await order_service.checkout(
         user=current_user, shipment_infos=shipment_list, redis=redis, request=request, db=db
     )
-
-@router.patch(
-    "/cancel-order/{order_item_id}",
-    summary="Cancel an order item",
-    status_code=status.HTTP_200_OK,
-    response_model=dict,
-)
-async def cancel_order_item(
-    order_item_id: str,
-    db: dbSessionDep,
-    current_user: CurrentActiveUser,
-):
-    return await order_service.cancel_order(
-        order_item_id=order_item_id, db=db, wallet_id=str(current_user.id)
-    )
-
-@router.patch(
-    "/accept-order/{order_item_id}",
-    summary="Accept an order item",
-    status_code=status.HTTP_200_OK,
-    response_model=dict,
-)
-async def accept_order_item(
-    order_item_id: str,
-    db: dbSessionDep,
-    current_user: CurrentActiveUser,
-):
-    return await order_service.accept_order(
-        order_item_id=order_item_id, db=db)

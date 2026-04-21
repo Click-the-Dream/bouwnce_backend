@@ -36,6 +36,7 @@ class AuthService:
         user = await User.get_by_unique(
             db=db, email=user_data["email"], username=user_data["username"]
         )
+
         if user:
             if user.email == user_data["email"]:
                 raise BadRequestException(message="User with the email already exist")

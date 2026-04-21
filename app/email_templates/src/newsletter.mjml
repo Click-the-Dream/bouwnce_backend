@@ -1,0 +1,43 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Helvetica, Arial, sans-serif" />
+      <mj-text font-size="16px" color="#000000" line-height="1.5" />
+    </mj-attributes>
+  </mj-head>
+
+  <mj-body background-color="#f9f9f9">
+
+```
+<!-- Subject (for reference in template systems) -->
+<mj-section background-color="#ff3b0a" padding="15px 0">
+  <mj-column>
+    <mj-text align="center" color="#ffffff" font-size="16px" font-weight="bold">
+      {{ subject }}
+    </mj-text>
+  </mj-column>
+</mj-section>
+
+<!-- Body -->
+<mj-section background-color="#ffffff" padding="40px 20px">
+  <mj-column>
+
+    <mj-text font-size="18px" color="#333333" font-weight="bold">
+      Hi {{ user_name }},
+    </mj-text>
+
+    <mj-text font-size="16px" color="#555555" padding-top="15px">
+      {{ body }}
+    </mj-text>
+
+    <mj-text font-size="16px" color="#555555" padding-top="25px">
+      Best regards,<br/>
+      The {{ project_name }} Team
+    </mj-text>
+
+  </mj-column>
+</mj-section>
+```
+
+  </mj-body>
+</mjml>

@@ -13,6 +13,7 @@ from app.api.v1 import (
     vendor_dashboard,
     verification_router,
     waitlist_router,
+    newsletter
 )
 from app.core.rate_limiter import rate_limiter
 from app.utils.responses import (
@@ -71,3 +72,4 @@ api_router.include_router(user_api_router)
 api_router.include_router(store_router)
 api_router.include_router(waitlist)
 api_router.include_router(payment.router)
+api_router.include_router(newsletter.router)

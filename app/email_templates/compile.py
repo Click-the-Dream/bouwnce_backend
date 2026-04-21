@@ -5,4 +5,4 @@ def compile_mjml(input_file: str, output_file: str):
     subprocess.run(["mjml", input_file, "-o", output_file], check=True)
 
 
-# compile_mjml("./src/vendor_alert_order.mjml", "./build/vendor_alert_order.html")
+compile_mjml("/home/pcnerd/projects/bouwnce/bouwnce_backend/app/email_templates/src/newsletter.mjml", "/home/pcnerd/projects/bouwnce/bouwnce_backend/app/email_templates/build/newsletter.html")

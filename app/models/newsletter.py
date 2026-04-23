@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, DateTime, select
+from sqlalchemy import String, DateTime, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Self
 from datetime import datetime
@@ -15,7 +15,7 @@ class NewsLetter(BaseModel):
     subject: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(String, nullable=False)
     is_sent: Mapped[bool] = mapped_column(nullable=False, default=False)
-    send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="scheduled")
     
     @classmethod

@@ -16,7 +16,7 @@ class UserBase(BaseModel):
     full_name: Annotated[str, Field(min_length=2, examples=["John Doe"])]
     email: Annotated[EmailStr, Field(examples=["johndoe@example.com"])]
     username: Annotated[str, Field(min_length=2, examples=["johndoe"])]
-    date_of_birth: Annotated[str, Field(...)]
+    date_of_birth: Annotated[str | None, Field(...)] = None
     role: Annotated[RoleEnum, Field(description="Role of user")]
     is_store_owner: Annotated[bool, Field(examples=[False])] = False
 

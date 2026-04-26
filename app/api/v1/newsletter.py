@@ -51,7 +51,7 @@ async def list_newsletters(
 ):
     return await newsletter_service.search_newsletters(db, query, page, per_page)
 
-@router.post("/{newletter_id}/broadcast", status_code=status.HTTP_200_OK)
+@router.post("/{newsletter_id}/broadcast", status_code=status.HTTP_200_OK)
 async def initiate_broadcast(
     newsletter_id: str,
     db: dbSessionDep,

@@ -13,7 +13,8 @@ from app.api.v1 import (
     vendor_dashboard,
     verification_router,
     waitlist_router,
-    newsletter
+    newsletter,
+    jobs
 )
 from app.core.rate_limiter import rate_limiter
 from app.utils.responses import (
@@ -23,6 +24,8 @@ from app.utils.responses import (
     NotFoundResponse,
     UnauthorizedResponse,
 )
+
+
 
 user_api_router = APIRouter(
     prefix="/users",
@@ -73,3 +76,4 @@ api_router.include_router(store_router)
 api_router.include_router(waitlist)
 api_router.include_router(payment.router)
 api_router.include_router(newsletter.router)
+api_router.include_router(jobs.router)

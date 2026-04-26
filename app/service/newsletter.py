@@ -14,7 +14,9 @@ from app.schemas.newsletter import (
 from app.utils.exception import (
     BadRequestException,
     NotFoundException,
+    InternalServerErrorException
 )
+from app.service.q_stash import enqueue_job, AvailableJobs
 from app.utils.responses import response_builder
 from app.utils.helper import is_valid_uuid
 from app.utils.emails import generate_email_content, send_email
@@ -23,6 +25,7 @@ from app.core.config import settings
 
 class NewsLetterStatusEnum(Enum):
     CREATED = "created"
+    INITIATED = "initiated"
     SENDING = "sending"
     COMPLETED = "completed"
 
@@ -112,8 +115,12 @@ class NewsLetterService:
             raise NotFoundException("Newsletter not found") from None
         
         # send to qstash for broadcasting to subscribers
+        try:
+            enqueue_job({"newsletter_id": str(newsletter.id)}, type=AvailableJobs.BROADCAST_NEWSLETTER)
+        except ValueError:
+            raise InternalServerErrorException("Unable to start newsletter broadcast, please try again later")
         
-        newsletter.status = NewsLetterStatusEnum.SENDING.value
+        newsletter.status = NewsLetterStatusEnum.INITIATED.value
         await newsletter.save(db)
         
         return response_builder(
@@ -132,11 +139,23 @@ class NewsLetterService:
         except ValueError as e:
             raise NotFoundException("Newsletter not found") from None
         
-        users_in_waitlist = await Waitlist.get_by(db, all=True)
-        user_emails_and_name = [(user.email, user.name) for user in users_in_waitlist["data"]]
+        # users_in_waitlist = await Waitlist.get_by(db, all=True)
+        # user_emails_and_name = [(user.email, user.name) for user in users_in_waitlist["data"]]
         
+        user_emails_and_name = [
+            ("znwajei@gmail.com", "Zion"),
+            ("theregalelegida@gmail.com", "Elegida"),
+            ("techforme247@gmail.com", "Khalid"),
+            ("ogunyemivictor738@gmail.com", "Victor"),
+            ("codenuel2000@gmail.com", "CodeNuel"),
+            ("ajayihabeeb977@gmail.com", "Habeeb"),
+            ("ajadii228@gmail.com", "Ajadi"),
+            ("afolabimubarak18@gmail.com", "Mubarak"),
+            ("bariudebayo@gmail.com", "Bariu")
+        ]
         
-        
+        newsletter.status = NewsLetterStatusEnum.SENDING.value
+        await newsletter.save(db)
         
         for email, name in user_emails_and_name:
             email_content = generate_email_content(

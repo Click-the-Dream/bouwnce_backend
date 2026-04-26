@@ -67,3 +67,12 @@ async def delete_newsletter(
     _: CurrentAdmin
 ):
     return await newsletter_service.delete_newsletter(newsletter_id, db)
+
+
+@router.post("/{newsletter_id}/job/execute/broadcasting", status_code=status.HTTP_200_OK)
+async def broadcast_newsletter(
+    newsletter_id: str,
+    db: dbSessionDep,
+    background_task: BackgroundTasks
+):
+    return await newsletter_service.broadcast_newsletter(newsletter_id, db, background_task)

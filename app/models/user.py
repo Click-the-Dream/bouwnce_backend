@@ -24,11 +24,10 @@ if TYPE_CHECKING:
 class User(BaseModel):
     __tablename__ = "users"
 
-    username: Mapped[str] = mapped_column(
-        String, unique=True, index=True, nullable=False
-    )
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    username: Mapped[str | None] = mapped_column(String, nullable=True)
+    date_of_birth: Mapped[str | None] = mapped_column(String, nullable=True)
     institution: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     role: Mapped[str] = mapped_column(

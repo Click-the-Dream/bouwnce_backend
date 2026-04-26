@@ -77,7 +77,7 @@ class UserService:
     async def deactivate_user(self, user: User, db: AsyncSession) -> dict[str, Any]:
 
         user.is_active = False
-        await user.save()
+        await user.save(db)
 
         return response_builder(
             status_code=status.HTTP_200_OK,

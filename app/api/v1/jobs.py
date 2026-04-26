@@ -14,7 +14,7 @@ class NewletterBroadcastRequest(BaseModel):
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
-@router.post("/execute/broadcast-newsletter", status_code=status.HTTP_200_OK)
+@router.post("/execute/broadcast-newsletter", status_code=status.HTTP_200_OK, include_in_schema=False)
 async def broadcast_newsletter(
     newsletter_payload: NewletterBroadcastRequest,
     db: dbSessionDep,

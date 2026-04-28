@@ -18,6 +18,9 @@ from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
 from app.models.newsletter import NewsLetter
 
+from app.matching_ground.model.interest import Interest
+from app.matching_ground.model.user_interest import UserInterest
+
 __all__ = [
     "BaseModel",
     "Cart",
@@ -37,5 +40,8 @@ __all__ = [
     "WalletTransaction",
     "Waitlist",
     "RefreshToken",
-    "NewsLetter"
+    "NewsLetter",
+    
+    "UserInterest",
+    "Interest"
 ]

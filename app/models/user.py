@@ -19,6 +19,8 @@ if TYPE_CHECKING:
         Store,
         Verification,
     )
+    from app.matching_ground.model.user_interest import UserInterest
+    from app.matching_ground.model.interest import Interest
 
 
 class User(BaseModel):
@@ -67,6 +69,15 @@ class User(BaseModel):
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    
+    user_interest: Mapped[list["UserInterest"]] = relationship(
+        back_populates="user"
+    )
+    interests: Mapped["Interest"] = relationship(
+        secondary="user_interests",
+        back_populates="users",
+        viewonly=True
     )
 
     def to_dict(self):

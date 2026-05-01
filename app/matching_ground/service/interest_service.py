@@ -49,7 +49,9 @@ class InterestService:
             status_code=status.HTTP_200_OK,
             status="success",
             message="Successfully fetched user interest",
-            data=interest_lists
+            data={
+                "interests": interest_lists
+            }
         )
         
     async def add_user_interests(
@@ -61,10 +63,7 @@ class InterestService:
         
         if not is_valid_uuid(user_id):
             raise BadRequestException("Invalid user id")
-        
-        for interest_id in interest_ids:
-            if not is_valid_uuid(interest_id):
-                raise BadRequestException("One of the interest ids is invalid")
+
             
         await UserInterest.add_user_interest(db, user_id, interest_ids)
         

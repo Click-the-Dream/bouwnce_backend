@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     )
     from app.matching_ground.model.user_interest import UserInterest
     from app.matching_ground.model.interest import Interest
+    from app.matching_ground.model.user_geolocation import UserGeolocation
 
 
 class User(BaseModel):
@@ -79,6 +80,10 @@ class User(BaseModel):
         back_populates="users",
         viewonly=True
     )
+    
+    geolocation: Mapped["UserGeolocation"] = relationship(
+        back_populates="user"
+    )
 
     def to_dict(self):
         data_dict = super().to_dict()
@@ -130,7 +135,7 @@ class User(BaseModel):
 
         return otp
 
-    async def clear_otp(self, db: AsyncSession) -> Self:
+    async def clear_otp(self, db: AsyncSession):
 
         self.otp = None
         self.otp_time = None

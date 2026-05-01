@@ -1,0 +1,96 @@
+import uuid
+from datetime import datetime, timezone, timedelta
+
+from sqlalchemy import DateTime, ForeignKey, String, select, and_
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped, mapped_column
+from typing import Self
+
+from app.models.basemodel import BaseModel
+
+
+class MatchRequest(BaseModel):
+    __tablename__ = "match_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    requester_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    
+    @classmethod
+    async def create_pending(
+        cls,
+        session: AsyncSession,
+        requester_id: uuid.UUID,
+        target_user_id: uuid.UUID,
+        note: str | None,
+        ttl_days: int = 7,
+    ) -> Self:
+        now = datetime.now(timezone.utc)
+        row = MatchRequest(
+            requester_id=requester_id,
+            target_user_id=target_user_id,
+            note=note,
+            status="pending",
+            expires_at=now + timedelta(days=ttl_days),
+        )
+        session.add(row)
+        await session.flush()
+        return row
+
+    @classmethod
+    async def find_open_for_pair(
+        cls,
+        session: AsyncSession,
+        requester_id: uuid.UUID,
+        target_user_id: uuid.UUID,
+    ) -> Self | None:
+        result = await session.execute(
+            select(cls).where(
+                and_(
+                    cls.requester_id == requester_id,
+                    cls.target_user_id == target_user_id,
+                    cls.status == "pending",
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+
+    async def set_status(self, session: AsyncSession, status: str) -> Self:
+        self.status = status
+        self.responded_at = datetime.now(timezone.utc)
+        await session.flush()
+        return self
+
+    @classmethod
+    async def list_expired_pending(cls, session: AsyncSession, now: datetime | None = None) -> list[Self]:
+        now = now or datetime.now(timezone.utc)
+        result = await session.execute(
+            select(cls).where(
+                cls.status == "pending",
+                cls.expires_at.is_not(None),
+                cls.expires_at <= now,
+            )
+        )
+        return list(result.scalars().all())
+
+    @classmethod
+    async def list_for_user(cls, session: AsyncSession, user_id: uuid.UUID) -> list[Self]:
+        result = await session.execute(
+            select(cls)
+            .where(
+                (cls.requester_id == user_id) | (cls.target_user_id == user_id)
+            )
+            .order_by(cls.created_at.desc())
+        )
+        return list(result.scalars().all())
+

@@ -80,8 +80,8 @@ class CheckoutResponseSchema(BaseModel):
         list[ProductCheckoutInfo], Field(description="List of available products")
     ]
     unavailable_products: Annotated[
-        list[ProductCheckoutInfo], Field(description="List of unavailable products")
-    ]
+        list[ProductCheckoutInfo] | None, Field(description="List of unavailable products")
+    ] = None
 
 
 class CheckoutResponse(BaseResponse):

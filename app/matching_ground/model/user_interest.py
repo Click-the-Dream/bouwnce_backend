@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 from uuid  import UUID as UUID_PK
 
 from app.models.basemodel import BaseModel
+from app.matching_ground.model.interest import Interest
 
 if TYPE_CHECKING:
     from app.models.user import User
-    from app.matching_ground.model.interest import Interest
+    
 
 
 class UserInterest(BaseModel):
@@ -44,7 +45,11 @@ class UserInterest(BaseModel):
     
     
     @classmethod
-    async def add_user_interest(cls, db: AsyncSession, user_id: str, interest_ids: list[str]) -> bool:
+    async def add_user_interest(cls, db: AsyncSession, user_id: str, interests: list[str]) -> bool:
+        query = select(Interest.id).where(Interest.name.in_(interests))
+        interest_result = await db.execute(query)
+        
+        interest_ids = interest_result.scalars().all()
         
         data = [
             {"user_id": user_id, "interest_id": interest_id} 

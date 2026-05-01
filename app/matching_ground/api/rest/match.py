@@ -16,7 +16,7 @@ from app.matching_ground.service.matching.match_lifecycle import MatchLifecycleS
 
 router = APIRouter(prefix="/api/v1/matches", tags=["matches"])
 
-@router.post("/suggest")
+@router.get("/suggest")
 async def suggest_candidates(
     db: dbSessionDep,
     current_user: CurrentUser,

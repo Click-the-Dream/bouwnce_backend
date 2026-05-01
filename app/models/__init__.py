@@ -20,7 +20,9 @@ from app.models.newsletter import NewsLetter
 
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.user_interest import UserInterest
-
+from app.matching_ground.model.user_block import UserBlock
+from app.matching_ground.model.user_geolocation import UserGeolocation
+from app.matching_ground.model.match import Match, MatchRequest
 __all__ = [
     "BaseModel",
     "Cart",
@@ -43,5 +45,9 @@ __all__ = [
     "NewsLetter",
     
     "UserInterest",
-    "Interest"
+    "Interest",
+    "UserBlock",
+    "UserGeolocation",
+    "MatchRequest",
+    "Match"
 ]

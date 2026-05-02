@@ -1,0 +1,154 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-text font-family="Arial, Helvetica, sans-serif" color="#444444" />
+      <mj-button font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+
+    <mj-style>
+      .small-text { font-size: 13px; color: #777777; }
+      .muted { color: #777777; }
+      .badge-request {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        background-color: #eef4ff;
+        color: #3b5bdb;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .info-row { font-size: 14px; padding: 6px 0; }
+    </mj-style>
+  </mj-head>
+
+  <mj-body background-color="#f5f6f8">
+
+    <!-- Main Card -->
+    <mj-section background-color="#ffffff" padding="25px 20px">
+      <mj-column width="100%">
+
+        <!-- Header -->
+        <mj-text
+          align="center"
+          font-size="22px"
+          font-weight="bold"
+          padding="10px 0 10px"
+          color="#2c3e50">
+          {{ project_name }} – New Match Request
+        </mj-text>
+
+        <!-- Badge -->
+        <mj-text align="center" padding="0 0 10px">
+          <span class="badge-request">New Request</span>
+        </mj-text>
+
+        <!-- Greeting -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="10px 25px 5px"
+          color="#555555">
+          Hi {{ recipient_name }},
+        </mj-text>
+
+        <!-- Main Message -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          You’ve received a new match request from <strong>{{ requester_name }}</strong>.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 15px"
+          color="#555555">
+          Take a moment to review their profile and decide whether you’d like to connect.
+        </mj-text>
+
+        <!-- Requester Info -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Request Details
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 15px"
+          css-class="muted">
+          Name: <strong>{{ requester_name }}</strong><br/>
+          Interest: <strong>{{ requester_interest }}</strong><br/>
+          Location: <strong>{{ requester_location }}</strong>
+        </mj-text>
+
+        <!-- Optional Message -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Message
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 15px"
+          color="#555555">
+          {{ requester_message }}
+        </mj-text>
+
+        <!-- CTA -->
+        <mj-button
+          align="center"
+          background-color="#009688"
+          color="#ffffff"
+          font-size="17px"
+          border-radius="6px"
+          padding="18px 30px"
+          href="{{ action_link }}">
+          View Request
+        </mj-button>
+
+        <mj-divider border-width="2px" border-color="#eeeeee" padding="20px 0" />
+
+        <!-- What Happens Next -->
+        <mj-text
+          align="left"
+          font-size="14px"
+          padding="0 25px 10px"
+          css-class="muted">
+          You can accept or decline this request after reviewing the profile. If accepted, you’ll be able to start interacting immediately.
+        </mj-text>
+
+        <!-- Support -->
+        <mj-text
+          align="left"
+          font-size="13px"
+          padding="10px 25px 0"
+          css-class="small-text">
+          Need help? Contact our support team anytime.
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section padding="10px 20px">
+      <mj-column>
+        <mj-text align="center" css-class="small-text">
+          © {{ year }} {{ project_name }}. All rights reserved.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

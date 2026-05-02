@@ -34,6 +34,13 @@ class Config(BaseModel):
     )
 
     PAYSTACK_API_KEY: str = config("PAYSTACK_API_KEY")
+    
+    # QSTASH
+    QSTASH_API_KEY: str = config("QSTASH_API_KEY", default="")
+    QSTASH_URL: str = config("QSTASH_URL", default="")
+    QSTASH_TOKEN: str = config("QSTASH_TOKEN", default="")
+    QSTASH_CURRENT_SIGNING_KEY: str = config("QSTASH_CURRENT_SIGNING_KEY", default="")
+    QSTASH_NEXT_SIGNING_KEY: str = config("QSTASH_NEXT_SIGNING_KEY", default="")
 
 
 class ProductionConfig(Config):

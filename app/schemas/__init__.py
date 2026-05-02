@@ -1,3 +1,4 @@
+from app.utils.responses import BaseResponse
 from app.schemas.contact_info_crud import (
     ContactInfoCreate,
     ContactInfoResponse,
@@ -39,9 +40,7 @@ from app.schemas.vendor_dashboard import (
 )
 
 __all__ = [
-    "BusinessInfoCreate",
-    "BusinessInfoResponse",
-    "BusinessInfoUpdate",
+    "BaseResponse",
     "ContactInfoCreate",
     "ContactInfoResponse",
     "ContactInfoResponseSchema",

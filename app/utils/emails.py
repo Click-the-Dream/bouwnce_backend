@@ -170,3 +170,5 @@ def generate_email_content(subject: str, template_name: str, context: dict[str, 
     html_content = render_email_templates(template_name=template_name, context=context)
 
     return EmailData(html_content=html_content, subject=subject)
+
+

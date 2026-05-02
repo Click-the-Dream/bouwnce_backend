@@ -62,12 +62,10 @@ class ProductService:
         try:
 
             product = await product_domain.get_product_by_id(product_id)
-
             if product.state != "live":
                 raise NotFoundException(message="product with specified ID not found")
 
             product_response = await product_domain.to_dict(product, redis)
-
             return response_builder(
                 status_code=status.HTTP_200_OK,
                 status="success",

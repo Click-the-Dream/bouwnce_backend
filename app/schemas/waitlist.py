@@ -11,7 +11,7 @@ class WaitlistBase(BaseModel):
     phone_number: Annotated[
         str, Field(min_length=11, max_length=14, examples=["08145326543"])
     ]
-    institution: Annotated[str, Field(examples=["Smith University"])]
+    location: Annotated[str | None, Field(examples=["your Location"])] = None
 
 
 class WaitlistCreate(WaitlistBase):

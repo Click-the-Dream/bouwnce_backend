@@ -13,8 +13,12 @@ from app.utils.cloudinary_utils import delete_folder, delete_images, upload_imag
 
 
 class Images(BaseModel):
-    url: str
-    public_id: str
+    public_id: Annotated[
+        str, Field(examples=["a0e43d-1ccc-4370-a32e-41812280b26e/zjejpt55jhouwwwplllo"])
+    ]
+    url: Annotated[str, Field(examples=["http://image_url.png"])]
+
+
 
 
 class Category(BaseDocument):
@@ -64,9 +68,9 @@ class ProductDomain:
 
         redis_key = self._compute_reserved_product_key(str(obj.id))
         reserved_stock = await redis.get(redis_key)
-        if reserved_stock is not None:
+        if reserved_stock is None:
             return obj.stock
-
+        
         avaialble = obj.stock - int(reserved_stock)
         return max(avaialble, 0)
 
@@ -171,7 +175,7 @@ class ProductDomain:
     async def decrease_product_stock_and_increase_total_sales(
         self, product_id: str, quantity: int
     ) -> bool:
-        await self.Product.find(Product.id == ObjectId(product_id)).update(
+        self.Product.find(Product.id == ObjectId(product_id)).update(
             {"$inc": {"stock": (-quantity), "total_sales": quantity}}
         )
         return True

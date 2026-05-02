@@ -16,7 +16,13 @@ from app.models.verification import Verification
 from app.models.waitlist import Waitlist
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
+from app.models.newsletter import NewsLetter
 
+from app.matching_ground.model.interest import Interest
+from app.matching_ground.model.user_interest import UserInterest
+from app.matching_ground.model.user_block import UserBlock
+from app.matching_ground.model.user_geolocation import UserGeolocation
+from app.matching_ground.model.match import Match, MatchRequest
 __all__ = [
     "BaseModel",
     "Cart",
@@ -36,4 +42,12 @@ __all__ = [
     "WalletTransaction",
     "Waitlist",
     "RefreshToken",
+    "NewsLetter",
+    
+    "UserInterest",
+    "Interest",
+    "UserBlock",
+    "UserGeolocation",
+    "MatchRequest",
+    "Match"
 ]

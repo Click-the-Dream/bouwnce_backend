@@ -4,9 +4,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import DateTime, ForeignKey, String, func, select
+from sqlalchemy import DateTime, ForeignKey, String, func, select, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import BaseModel
@@ -22,7 +23,7 @@ class RefreshToken(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     token: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    device_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    device_id: Mapped[str] = mapped_column(String, nullable=False)
     user_agent: Mapped[str] = mapped_column(String, nullable=False)
     ip_address: Mapped[str] = mapped_column(String, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(
@@ -33,6 +34,10 @@ class RefreshToken(BaseModel):
     )
 
     user: Mapped[User] = relationship(back_populates="refresh_tokens", uselist=False)
+    
+    __table_args__ = (
+        UniqueConstraint("user_id", "device_id", name="uix_user_device"),
+    )
 
     @classmethod
     async def get_token_by_user_and_device(
@@ -61,20 +66,23 @@ class RefreshToken(BaseModel):
         expires_at: datetime,
         db: AsyncSession,
     ):
-        existing_token = await cls.get_token_by_user_and_device(user_id, device_id, db)
-        if existing_token:
-            await existing_token.revoke(db)
-
-        refresh_token = await cls.create(
-            {
-                "user_id": user_id,
+        stmt = insert(cls).values(
+            user_id=user_id,
+            token=token,
+            device_id=device_id,
+            user_agent=user_agent,
+            ip_address=ip_address,
+            expires_at=expires_at,
+        ).on_conflict_do_update(
+            index_elements=["user_id", "device_id"],
+            set_={
                 "token": token,
-                "device_id": device_id,
                 "user_agent": user_agent,
                 "ip_address": ip_address,
                 "expires_at": expires_at,
+                "issued_at": func.now(),
             },
-            db,
         )
+        
+        await db.execute(stmt)
 
-        return refresh_token

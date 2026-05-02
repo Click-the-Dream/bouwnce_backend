@@ -66,7 +66,7 @@ class VendorDashBoardService:
         dashboard = {
             "total_revenue": metrics["total_revenue"],
             "total_orders": metrics["total_orders"],
-            "total_custmoers": metrics["total_customers"],
+            "total_customers": metrics["total_customers"],
             "avg_order_value": metrics["aov"],
             "revenue_change_percent": metrics["revenue_change_percentage"],
             "orders_change_percent": metrics["orders_change_percentage"],
@@ -196,7 +196,7 @@ class VendorDashBoardService:
                 "page": page_result.get("page", 1),
                 "page_size": page_result.get("page_size", page_size),
                 "total": page_result.get("total", 0),
-                "total_page": page_result.get("total_page", 1),
+                "total_pages": page_result.get("total_page", 1),
             },
         }
 

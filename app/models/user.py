@@ -19,16 +19,18 @@ if TYPE_CHECKING:
         Store,
         Verification,
     )
+    from app.matching_ground.model.user_interest import UserInterest
+    from app.matching_ground.model.interest import Interest
+    from app.matching_ground.model.user_geolocation import UserGeolocation
 
 
 class User(BaseModel):
     __tablename__ = "users"
 
-    username: Mapped[str] = mapped_column(
-        String, unique=True, index=True, nullable=False
-    )
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    username: Mapped[str | None] = mapped_column(String, nullable=True)
+    date_of_birth: Mapped[str | None] = mapped_column(String, nullable=True)
     institution: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     role: Mapped[str] = mapped_column(
@@ -68,6 +70,19 @@ class User(BaseModel):
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    
+    user_interest: Mapped[list["UserInterest"]] = relationship(
+        back_populates="user"
+    )
+    interests: Mapped["Interest"] = relationship(
+        secondary="user_interests",
+        back_populates="users",
+        viewonly=True
+    )
+    
+    geolocation: Mapped["UserGeolocation"] = relationship(
+        back_populates="user"
     )
 
     def to_dict(self):
@@ -120,7 +135,7 @@ class User(BaseModel):
 
         return otp
 
-    async def clear_otp(self, db: AsyncSession) -> Self:
+    async def clear_otp(self, db: AsyncSession):
 
         self.otp = None
         self.otp_time = None

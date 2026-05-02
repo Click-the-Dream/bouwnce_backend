@@ -16,22 +16,43 @@ class EmailData:
     subject: str
 
 
-# Setting up email service depeinding on the environment
-if settings.NAME == "staging":
-    resend.api_key = settings.RESEND_API_KEY
-elif settings.NAME == "dev":
-    conf = ConnectionConfig(
-        MAIL_USERNAME=settings.SMTP_USER,
-        MAIL_PASSWORD=settings.SMTP_PASSWORD,
-        MAIL_FROM=settings.EMAILS_FROM_EMAIL,
-        MAIL_FROM_NAME=settings.EMAILS_FROM_NAME,
-        MAIL_PORT=settings.SMTP_PORT,
-        MAIL_SERVER=settings.SMTP_HOST,
-        MAIL_SSL_TLS=settings.SMTP_TLS,
-        MAIL_STARTTLS=settings.SMTP_SSL,
+def _get_valid_mail_from() -> str:
+    mail_from = (getattr(settings, "EMAILS_FROM_EMAIL", "") or "").strip()
+    if mail_from:
+        return mail_from
+
+    for candidate in (
+        (getattr(settings, "PROJECT_EMAIL", "") or "").strip(),
+        (getattr(settings, "SMTP_USER", "") or "").strip(),
+    ):
+        if candidate and "@" in candidate:
+            return candidate
+
+    raise ValueError(
+        "SMTP email is enabled (FASTAPI_ENV=dev) but no valid sender email is configured. "
+        "Set `EMAILS_FROM_EMAIL` (recommended) or `PROJECT_EMAIL` in `Backend/.env`."
+    )
+
+
+def _get_smtp_conf() -> ConnectionConfig:
+    return ConnectionConfig(
+        MAIL_USERNAME=(getattr(settings, "SMTP_USER", "") or "").strip(),
+        MAIL_PASSWORD=(getattr(settings, "SMTP_PASSWORD", "") or "").strip(),
+        MAIL_FROM=_get_valid_mail_from(),
+        MAIL_FROM_NAME=(getattr(settings, "EMAILS_FROM_NAME", "") or "").strip(),
+        MAIL_PORT=getattr(settings, "SMTP_PORT", 465),
+        MAIL_SERVER=(getattr(settings, "SMTP_HOST", "") or "").strip(),
+        # FastAPI-Mail expects SSL/TLS and STARTTLS booleans
+        MAIL_SSL_TLS=getattr(settings, "SMTP_SSL", False),
+        MAIL_STARTTLS=getattr(settings, "SMTP_TLS", True),
         USE_CREDENTIALS=True,
         VALIDATE_CERTS=True,
     )
+
+
+# Setting up email service depending on the environment
+if settings.NAME == "staging":
+    resend.api_key = settings.RESEND_API_KEY
 
 
 def render_email_templates(*, template_name: str, context: dict[str, Any]) -> str:
@@ -73,6 +94,13 @@ async def send_email_using_smtp(
     message = MessageSchema(
         subject=subject, recipients=[email_to], body=html_content, subtype="html"
     )
+    try:
+        conf = _get_smtp_conf()
+    except Exception as e:
+        print("❌SMTP is not configured; email not sent.")
+        print("❌error: ", e)
+        return False
+
     fm = FastMail(conf)
     try:
         print("📧sending email to: ", email_to)

@@ -10,7 +10,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.shipment_info import ShipmentInfo
 from app.models.store import Store
 from app.models.store_info import StoreInfo
-from app.models.suborder import SubOrder
+from app.models.suborder import SubOrder, SubOrderSnapshot
 from app.models.user import User
 from app.models.verification import Verification
 from app.models.waitlist import Waitlist
@@ -23,6 +23,7 @@ from app.matching_ground.model.user_interest import UserInterest
 from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.match import Match, MatchRequest
+
 __all__ = [
     "BaseModel",
     "Cart",
@@ -43,11 +44,11 @@ __all__ = [
     "Waitlist",
     "RefreshToken",
     "NewsLetter",
-    
     "UserInterest",
     "Interest",
     "UserBlock",
     "UserGeolocation",
     "MatchRequest",
-    "Match"
+    "Match",
+    "SubOrderSnapshot",
 ]

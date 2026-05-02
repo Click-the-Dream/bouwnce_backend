@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import BaseModel
+from app.models.wallet import Refund
 
 if TYPE_CHECKING:
     from app.models import SubOrder
@@ -36,6 +37,7 @@ class OrderItem(BaseModel):
     suborder: Mapped[SubOrder] = relationship(
         back_populates="order_items", uselist=False
     )
+    refunds: Mapped[list[Refund]] = relationship(back_populates="order_item", lazy="selectin")
 
     @classmethod
     async def get_by_suborder_ids(cls, db: AsyncSession, suborder_ids: list[str]):

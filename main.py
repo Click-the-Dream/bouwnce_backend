@@ -4,12 +4,14 @@ import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, Request, status
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.logger import log_internal_error
 from app.core.rate_limiter import rate_limiter
 from app.db.mongo import mongo_conn
 from app.db.postgres_db_conn import engine
@@ -33,7 +35,7 @@ async def fastapi_lifespan(app: FastAPI):
 
     client = await mongo_conn()
 
-    if settings.NAME == "staging":
+    if settings.SELF_PING_ENABLED:
         scheduler.add_job(call_health_endpoint_cron_task, CronTrigger(minute="*/5"))
     scheduler.add_job(product_reservation, CronTrigger(minute="*/1"))
     scheduler.add_job(mark_order_and_payment_abandoned, CronTrigger(minute="*/2"))
@@ -66,6 +68,41 @@ app = FastAPI(
     lifespan=fastapi_lifespan,
 )
 
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        openapi_version="3.0.3",
+    )
+
+    # Swagger UI renders file inputs reliably when schemas use `format: binary`.
+    # Pydantic v2 may emit `contentMediaType` for bytes-like fields, which Swagger UI
+    # can show as plain strings instead of file pickers. Convert those occurrences.
+    def _coerce_content_media_type_to_binary(node):
+        if isinstance(node, dict):
+            if node.get("type") == "string" and "contentMediaType" in node:
+                node.setdefault("format", "binary")
+                node.pop("contentMediaType", None)
+            for value in node.values():
+                _coerce_content_media_type_to_binary(value)
+        elif isinstance(node, list):
+            for item in node:
+                _coerce_content_media_type_to_binary(item)
+
+    _coerce_content_media_type_to_binary(openapi_schema)
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://www.bouwnce.com", "https://dev.bouwnce.com", "http://localhost:5173", "https://bouwnce.com", "http://localhost:3000"],
@@ -80,6 +117,13 @@ app.add_middleware(
 async def global_exception_handler(request: Request, exc: Exception):
 
     message = str(exc) if settings.FASTAPI_ENV == "dev" else "Internal server Error"
+
+    log_internal_error(
+        exc=exc,
+        message=message,
+        context={"path": request.url.path, "method": request.method},
+    )
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -88,6 +132,7 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": message,
         },
     )
+
 
 
 app.include_router(api_router, prefix=settings.API_STR)

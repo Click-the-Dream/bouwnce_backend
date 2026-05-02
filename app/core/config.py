@@ -20,6 +20,17 @@ class Config(BaseModel):
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")
 
+    # Optional self-ping job (used to keep some hosts from idling)
+    SELF_PING_ENABLED: bool = config("SELF_PING_ENABLED", default=False, cast=bool)
+    SELF_PING_URL: str | None = config("SELF_PING_URL", default=None)
+    SELF_PING_ATTEMPTS: int = config("SELF_PING_ATTEMPTS", default=3, cast=int)
+    SELF_PING_TIMEOUT_SECONDS: float = config(
+        "SELF_PING_TIMEOUT_SECONDS", default=5.0, cast=float
+    )
+    SELF_PING_SLEEP_SECONDS: float = config(
+        "SELF_PING_SLEEP_SECONDS", default=1.0, cast=float
+    )
+
     RESERVATION_TTL: int = config("RESERVATION_TTL", default=300, cast=int)
     ALGORITHM: str = config("ALGORITHM")
 
@@ -34,7 +45,14 @@ class Config(BaseModel):
     )
 
     PAYSTACK_API_KEY: str = config("PAYSTACK_API_KEY")
-    
+    PAYSTACK_WEBHOOK_VERIFY_SIGNATURE: bool = config(
+        "PAYSTACK_WEBHOOK_VERIFY_SIGNATURE", default=True, cast=bool
+    )
+    ALLOW_TEST_PAYSTACK_WEBHOOK: bool = config(
+        "ALLOW_TEST_PAYSTACK_WEBHOOK", default=False, cast=bool
+    )
+    CELERY_ALWAYS_EAGER: bool = config("CELERY_ALWAYS_EAGER", default=False, cast=bool)
+
     # QSTASH
     QSTASH_API_KEY: str = config("QSTASH_API_KEY", default="")
     QSTASH_URL: str = config("QSTASH_URL", default="")

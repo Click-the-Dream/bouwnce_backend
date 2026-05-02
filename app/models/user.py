@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.security import genrate_verification_code
 from app.models import BaseModel
+from app.models.wallet import UserWallet
 
 if TYPE_CHECKING:
     from app.models import (
@@ -38,6 +39,7 @@ class User(BaseModel):
     )
     otp: Mapped[str | None] = mapped_column(String(6))
     otp_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     is_store_owner: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), nullable=False
     )
@@ -71,19 +73,18 @@ class User(BaseModel):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    
-    user_interest: Mapped[list["UserInterest"]] = relationship(
-        back_populates="user"
+
+    user_wallet: Mapped[UserWallet] = relationship(
+        back_populates="user", uselist=False, lazy="selectin"
     )
-    interests: Mapped["Interest"] = relationship(
+
+    user_interest: Mapped[list["UserInterest"]] = relationship(back_populates="user")
+    interests: Mapped[list["Interest"]] = relationship(
         secondary="user_interests",
         back_populates="users",
-        viewonly=True
+        viewonly=True,
     )
-    
-    geolocation: Mapped["UserGeolocation"] = relationship(
-        back_populates="user"
-    )
+    geolocation: Mapped["UserGeolocation"] = relationship(back_populates="user")
 
     def to_dict(self):
         data_dict = super().to_dict()

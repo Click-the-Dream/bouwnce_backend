@@ -1,17 +1,20 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, status
 from fastapi.requests import Request
+from pydantic import BaseModel, Field
 
 from app.api.dependencies import (
-    CurrentActiveUser,
     dbSessionDep,
     redisSessionDep,
 )
+from app.core.config import settings
 from app.service.order_srevice import order_service
-from app.utils.responses import BaseResponse
 
 router = APIRouter(prefix="/payment", tags=["Payments"])
+
+class SimulatePaystackChargeSuccessRequest(BaseModel):
+    reference: str = Field(min_length=1)
+    amount_kobo: int = Field(gt=0)
+    event_id: str | None = None
 
 
 @router.post("/paystack/webhook", summary="Paystack Webhook to verify payment")
@@ -19,15 +22,22 @@ async def paystack_webhook(request: Request, db: dbSessionDep, redis: redisSessi
     return await order_service.handle_successful_payment(request, db, redis)
 
 
-@router.get(
-    "/verify",
-    summary="Verify Payment using reference token from payment gateway",
-    response_model=BaseResponse,
+@router.post(
+    "/paystack/simulate-charge-success",
+    summary="Simulate paystack charge.success (dev/test only)",
 )
-async def verify_payment(
+async def simulate_paystack_charge_success(
+    payload: SimulatePaystackChargeSuccessRequest,
     db: dbSessionDep,
-    current_user: CurrentActiveUser,
     redis: redisSessionDep,
-    referenceToken: Annotated[str, Query(..., examples=["qTPrJoy9Bx"])],
 ):
-    return order_service.verify_payment(current_user, referenceToken, redis, db)
+    if not settings.ALLOW_TEST_PAYSTACK_WEBHOOK:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    return await order_service.queue_paid_order(
+        reference=payload.reference,
+        amount_kobo=payload.amount_kobo,
+        event_id=payload.event_id,
+        db=db,
+        redis=redis,
+    )

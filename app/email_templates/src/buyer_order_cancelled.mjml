@@ -1,0 +1,153 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-text font-family="Arial, Helvetica, sans-serif" color="#444444" />
+      <mj-button font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+
+    <mj-style>
+      .small-text { font-size: 13px; color: #777777; }
+      .muted { color: #777777; }
+      .table-header { font-weight: bold; font-size: 14px; background: #f1f1f1; padding: 10px; }
+      .table-row { padding: 10px; font-size: 14px; }
+    </mj-style>
+  </mj-head>
+
+  <mj-body background-color="#f5f6f8">
+
+    <!-- Main Card -->
+    <mj-section background-color="#ffffff" padding="25px 20px">
+      <mj-column width="100%">
+
+        <!-- Header -->
+        <mj-text
+          align="center"
+          font-size="22px"
+          font-weight="bold"
+          padding="10px 0 20px"
+          color="#2c3e50">
+          {{ project_name }} – Order Rejected
+        </mj-text>
+
+        <!-- Greeting -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          Hi {{ customer_name }},
+        </mj-text>
+
+        <!-- Message -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          We’re sorry to inform you that your order was <strong>rejected by the vendor</strong> and will not be fulfilled.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 15px"
+          color="#555555">
+          Don’t worry — your payment is safe, and the full amount has been processed according to our refund policy.
+        </mj-text>
+
+        <!-- Order Details -->
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 5px"
+          font-weight="bold"
+          color="#333333">
+          Order Details
+        </mj-text>
+
+        <mj-table padding="0 25px 20px" font-size="14px" color="#444">
+          <tr class="table-header">
+            <th>Item</th>
+            <th>Quantity</th>
+            <th>Amount</th>
+          </tr>
+
+          {{ order_items_rows }}
+
+          <tr class="table-row">
+            <td colspan="2" style="text-align:right; font-weight:bold;">Total</td>
+            <td style="font-weight:bold;">{{ order_total }}</td>
+          </tr>
+        </mj-table>
+
+        <!-- Refund Explanation -->
+        <mj-text
+          align="left"
+          font-size="16px"
+          padding="0 25px 10px"
+          color="#555555">
+          <strong>Refund Information</strong>
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 10px"
+          color="#555555">
+          The refunded amount has been credited to your <strong>{{ project_name }} Wallet</strong>.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 10px"
+          color="#555555">
+          You can use this balance immediately to purchase another item on {{ project_name }}.
+        </mj-text>
+
+        <mj-text
+          align="left"
+          font-size="15px"
+          padding="0 25px 15px"
+          color="#555555">
+          If you prefer to withdraw the funds to your bank account, the amount will become available for withdrawal after
+          <strong>24 hours</strong>, in line with our refund security policy.
+        </mj-text>
+
+        <!-- CTA -->
+        <mj-button
+          align="center"
+          background-color="#009688"
+          color="#ffffff"
+          font-size="17px"
+          border-radius="6px"
+          padding="18px 30px"
+          href="{{ wallet_link }}">
+          View Wallet & Continue Shopping
+        </mj-button>
+
+        <mj-divider border-width="2px" border-color="#eeeeee" padding="20px 0" />
+
+        <!-- Support -->
+        <mj-text
+          align="left"
+          font-size="13px"
+          padding="10px 25px 0"
+          css-class="small-text">
+          If you believe this was a mistake or need further assistance, please contact our support team.
+        </mj-text>
+
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer -->
+    <mj-section padding="10px 20px">
+      <mj-column>
+        <mj-text align="center" css-class="small-text">
+          © {{ year }} {{ project_name }}. All rights reserved.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+  </mj-body>
+</mjml>

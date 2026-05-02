@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, distinct, func, select
+from sqlalchemy import Enum, ForeignKey, Integer, String,  func, select, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import BaseModel
+from sqlalchemy.orm import relationship
+from sqlalchemy import UniqueConstraint
+from datetime import datetime
 
 if TYPE_CHECKING:
     from app.models import Order, OrderItem, Store
@@ -54,7 +57,7 @@ class SubOrder(BaseModel):
         single_parent=True,
         lazy="selectin",
     )
-
+    
     @classmethod
     async def get_top_products_paginated(
         cls, store_id: str, page: int, page_size: int, db: AsyncSession
@@ -98,32 +101,91 @@ class SubOrder(BaseModel):
             "has_previous": page > 1,
             "items": items_list,
         }
+    
+    async def subtract_total_amount(self, amount: int, db: AsyncSession) -> None:
+        self.total_amount -= amount
+        self.order.total_amount -= amount
+        await self.save(db)
+
+    
+class SubOrderSnapshot(BaseModel):
+    __tablename__ = "suborder_snapshots"
+
+    store_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("stores.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    snapshot_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+
+    total_orders: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    total_revenue: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    total_customers: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "store_id",
+            "snapshot_time",
+            name="uix_store_snapshot_time",
+        ),
+    )
 
     @staticmethod
     async def aggregate_suborders(
         db: AsyncSession,
-        store_id: str,
-        start_date,
-        end_date,
+        store_id,
+        start_date: datetime,
+        end_date: datetime,
     ) -> dict[str, Any]:
 
-        stmt = select(
-            func.count(SubOrder.id).label("total_orders"),
-            func.count(distinct(SubOrder.username)).label("total_customers"),
-            func.sum(SubOrder.total_amount).label("total_revenue"),
-        ).where(
-            SubOrder.store_id == store_id,
-            SubOrder.status == "delivered",
-            SubOrder.created_at >= start_date,
-            SubOrder.created_at < end_date,
+        stmt = (
+            select(
+                func.coalesce(func.sum(SubOrderSnapshot.total_orders), 0).label("total_orders"),
+                func.coalesce(func.sum(SubOrderSnapshot.total_revenue), 0).label("total_revenue"),
+                func.coalesce(func.sum(SubOrderSnapshot.total_customers), 0).label("total_customers"),
+            )
+            .where(
+                SubOrderSnapshot.store_id == store_id,
+                SubOrderSnapshot.snapshot_time >= start_date,
+                SubOrderSnapshot.snapshot_time < end_date,
+            )
         )
 
-        row = (await db.execute(stmt)).one_or_none()
-        total_orders = int((row.total_orders if row else 0) or 0)
-        total_revenue = float((row.total_revenue if row else 0.0) or 0.0)
-        total_customers = int((row.total_customers if row else 0) or 0)
+        result = await db.execute(stmt)
+        row = result.one()
 
-        aov = float(total_revenue / total_orders) if total_orders else 0.0
+        total_orders: int = int(row.total_orders)
+        total_revenue: float = float(row.total_revenue)
+        total_customers: int = int(row.total_customers)
+
+        aov: float = (
+            total_revenue / total_orders
+            if total_orders > 0
+            else 0.0
+        )
 
         return {
             "total_orders": total_orders,

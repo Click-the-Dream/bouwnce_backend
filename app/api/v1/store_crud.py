@@ -18,7 +18,7 @@ from app.schemas.store_crud import (
 from app.service import store_service
 from app.utils.responses import BaseResponse
 
-ImageUpdate = Annotated[UploadFile | None, File(...)]
+ImageUpdate = Annotated[UploadFile | None, File(description="Upload an image file")]
 
 router = APIRouter(tags=["Store"], prefix="")
 

@@ -27,24 +27,27 @@ async def get_vendor_dashboard_overview(
     date_range: str = Query(
         "this_month",
         description="Date range for the overview",
-        regex="^(today|yesterday|last_7_days|last_30_days|this_month|custom)$",
+        pattern="^(today|yesterday|last_7_days|last_30_days|this_month|custom)$",
     ),
-    start_date: str = Query(
-        None, description="Start date for the overview", example="2023-01-01"
+    start_date: str | None = Query(
+        None,
+        description="Start date for the overview",
+        examples={"default": {"value": "2023-01-01"}},
     ),
-    end_date: str = Query(
-        None, description="End date for the overview", example="2023-01-31"
+    end_date: str | None = Query(
+        None,
+        description="End date for the overview",
+        examples={"default": {"value": "2023-01-31"}},
     ),
 ):
 
-    if date_range == "custom":
-        if not start_date or not end_date:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "message": "start_date and end_date are required for custom date range"
-                },
-            )
+    if date_range == "custom" and (not start_date or not end_date):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "message": "start_date and end_date are required for custom date range"
+            },
+        )
 
     return await VendorDashBoardService.get_vendor_overview(
         session=session,
@@ -85,12 +88,12 @@ async def vendor_orders_dashboard(
     current_user: CurrentStore,
     page: int = Query(1, ge=1, description="Page number for pagination"),
     page_size: int = Query(10, ge=1, le=100, description="Number of orders per page"),
-    search: str = Query(None, description="Search orders by buyer name"),
+    search: str | None = Query(None, description="Search orders by buyer name"),
     order_by: str = Query(
-        "date", regex="^(name|date|price)$", description="Sort field"
+        "date", pattern="^(name|date|price)$", description="Sort field"
     ),
     order_dir: str = Query(
-        "desc", regex="^(asc|desc)$", description="Sort direction (asc/desc)"
+        "desc", pattern="^(asc|desc)$", description="Sort direction (asc/desc)"
     ),
 ):
     return await VendorDashBoardService.get_vendor_orders(
@@ -101,6 +104,24 @@ async def vendor_orders_dashboard(
         search=search,
         order_by=order_by,
         order_dir=order_dir,
+    )
+
+
+@router.get(
+    "/orders/{suborder_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Fetch a single vendor order with its items",
+    response_model=dict,
+)
+async def vendor_order_details(
+    suborder_id: str,
+    session: dbSessionDep,
+    current_store: CurrentStore,
+) -> JSONResponse:
+    return await VendorDashBoardService.get_vendor_order_details(
+        session=session,
+        store_id=current_store.id,
+        suborder_id=suborder_id,
     )
 
 

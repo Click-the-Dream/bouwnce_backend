@@ -14,7 +14,7 @@ from app.matching_ground.schema.match import (
 )
 from app.matching_ground.service.matching.match_lifecycle import MatchLifecycleService
 
-router = APIRouter(prefix="/api/v1/matches", tags=["matches"])
+router = APIRouter(prefix="/matches", tags=["matches"])
 
 @router.get("/suggest")
 async def suggest_candidates(

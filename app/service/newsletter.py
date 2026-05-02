@@ -164,7 +164,8 @@ class NewsLetterService:
                 context={
                         "subject": newsletter.subject,
                         "user_name": name,
-                        "body": newsletter.content
+                        "body": newsletter.content,
+                        "year": datetime.now(timezone.utc).year,
                     }
                 )
             background_task.add_task(

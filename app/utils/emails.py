@@ -56,9 +56,18 @@ if settings.NAME == "staging":
 
 
 def render_email_templates(*, template_name: str, context: dict[str, Any]) -> str:
-    template_str = (
-        Path(__file__).parent.parent / "email_templates" / "build" / template_name
-    ).read_text()
+    templates_dir = Path(__file__).parent.parent / "email_templates"
+    build_path = templates_dir / "build" / template_name
+    src_path = templates_dir / "src" / template_name
+
+    if build_path.exists():
+        template_str = build_path.read_text()
+    elif src_path.exists():
+        template_str = src_path.read_text()
+    else:
+        raise FileNotFoundError(
+            f"Email template not found in build/ or src/: {template_name}"
+        )
 
     html_content = Template(template_str).render(context)
     return html_content

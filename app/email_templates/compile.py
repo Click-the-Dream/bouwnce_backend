@@ -14,4 +14,4 @@ def compile_mjml(input_file: str, output_file: str) -> None:
 
 
 # Examples:
-# compile_mjml("./src/buyer_order_cancelled.mjml", "./build/buyer_order_cancelled.html")
+compile_mjml("./src/newsletter.mjml", "./build/newsletter.html")

@@ -3,15 +3,17 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.matching_ground.core.location import Coordinates, haversine_km, within_radius
 from app.matching_ground.core.interest_normalization import normalize_interest_name
+from app.matching_ground.core.matching.aggregator import WeightedScore, aggregate
+from app.matching_ground.core.matching.score import interest_overlap_score, location_score
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.user_interest import UserInterest
 from app.models.user import User
 from app.matching_ground.core.matching.matching_feature import build_user_matching_features
-from app.matching_ground.service.matching.matching_service import MatchingService
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,7 @@ class BuddyMatch:
     distance_km: float
     score: float
     shared_interests: list[str]
+    shared_traits: list[str]
 
 
 @dataclass(frozen=True)
@@ -37,7 +40,6 @@ class BuddySearchService:
         self.geolocation_model = UserGeolocation
         self.interest_model = UserInterest
         self.user_model = User
-        self.matching = MatchingService(weights={"personality": 0.35, "interests": 0.4, "location": 0.25})
 
     async def search(
         self,
@@ -48,46 +50,79 @@ class BuddySearchService:
         limit: int = 10,
     ) -> BuddySearchResult:
         requester_geo = await self.geolocation_model.get_by_user_id(session, requester_id)
-        if requester_geo is None:
-            return BuddySearchResult(status="location_required", matches=[], reason="requester_location_missing")
-
-        requester_interests = {i.name for i in await self.interest_model.get_user_interests(session, str(requester_id))}
+        requester_interests = {
+            normalize_interest_name(i.name)
+            for i in await self.interest_model.get_user_interests(session, str(requester_id))
+        }
 
         hint = normalize_interest_name(interest_hint) if interest_hint else None
-        center = Coordinates(lat=requester_geo.lat, lon=requester_geo.lon)
+        if hint:
+            requester_interests.add(hint)
+
+        center = (
+            Coordinates(lat=requester_geo.lat, lon=requester_geo.lon)
+            if requester_geo is not None
+            else None
+        )
 
         matches: list[BuddyMatch] = []
-        candidates = await self.geolocation_model.list_others(session, requester_id)
-        for candidate_geo in candidates:
-            target = Coordinates(lat=candidate_geo.lat, lon=candidate_geo.lon)
-            if not within_radius(center, target, radius_km):
+        candidate_rows = await session.execute(
+            select(
+                self.user_model.id,
+                self.user_model.full_name,
+                self.geolocation_model.lat,
+                self.geolocation_model.lon,
+            )
+            .outerjoin(
+                self.geolocation_model, self.geolocation_model.user_id == self.user_model.id
+            )
+            .where(self.user_model.id != requester_id)
+            .limit(max(limit * 25, 100))
+        )
+
+        for candidate_id, full_name, candidate_lat, candidate_lon in candidate_rows.all():
+            target = (
+                Coordinates(lat=float(candidate_lat), lon=float(candidate_lon))
+                if candidate_lat is not None and candidate_lon is not None
+                else None
+            )
+            if center is not None and target is not None and not within_radius(center, target, radius_km):
                 continue
 
-            candidate_interests_rows = await self.interest_model.get_user_interests(session, str(candidate_geo.user_id))
-            candidate_interests = {i.name for i in candidate_interests_rows}
-
+            candidate_interests_rows = await self.interest_model.get_user_interests(
+                session, str(candidate_id)
+            )
+            candidate_interests = {
+                normalize_interest_name(i.name) for i in candidate_interests_rows
+            }
 
             features = build_user_matching_features(
                 source_interests=requester_interests,
                 target_interests=candidate_interests,
             )
-            inputs = self.matching.build_inputs(
-                features=features,
-                user_location=center,
-                target_location=target,
-                max_distance_km=radius_km,
-            )
-            score = self.matching.score(inputs)
-            distance = haversine_km(center, target)
-            profile = await self.user_model.get_by_id( str(candidate_geo.user_id), session)
-            full_name = profile.full_name if profile else None
+
+            interest_value = interest_overlap_score(
+                features.shared_interests, features.total_interests
+            ).value
+            score_parts: list[WeightedScore] = [WeightedScore(interest_value, 1.0)]
+
+            distance = -1.0
+            if center is not None and target is not None:
+                distance = haversine_km(center, target)
+                location_value = location_score(distance, radius_km).value
+                score_parts.append(WeightedScore(location_value, 1.0))
+
+            score = aggregate(score_parts)
             matches.append(
                 BuddyMatch(
-                    user_id=str(candidate_geo.user_id),
+                    user_id=str(candidate_id),
                     full_name=full_name,
-                    distance_km=round(distance, 2),
+                    distance_km=round(distance, 2) if distance >= 0 else -1.0,
                     score=round(score, 4),
-                    shared_interests=sorted(requester_interests.intersection(candidate_interests))
+                    shared_interests=sorted(
+                        requester_interests.intersection(candidate_interests)
+                    ),
+                    shared_traits=[],
                 )
             )
 

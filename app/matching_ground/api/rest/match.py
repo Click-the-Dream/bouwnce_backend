@@ -55,7 +55,7 @@ async def list_match_requests(
     return await service.list_requests_for_user(db, current_user.id)
 
 
-@router.get("")
+@router.get("/")
 async def list_matches(
     db: dbSessionDep,
     current_user: CurrentUser,

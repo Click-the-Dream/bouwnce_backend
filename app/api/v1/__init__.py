@@ -18,7 +18,7 @@ from app.api.v1 import (
     jobs
 )
 
-from app.matching_ground.api.rest import interest, match
+from app.matching_ground.api.rest import interest, location, match
 
 from app.core.rate_limiter import rate_limiter
 from app.utils.responses import (
@@ -84,3 +84,4 @@ api_router.include_router(newsletter.router)
 api_router.include_router(jobs.router)
 api_router.include_router(interest.router)
 api_router.include_router(match.router)
+api_router.include_router(location.router)

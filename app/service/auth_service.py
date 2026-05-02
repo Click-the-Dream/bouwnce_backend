@@ -51,6 +51,8 @@ class AuthService:
             
             await UserWallet.create({"user_id": new_user.id}, db=db)
             otp = await new_user.generate_otp(db)
+            # Ensure OTP is persisted before returning it to the client (avoids race with /verify-code)
+            await db.commit()
 
         except Exception as e:
             raise InternalServerErrorException(
@@ -94,7 +96,9 @@ class AuthService:
         if user is None:
             raise NotFoundException(message="User with the email does not exist")
 
-        if user.otp != user_data["code"] or user.otp_time < datetime.now(UTC):
+        code = (user_data.get("code") or "").strip()
+        now = datetime.now(UTC)
+        if not user.otp or not user.otp_time or user.otp != code or user.otp_time <= now:
             raise BadRequestException(message="Invalid or expired verification code")
 
         await user.clear_otp(db)
@@ -144,6 +148,8 @@ class AuthService:
         if user is None:
             raise NotFoundException(message="User with the email does not exist")
         otp = await user.generate_otp(db)
+        # Ensure OTP is persisted before returning it to the client (avoids race with /verify-code)
+        await db.commit()
 
         email_data = generate_login_verification_email(user.username, otp)
         background_tasks.add_task(

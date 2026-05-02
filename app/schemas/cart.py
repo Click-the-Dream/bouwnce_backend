@@ -69,6 +69,8 @@ class ProductCheckoutInfo(BaseModel):
 
 class CheckoutResponseSchema(BaseModel):
     payment_url: Annotated[str, Field(examples=["https://paymentgateway.com/pay/xyz"])]
+    reference_token: Annotated[str, Field(examples=["psk_ref_123456789"])]
+    amount_kobo: Annotated[int, Field(examples=[250000])]
     available_products: Annotated[
         list[ProductCheckoutInfo], Field(description="List of available products")
     ]

@@ -1,3 +1,4 @@
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -5,7 +6,6 @@ from fastapi import status
 from fastapi.requests import Request
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import timedelta
 
 from app.models.cart import Cart
 from app.models.order import Order, ProductMetadata
@@ -14,8 +14,8 @@ from app.models.payment import Payment
 from app.models.products import product_domain
 from app.models.store import Store
 from app.models.user import User
-from app.schemas.order import CheckoutInputSchema
 from app.schemas.events import PaidOrderEvent
+from app.schemas.order import CheckoutInputSchema
 from app.service.payment.paystack import paystack_service
 from app.utils.exception import (
     BadRequestException,
@@ -27,7 +27,6 @@ from app.utils.exception import (
 )
 from app.utils.helper import generate_order_track_id
 from app.utils.responses import response_builder
-from app.worker.tasks.order_processor import process_paid_order
 from app.worker.event_system import (
     EventNames,
     OrderCompleteEvent,
@@ -35,6 +34,15 @@ from app.worker.event_system import (
     OrderItemCancelEvent,
     dispatch_event,
 )
+from app.worker.tasks.order_processor import process_paid_order
+
+
+def _naira_to_kobo(amount_naira: float) -> int:
+    return int(
+        (Decimal(str(amount_naira)) * Decimal("100")).quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
+    )
 
 
 class OrderService:
@@ -143,6 +151,8 @@ class OrderService:
                     message="Successfully checkout user",
                     data={
                         "payment_url": authorization_url,
+                        "reference_token": order.reference_token,
+                        "amount_kobo": _naira_to_kobo(order.total_amount),
                         "available_products": reserved_products,
                     },
                 )
@@ -230,10 +240,7 @@ class OrderService:
                     Order.compute_total_amount(reserved_product) + total_shipping_fee
                 )
                 
-                payment_data = {
-                    "email": user.email,
-                    "amount": total_price * 100,  # convert to kobo
-                }
+                payment_data = {"email": user.email, "amount": _naira_to_kobo(total_price)}
             except BadRequestException:
                 raise
             except GoneException:
@@ -303,6 +310,8 @@ class OrderService:
                 message="Successfully checkout user",
                 data={
                     "payment_url": authorization_url,
+                    "reference_token": referenceToken,
+                    "amount_kobo": _naira_to_kobo(total_price),
                     "available_products": reserved_product,
                     "unavailable_products": unavailable_products,
                 },
@@ -314,13 +323,10 @@ class OrderService:
     async def handle_successful_payment(
         self, request: Request, db: AsyncSession, redis: Redis
     ) -> dict[str, Any]:
-
-        # Verify paystack webhook signature
         await paystack_service.verify_webhook_signature(request)
 
         body = await request.json()
 
-        # Only handle charge.success event
         event = body.get("event")
         if event and event != "charge.success":
             return response_builder(
@@ -331,12 +337,31 @@ class OrderService:
 
         data = body["data"]
         reference = data["reference"]
+        amount_kobo = int(data["amount"])
+        event_id = str(data.get("id") or "") or None
+
+        return await self.queue_paid_order(
+            reference=reference,
+            amount_kobo=amount_kobo,
+            event_id=event_id,
+            db=db,
+            redis=redis,
+        )
+
+    async def queue_paid_order(
+        self,
+        *,
+        reference: str,
+        amount_kobo: int,
+        event_id: str | None,
+        db: AsyncSession,
+        redis: Redis,
+    ) -> dict[str, Any]:
         order = await Order.get_by_reference(reference, db)
 
         if not order:
             raise BadRequestException(message="Invalid reference Token")
 
-        # If the order status is not initiated or abandoned (for late payment), then the order has been processed in one away or the other
         if order.status not in ["initiated", "abandoned"]:
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -344,8 +369,8 @@ class OrderService:
                 message="Order has been processed",
             )
 
-        # Confirm the amount paid is eqal to order amount
-        if (order.total_amount * 100) != data["amount"]:  # Convert to naira from kobo
+        expected_amount_kobo = _naira_to_kobo(order.total_amount)
+        if expected_amount_kobo != int(amount_kobo):
             raise ConflictException(message="amount mismatch")
 
         queue_key = f"order_processing:queued:{reference}"
@@ -360,11 +385,10 @@ class OrderService:
 
         try:
             event_payload = PaidOrderEvent(
-                event_id=str(data.get("id") or uuid4()),
+                event_id=str(event_id or uuid4()),
                 reference=reference,
-                amount=int(data["amount"]),
+                amount=int(amount_kobo),
             )
-
             process_paid_order.delay(event_payload.model_dump(mode="json"))
         except Exception:
             await redis.delete(queue_key)

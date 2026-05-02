@@ -1,10 +1,13 @@
 from typing import Any
 
 from fastapi import status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models import SubOrder, WalletTransaction
 from app.service.metrics_service import MetricService
+from app.utils.exception import NotFoundException
 from app.utils.helper import build_date_filter
 from app.utils.responses import response_builder
 
@@ -203,6 +206,35 @@ class VendorDashBoardService:
         return response_builder(
             status="success",
             message="Orders fetched successfully",
+            data=data,
+            status_code=status.HTTP_200_OK,
+        )
+
+    @staticmethod
+    async def get_vendor_order_details(
+        *,
+        session: AsyncSession,
+        store_id: str,
+        suborder_id: str,
+    ) -> dict[str, Any]:
+        stmt = (
+            select(SubOrder)
+            .where(SubOrder.id == suborder_id, SubOrder.store_id == store_id)
+            .options(selectinload(SubOrder.order_items))
+        )
+        result = await session.execute(stmt)
+        suborder = result.scalar_one_or_none()
+        if not suborder:
+            raise NotFoundException(message="Order not found")
+
+        data = {
+            **suborder.to_dict(),
+            "order_items": [item.to_dict() for item in suborder.order_items],
+        }
+
+        return response_builder(
+            status="success",
+            message="Order fetched successfully",
             data=data,
             status_code=status.HTTP_200_OK,
         )

@@ -1,20 +1,21 @@
 import asyncio
-import os
 from logging.config import fileConfig
 
 from alembic import context
+from decouple import config as env_config
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+import app.models
 from app.core.config import config_options
-from app.core.config import settings
 from app.db.postgres_db_conn import Base
-from app.models import *
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
-env = (os.getenv("FASTAPI_ENV") or "development").lower()
+# Prefer `.env` (decouple) over raw OS env so Alembic matches the app config
+env = (env_config("FASTAPI_ENV", default="development") or "development").lower()
 env_aliases = {
     "dev": "development",
     "prod": "production",

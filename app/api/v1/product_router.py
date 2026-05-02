@@ -20,10 +20,6 @@ from app.service.product_service import product_service
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
-ImageCreate = Annotated[list[UploadFile], File(...)]
-ImageUpdate = Annotated[list[UploadFile] | None, File(...)]
-
-
 @router.get(
     "/categories",
     summary="List of available product categories that you can choose from when creating a product",
@@ -69,8 +65,11 @@ async def create_product(
     amount: Annotated[int, Form(ge=0, examples=[25000])],
     stock: Annotated[int, Form(ge=0, examples=[20])],
     category: Annotated[str, Form(examples=["cloth"])],
-    images: ImageCreate,
     db: dbSessionDep,
+    images: list[UploadFile] = File(
+        ...,
+        description="One or more product images (multipart/form-data).",
+    ),
 ):
 
     product_data = {
@@ -182,7 +181,10 @@ async def update_product(
     id: str,
     current_store: CurrentStore,
     redis: redisSessionDep,
-    images: ImageUpdate = None,
+    images: list[UploadFile] | None = File(
+        None,
+        description="Optional new product images (multipart/form-data).",
+    ),
     name: Annotated[str | None, Form(min_length=2, examples=["Round Neck"])] = None,
     description: Annotated[
         str | None, Form(min_length=5, examples=["This is straight from New York"])

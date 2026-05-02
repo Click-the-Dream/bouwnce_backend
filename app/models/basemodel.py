@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, selectinload
 from sqlalchemy.sql import text
 
 from app.db.postgres_db_conn import Base
+from app.utils.exception import BadRequestException, NotFoundException
 from app.utils.helper import is_valid_uuid
 
 T = TypeVar("T", bound="BaseModel")
@@ -67,7 +68,7 @@ class BaseModel(Base):
     @classmethod
     async def get_by_id(cls, id: str, db: AsyncSession) -> Self:
         if not is_valid_uuid(str(id)):
-            raise TypeError("id not a valid uuid")
+            raise BadRequestException(message="id not a valid uuid")
 
         if hasattr(cls, "is_active"):
             result = await db.execute(
@@ -78,7 +79,9 @@ class BaseModel(Base):
 
         obj = result.scalar_one_or_none()
         if not obj:
-            raise ValueError(f"{cls.__name__} with the specified ID not found")
+            raise NotFoundException(
+                message=f"{cls.__name__} with the specified ID not found"
+            )
         return obj
 
     @classmethod
@@ -95,7 +98,7 @@ class BaseModel(Base):
         obj = result.scalar_one_or_none()
 
         if not obj:
-            raise ValueError(f"{cls.__name__} not found")
+            raise NotFoundException(message=f"{cls.__name__} not found")
 
         obj.is_deleted = False
         obj.deleted_at = datetime.now(UTC)
@@ -111,7 +114,7 @@ class BaseModel(Base):
         obj = result.scalar_one_or_none()
 
         if not obj:
-            raise ValueError(f"{cls.__name__} not found")
+            raise NotFoundException(message=f"{cls.__name__} not found")
 
         await db.delete(obj)
 
@@ -132,7 +135,7 @@ class BaseModel(Base):
     async def update_by_id(cls, id: str, data: dict, db: AsyncSession) -> Self:
         obj = await cls.get_by_id(id, db)
         if not obj:
-            raise ValueError(f"{cls.__name__} not found")
+            raise NotFoundException(message=f"{cls.__name__} not found")
 
         exclude = ["id", "created_at"]
         for key, value in data.items():
@@ -223,7 +226,7 @@ class BaseModel(Base):
         obj = result.scalar_one_or_none()
 
         if not obj:
-            raise ValueError(f"{cls.__name__} not found")
+            raise NotFoundException(message=f"{cls.__name__} not found")
 
         obj.is_deleted = False
         obj.deleted_at = None

@@ -48,6 +48,9 @@ class PaystackGateWay:
         :rtype: Literal[True]
         """
 
+        if not settings.PAYSTACK_WEBHOOK_VERIFY_SIGNATURE:
+            return True
+
         body = await request.body()
 
         signature = request.headers.get("x-paystack-signature")

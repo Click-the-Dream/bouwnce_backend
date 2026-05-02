@@ -1,11 +1,11 @@
 import asyncio
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.security import genrate_verification_code
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
-from app.models.cart import Cart
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
@@ -24,6 +24,14 @@ from app.worker.event_system import (
     UserCartClearEvent,
     dispatch_event,
 )
+
+
+def _naira_to_kobo(amount_naira: float) -> int:
+    return int(
+        (Decimal(str(amount_naira)) * Decimal("100")).quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
+    )
 
 
 async def _process_paid_order(event: PaidOrderEvent) -> None:
@@ -47,7 +55,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
             if order.status not in ["initiated", "abandoned"]:
                 return
 
-            if (order.total_amount * 100) != amount:
+            if _naira_to_kobo(order.total_amount) != amount:
                 await order.update(db, {"status": "failed"})
                 await Payment.update_by_id(str(order.payment_id), {"status": "failed"}, db)
                 return
@@ -224,4 +232,4 @@ def process_paid_order(self, event_payload: dict) -> None:
             raise
 
         delay_seconds = min(2 ** (retries + 1), 300)
-        raise self.retry(exc=exc, countdown=delay_seconds)
+        raise self.retry(exc=exc, countdown=delay_seconds) from exc

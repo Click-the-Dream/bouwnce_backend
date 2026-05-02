@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import DateTime, ForeignKey, String, func, select
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,11 +18,19 @@ if TYPE_CHECKING:
 class RefreshToken(BaseModel):
     __tablename__ = "refresh_tokens"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "device_id",
+            name="uix_refresh_tokens_user_id_device_id",
+        ),
+    )
+
     user_id: Mapped[UUID_Type] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     token: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    device_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    device_id: Mapped[str] = mapped_column(String, nullable=False)
     user_agent: Mapped[str] = mapped_column(String, nullable=False)
     ip_address: Mapped[str] = mapped_column(String, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(

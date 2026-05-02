@@ -49,7 +49,7 @@ class LoginUserResponse(BaseResponse):
 
 
 class PaginatedUserResponseSchema(BaseModel):
-    uses: Annotated[list[UserResponsSchema], Field(description="List of User response")]
+    users: Annotated[list[UserResponsSchema], Field(description="List of User response")]
     page: Annotated[int, Field(examples=[2])]
     page_size: Annotated[int, Field(examples=[10])]
     total: Annotated[int, Field(examples=[100])]

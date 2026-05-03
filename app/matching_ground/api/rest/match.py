@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
-from fastapi import APIRouter,  BackgroundTasks
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, BackgroundTasks, Query
 
 from app.api.dependencies import CurrentUser, dbSessionDep
 from app.matching_ground.schema.match import (
@@ -25,6 +23,27 @@ async def suggest_candidates(
     return await service.suggest_candidates(
         session=db,
         requester_id=current_user.id
+    )
+
+
+@router.get(
+    "/search",
+    summary="Search match candidates from a natural language message",
+)
+async def search_candidates(
+    db: dbSessionDep,
+    current_user: CurrentUser,
+    message: str = Query(..., description="Natural language search, e.g. 'I want someone into AI within 5km'"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+) -> dict:
+    service = MatchLifecycleService()
+    return await service.search_candidates_from_message(
+        session=db,
+        requester_id=current_user.id,
+        message=message,
+        page=page,
+        page_size=page_size,
     )
 
 @router.post("/requests")

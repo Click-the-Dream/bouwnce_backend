@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from fastapi import BackgroundTasks
 import uuid
 from dataclasses import dataclass, field
@@ -7,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.matching_ground.core.interest_normalization import normalize_interest_name
 from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.notification import Notification
@@ -18,6 +20,59 @@ from app.utils.emails import generate_email_content, send_email
 
 @dataclass
 class MatchLifecycleService:
+    @staticmethod
+    def _parse_search_message(message: str) -> tuple[str | None, float]:
+  
+        text = (message or "").strip()
+        if not text:
+            return None, 10.0
+
+        radius_km = 10.0
+        radius_match = re.search(
+            r"(?i)(?:within|radius|around|near|in)\s*(\d+(?:\.\d+)?)\s*km", text
+        )
+        if radius_match:
+            try:
+                radius_km = float(radius_match.group(1))
+            except ValueError:
+                radius_km = 10.0
+
+        interest_hint = normalize_interest_name(text)
+        return interest_hint, radius_km
+
+    async def search_candidates_from_message(
+        self,
+        *,
+        session: AsyncSession,
+        requester_id: uuid.UUID,
+        message: str,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> dict:
+        interest_hint, radius_km = self._parse_search_message(message)
+        result = await self.suggest_candidates(
+            session=session,
+            requester_id=requester_id,
+            interest_hint=interest_hint,
+            radius_km=radius_km,
+        )
+
+        items = result.get("items", []) or []
+        start = (page - 1) * page_size
+        end = start + page_size
+        return {
+            "status": result.get("status", "ok"),
+            "reason": result.get("reason"),
+            "page": page,
+            "page_size": page_size,
+            "total": len(items),
+            "items": items[start:end],
+            "query": {
+                "message": message,
+                "radius_km": radius_km,
+                "interest_hint": interest_hint,
+            },
+        }
     
     async def suggest_candidates(
         self, session: AsyncSession, requester_id: uuid.UUID, interest_hint: str | None = None, radius_km: float = 10.0

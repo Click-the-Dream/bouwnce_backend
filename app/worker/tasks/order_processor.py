@@ -76,7 +76,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                         payload={
                             "reference": reference,
                             "order_id": str(order.id),
-                            "progress": 100,
+                            "progress": -100,
                         },
                     ),
                     db=db,

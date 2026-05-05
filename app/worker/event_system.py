@@ -57,7 +57,7 @@ async def _set_payment_progress(
     value = {
         "reference": reference,
         "order_id": order_id,
-        "progress": int(max(0, min(100, progress))),
+        "progress": int(max(-100, min(100, progress))),
         "status": status,
     }
     await redis.set(key, json.dumps(value), ex=60 * 30)

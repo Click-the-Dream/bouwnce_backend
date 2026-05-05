@@ -6,7 +6,7 @@ from app.api.dependencies import CurrentActiveUser, redisSessionDep
 import json
 
 from app.utils.exception import NotFoundException
-from app.worker.event_system import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
+from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
 
 router = APIRouter(prefix="/events", tags=["Events"])
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy import desc, select
@@ -51,6 +52,12 @@ class ChatService:
         await db.flush()
         await db.refresh(msg)
 
+        if redis is not None:
+            await redis.publish(
+                f"chat:conversation:{conversation.id}",
+                json.dumps({"type": "chat.message", "data": msg.to_dict()}),
+            )
+
         await dispatch_event(
             EventNames.PUSH_NOTIFICATION,
             PushNotificationEvent(
@@ -67,7 +74,6 @@ class ChatService:
             redis=redis,
         )
 
-        # Stream-friendly receipt event (frontend can use this to update UI quickly)
         await dispatch_event(
             EventNames.MOBILE_EVENT,
             MobileEvent(

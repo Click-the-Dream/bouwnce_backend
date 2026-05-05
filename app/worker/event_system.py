@@ -12,6 +12,7 @@ from app.models.products import product_domain
 from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.models.wallet import UserWallet
+from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
 from app.worker.tasks.email import send_email_using_worker
 
 
@@ -30,9 +31,6 @@ class EventNames:
     ORDER_COMPLETE = "order.complete"
     MOBILE_EVENT = "mobile.event"
 
-
-MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
-PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
 
 
 async def _publish_mobile_stream_event(

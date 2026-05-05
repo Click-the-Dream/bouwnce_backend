@@ -9,6 +9,7 @@ from app.api.dependencies import (
     dbSessionDep,
 )
 from app.schemas.store_crud import (
+    ListStoreResponse,
     PaginatStoreResponse,
     StoreCreate,
     StoreFullDetailsResponse,
@@ -76,7 +77,7 @@ async def get_store_onboarding_status(current_store: CurrentStore):
 
 @router.get(
     "/{vendor_id}",
-    response_model=StoreResponse,
+    response_model=ListStoreResponse,
     status_code=status.HTTP_200_OK,
     summary="Get store rmation by user ID",
 )

@@ -2,6 +2,11 @@ from decouple import config
 from pydantic import BaseModel, EmailStr
 
 
+# Redis keys / streams
+MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
+PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
+
+
 class Config(BaseModel):
     # Common settings
     API_STR: str = config("API_STR", default="api/v1")

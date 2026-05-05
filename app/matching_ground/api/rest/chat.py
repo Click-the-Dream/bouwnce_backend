@@ -33,15 +33,13 @@ async def send_message(
     redis: redisSessionDep,
     current_user: CurrentActiveUser,
 ) -> dict:
-    result = await chat_service.send_message(
+    return await chat_service.send_message_api(
         db=db,
         redis=redis,
-        sender=current_user,
-        recipient_id=uuid.UUID(payload.recipient_id),
+        current_user=current_user,
+        recipient_id=payload.recipient_id,
         body=payload.body,
     )
-    await db.commit()
-    return {"status": "success", "data": result}
 
 
 @router.get(
@@ -56,10 +54,31 @@ async def list_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> dict:
-    data = await chat_service.list_conversations(
+    return await chat_service.list_conversations_api(
         db=db, user_id=current_user.id, page=page, page_size=page_size
     )
-    return {"status": "success", "data": data}
+
+
+@router.get(
+    "/users/{user_id}/conversations",
+    summary="List conversations for a user id (self only)",
+    status_code=status.HTTP_200_OK,
+    response_model=dict,
+)
+async def list_user_conversations(
+    user_id: str,
+    db: dbSessionDep,
+    current_user: CurrentActiveUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> dict:
+    return await chat_service.list_user_conversations_api(
+        db=db,
+        current_user=current_user,
+        user_id=user_id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get(
@@ -73,10 +92,24 @@ async def get_conversation(
     db: dbSessionDep,
     current_user: CurrentActiveUser,
 ) -> dict:
-    data = await chat_service.get_conversation(
-        db=db, conversation_id=uuid.UUID(conversation_id), current_user_id=current_user.id
+    return await chat_service.get_conversation_api(
+        db=db, current_user_id=current_user.id, conversation_id=conversation_id
     )
-    return {"status": "success", "data": data}
+
+@router.get(
+    "/conversations/with/{user_id}",
+    summary="Get or create a conversation with a user",
+    status_code=status.HTTP_200_OK,
+    response_model=dict,
+)
+async def get_conversation_with_user(
+    user_id: str,
+    db: dbSessionDep,
+    current_user: CurrentActiveUser,
+) -> dict:
+    return await chat_service.get_or_create_conversation_with_user_api(
+        db=db, current_user_id=current_user.id, user_id=user_id
+    )
 
 
 @router.get(
@@ -92,14 +125,13 @@ async def list_messages(
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
 ) -> dict:
-    data = await chat_service.list_messages(
+    return await chat_service.list_messages_api(
         db=db,
-        conversation_id=uuid.UUID(conversation_id),
         current_user_id=current_user.id,
+        conversation_id=conversation_id,
         page=page,
         page_size=page_size,
     )
-    return {"status": "success", "data": data}
 
 
 @router.websocket("/ws/conversations/{conversation_id}")

@@ -4,12 +4,14 @@ import uuid
 import json
 from datetime import UTC, datetime
 
+from fastapi import status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.utils.exception import ForbiddenException, NotFoundException
+from app.utils.responses import response_builder
 from app.worker.event_system import (
     EventNames,
     MobileEvent,
@@ -26,6 +28,9 @@ class ChatService:
             raise ForbiddenException("You can't chat with yourself")
         return await Conversation.get_or_create_between(db, user1_id, user2_id)
 
+    # -----------------------------
+    # Core methods (domain-level)
+    # -----------------------------
     async def send_message(
         self,
         *,
@@ -93,6 +98,127 @@ class ChatService:
             "conversation_id": str(conversation.id),
             "message": msg.to_dict(),
         }
+
+    # -----------------------------
+    # API-friendly wrappers (standard response_builder)
+    # -----------------------------
+    async def send_message_api(
+        self,
+        *,
+        db: AsyncSession,
+        redis,
+        current_user: User,
+        recipient_id: str,
+        body: str,
+    ) -> dict:
+        result = await self.send_message(
+            db=db,
+            redis=redis,
+            sender=current_user,
+            recipient_id=uuid.UUID(recipient_id),
+            body=body,
+        )
+        await db.commit()
+        return response_builder(
+            status_code=status.HTTP_201_CREATED,
+            status="success",
+            message="Message sent",
+            data=result,
+        )
+
+    async def list_conversations_api(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        page: int,
+        page_size: int,
+    ) -> dict:
+        data = await self.list_conversations(
+            db=db, user_id=user_id, page=page, page_size=page_size
+        )
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Conversations fetched successfully",
+            data=data,
+        )
+
+    async def list_user_conversations_api(
+        self,
+        *,
+        db: AsyncSession,
+        current_user: User,
+        user_id: str,
+        page: int,
+        page_size: int,
+    ) -> dict:
+        target_id = uuid.UUID(user_id)
+        if target_id != current_user.id:
+            raise ForbiddenException(message="Forbidden")
+        return await self.list_conversations_api(
+            db=db, user_id=target_id, page=page, page_size=page_size
+        )
+
+    async def get_conversation_api(
+        self,
+        *,
+        db: AsyncSession,
+        current_user_id: uuid.UUID,
+        conversation_id: str,
+    ) -> dict:
+        data = await self.get_conversation(
+            db=db,
+            conversation_id=uuid.UUID(conversation_id),
+            current_user_id=current_user_id,
+        )
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Conversation fetched successfully",
+            data=data,
+        )
+
+    async def get_or_create_conversation_with_user_api(
+        self,
+        *,
+        db: AsyncSession,
+        current_user_id: uuid.UUID,
+        user_id: str,
+    ) -> dict:
+        conv = await self.get_or_create_conversation(
+            db=db, user1_id=current_user_id, user2_id=uuid.UUID(user_id)
+        )
+        await db.commit()
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Conversation ready",
+            data=conv.to_dict(),
+        )
+
+    async def list_messages_api(
+        self,
+        *,
+        db: AsyncSession,
+        current_user_id: uuid.UUID,
+        conversation_id: str,
+        page: int,
+        page_size: int,
+    ) -> dict:
+        data = await self.list_messages(
+            db=db,
+            conversation_id=uuid.UUID(conversation_id),
+            current_user_id=current_user_id,
+            page=page,
+            page_size=page_size,
+        )
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Messages fetched successfully",
+            data=data,
+        )
 
     async def list_conversations(
         self,

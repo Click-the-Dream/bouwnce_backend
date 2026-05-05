@@ -81,6 +81,8 @@ class BuddySearchService:
         )
 
         for candidate_id, full_name, candidate_lat, candidate_lon in candidate_rows.all():
+            if str(candidate_id) == str(requester_id):
+                continue
             target = (
                 Coordinates(lat=float(candidate_lat), lon=float(candidate_lon))
                 if candidate_lat is not None and candidate_lon is not None

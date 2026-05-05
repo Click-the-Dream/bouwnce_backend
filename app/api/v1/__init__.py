@@ -5,6 +5,7 @@ from app.api.v1 import (
     cart_router,
     contact_info_crud,
     order_router,
+    mobile_events,
     payment,
     payout_info_crud,
     product_router,
@@ -18,7 +19,7 @@ from app.api.v1 import (
     jobs
 )
 
-from app.matching_ground.api.rest import interest, location, match
+from app.matching_ground.api.rest import chat, interest, location, match
 
 from app.core.rate_limiter import rate_limiter
 from app.utils.responses import (
@@ -85,3 +86,5 @@ api_router.include_router(jobs.router)
 api_router.include_router(interest.router)
 api_router.include_router(match.router)
 api_router.include_router(location.router)
+api_router.include_router(mobile_events.router)
+api_router.include_router(chat.router)

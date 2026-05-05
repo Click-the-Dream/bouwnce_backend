@@ -17,6 +17,7 @@ from app.worker.celery_app import celery_app
 from app.worker.event_system import (
     EmailNotificationEvent,
     EventNames,
+    MobileEvent,
     ProductStockUpdateEvent,
     PushNotificationEvent,
     ReservationReleaseEvent,
@@ -55,10 +56,47 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
             if order.status not in ["initiated", "abandoned"]:
                 return
 
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="payment.processing.started",
+                    payload={"reference": reference, "order_id": str(order.id), "progress": 5},
+                ),
+                db=db,
+                redis=redis,
+            )
+
             if _naira_to_kobo(order.total_amount) != amount:
                 await order.update(db, {"status": "failed"})
                 await Payment.update_by_id(str(order.payment_id), {"status": "failed"}, db)
+                await dispatch_event(
+                    EventNames.MOBILE_EVENT,
+                    MobileEvent(
+                        event_name="payment.failed",
+                        payload={
+                            "reference": reference,
+                            "order_id": str(order.id),
+                            "progress": 100,
+                        },
+                    ),
+                    db=db,
+                    redis=redis,
+                )
                 return
+
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="payment.verified",
+                    payload={
+                        "reference": reference,
+                        "order_id": str(order.id),
+                        "progress": 25,
+                    },
+                ),
+                db=db,
+                redis=redis,
+            )
 
             user = await Order.fetch_owner_of_order(str(order.user_id), db)
             if not user:
@@ -158,8 +196,36 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                     redis=redis,
                 )
 
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="payment.processing.order_created",
+                    payload={
+                        "reference": reference,
+                        "order_id": str(order.id),
+                        "progress": 75,
+                    },
+                ),
+                db=db,
+                redis=redis,
+            )
+
             await order.update(db, {"status": "paid"})
             await Payment.update_by_id(str(order.payment_id), {"status": "successful"}, db)
+
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="payment.success",
+                    payload={
+                        "reference": reference,
+                        "order_id": str(order.id),
+                        "progress": 100,
+                    },
+                ),
+                db=db,
+                redis=redis,
+            )
 
             await dispatch_event(
                 EventNames.USER_CART_CLEAR,
@@ -195,6 +261,20 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                     title="Order Received",
                     body="Your payment was successful and your order is now confirmed.",
                     data={"track_id": str(order.track_id), "order_id": str(order.id)},
+                ),
+                db=db,
+                redis=redis,
+            )
+
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="payment.processing.notifications_sent",
+                    payload={
+                        "reference": reference,
+                        "order_id": str(order.id),
+                        "progress": 90,
+                    },
                 ),
                 db=db,
                 redis=redis,

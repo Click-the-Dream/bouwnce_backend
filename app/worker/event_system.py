@@ -28,6 +28,41 @@ class EventNames:
     BUYER_WALLET_CREDIT = "buyer.wallet.credit"
     STORE_WALLET_RELEASE = "store.wallet.release"
     ORDER_COMPLETE = "order.complete"
+    MOBILE_EVENT = "mobile.event"
+
+
+MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
+PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
+
+
+async def _publish_mobile_stream_event(
+    redis: Redis, *, event_name: str, payload: dict[str, Any]
+) -> None:
+    # Store payload as JSON so mobile clients can consume consistently.
+    await redis.xadd(
+        MOBILE_EVENTS_STREAM_KEY,
+        {"event_name": event_name, "payload": json.dumps(payload)},
+        maxlen=5000,
+        approximate=True,
+    )
+
+
+async def _set_payment_progress(
+    redis: Redis,
+    *,
+    reference: str,
+    progress: int,
+    status: str,
+    order_id: str | None = None,
+) -> None:
+    key = f"{PAYMENT_PROGRESS_KEY_PREFIX}{reference}"
+    value = {
+        "reference": reference,
+        "order_id": order_id,
+        "progress": int(max(0, min(100, progress))),
+        "status": status,
+    }
+    await redis.set(key, json.dumps(value), ex=60 * 30)
 
 
 @dataclass
@@ -101,6 +136,12 @@ class OrderCompleteEvent:
     order_id: str
 
 
+@dataclass
+class MobileEvent:
+    event_name: str
+    payload: dict[str, Any]
+
+
 async def dispatch_event(
     event_name: str,
     payload: Any,
@@ -108,6 +149,25 @@ async def dispatch_event(
     db: AsyncSession,
     redis: Redis | None,
 ) -> None:
+    if event_name == EventNames.MOBILE_EVENT:
+        if redis is None:
+            raise ValueError("redis client is required for mobile event")
+        # If this is a payment progress event, cache latest progress for quick reads.
+        if payload.event_name.startswith("payment."):
+            reference = str(payload.payload.get("reference") or "")
+            progress = int(payload.payload.get("progress") or 0)
+            if reference:
+                await _set_payment_progress(
+                    redis,
+                    reference=reference,
+                    progress=progress,
+                    status=payload.event_name,
+                    order_id=payload.payload.get("order_id"),
+                )
+        await _publish_mobile_stream_event(
+            redis, event_name=payload.event_name, payload=payload.payload
+        )
+        return
     if event_name == EventNames.PRODUCT_STOCK_UPDATE:
         await product_domain.decrease_product_stock_and_increase_total_sales(
             payload.product_id, payload.quantity
@@ -141,16 +201,18 @@ async def dispatch_event(
     if event_name == EventNames.PUSH_NOTIFICATION:
         if redis is None:
             raise ValueError("redis client is required for push notification event")
+        payload_dict = {
+            "user_id": payload.user_id,
+            "title": payload.title,
+            "body": payload.body,
+            "data": payload.data,
+        }
         await redis.rpush(
             "notifications:push:queue",
-            json.dumps(
-                {
-                    "user_id": payload.user_id,
-                    "title": payload.title,
-                    "body": payload.body,
-                    "data": payload.data,
-                }
-            ),
+            json.dumps(payload_dict),
+        )
+        await _publish_mobile_stream_event(
+            redis, event_name=EventNames.PUSH_NOTIFICATION, payload=payload_dict
         )
         return
 

@@ -17,6 +17,8 @@ from app.models.waitlist import Waitlist
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
 from app.models.newsletter import NewsLetter
+from app.models.chat import Conversation, Message
+from app.models.device_token import DeviceToken
 
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.user_interest import UserInterest
@@ -51,4 +53,7 @@ __all__ = [
     "MatchRequest",
     "Match",
     "SubOrderSnapshot",
+    "Conversation",
+    "Message",
+    "DeviceToken",
 ]

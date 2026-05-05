@@ -13,6 +13,7 @@ from app.models.order_item import OrderItem
 from app.models.payment import Payment
 from app.models.products import product_domain
 from app.models.store import Store
+from app.models.suborder import SubOrder
 from app.models.user import User
 from app.schemas.events import PaidOrderEvent
 from app.schemas.order import CheckoutInputSchema
@@ -32,6 +33,7 @@ from app.worker.event_system import (
     OrderCompleteEvent,
     OrderItemAcceptEvent,
     OrderItemCancelEvent,
+    PushNotificationEvent,
     dispatch_event,
 )
 from app.worker.tasks.order_processor import process_paid_order
@@ -406,6 +408,7 @@ class OrderService:
         self,
         order_item_id: str,
         db: AsyncSession,
+        redis: Redis,
         current_user: User,
     ) -> dict[str, Any]:
         order_item = await OrderItem.get_by_id(order_item_id, db)
@@ -419,7 +422,7 @@ class OrderService:
             EventNames.ORDER_ITEM_CANCEL,
             OrderItemCancelEvent(order_item_id=order_item_id),
             db=db,
-            redis=None,
+            redis=redis,
         )
 
         return response_builder(
@@ -429,7 +432,7 @@ class OrderService:
         )
 
     async def accept_order(
-        self, order_item_id: str, db: AsyncSession, current_user: User
+        self, order_item_id: str, db: AsyncSession, redis: Redis, current_user: User
     ) -> dict[str, Any]:
         order_item = await OrderItem.get_by_id(order_item_id, db)
         suborder = order_item.suborder
@@ -442,7 +445,7 @@ class OrderService:
             EventNames.ORDER_ITEM_ACCEPT,
             OrderItemAcceptEvent(order_item_id=order_item_id),
             db=db,
-            redis=None,
+            redis=redis,
         )
 
         return response_builder(
@@ -452,7 +455,7 @@ class OrderService:
         )
 
     async def complete_order(
-        self, order_id: str, db: AsyncSession, current_user: User
+        self, order_id: str, db: AsyncSession, redis: Redis, current_user: User
     ) -> dict[str, Any]:
         order = await Order.get_by_id(order_id, db)
         if str(order.user_id) != str(current_user.id):
@@ -462,13 +465,100 @@ class OrderService:
             EventNames.ORDER_COMPLETE,
             OrderCompleteEvent(order_id=order_id),
             db=db,
-            redis=None,
+            redis=redis,
         )
 
         return response_builder(
             status_code=status.HTTP_200_OK,
             status="success",
             message="Order marked as completed successfully",
+        )
+
+    async def decline_order_item(
+        self,
+        *,
+        order_item_id: str,
+        db: AsyncSession,
+        redis: Redis,
+        current_user: User,
+    ) -> dict[str, Any]:
+        order_item = await OrderItem.get_by_id(order_item_id, db)
+        suborder = order_item.suborder
+        store = suborder.store if suborder else None
+
+        if not store or str(store.user_id) != str(current_user.id):
+            raise ForbiddenException(message="You cannot decline this order item")
+
+        await dispatch_event(
+            EventNames.ORDER_ITEM_CANCEL,
+            OrderItemCancelEvent(order_item_id=order_item_id),
+            db=db,
+            redis=redis,
+        )
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Order item declined successfully",
+        )
+
+    async def update_suborder_status(
+        self,
+        *,
+        suborder_id: str,
+        new_status: str,
+        db: AsyncSession,
+        redis: Redis,
+        current_user: User,
+    ) -> dict[str, Any]:
+        allowed_statuses = {
+            "accepted",
+            "declined",
+            "shipped",
+            "delivered",
+            "cancelled",
+        }
+        if new_status not in allowed_statuses:
+            raise BadRequestException(message="Invalid suborder status")
+
+        # Load required relationships explicitly (avoid async lazy-loading issues)
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        result = await db.execute(
+            select(SubOrder)
+            .where(SubOrder.id == suborder_id)
+            .options(selectinload(SubOrder.store), selectinload(SubOrder.order))
+        )
+        suborder = result.scalar_one_or_none()
+        if not suborder:
+            raise NotFoundException(message="Suborder not found")
+
+        store = suborder.store
+        if not store or str(store.user_id) != str(current_user.id):
+            raise ForbiddenException(message="You cannot update this suborder")
+
+        suborder.status = new_status
+        await suborder.save(db)
+
+        # Best-effort: notify buyer/store via mobile stream/push.
+        await dispatch_event(
+            EventNames.PUSH_NOTIFICATION,
+            PushNotificationEvent(
+                user_id=str(suborder.order.user_id),
+                title="Order Update",
+                body=f"Your order is now {new_status}.",
+                data={"suborder_id": str(suborder.id), "status": new_status},
+            ),
+            db=db,
+            redis=redis,
+        )
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Suborder status updated successfully",
+            data=suborder.to_dict(),
         )
 
     async def fetch_user_orders(

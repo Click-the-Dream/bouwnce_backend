@@ -14,6 +14,7 @@ from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.notification import Notification
 from app.models.user import User
 from app.matching_ground.service.buddy_search import BuddySearchService
+from app.models.chat import Conversation
 from app.utils.exception import ForbiddenException, NotFoundException, BadRequestException
 from app.utils.emails import generate_email_content, send_email
 
@@ -216,6 +217,9 @@ class MatchLifecycleService:
         await request.set_status(session, "accepted")
         
         match = await MatchRequest.create_accepted(session, request.requester_id, request.target_user_id)
+        conversation = await Conversation.get_or_create_between(
+            session, request.requester_id, request.target_user_id
+        )
 
         notif_data = {
             "user_id": request.requester_id,
@@ -227,7 +231,12 @@ class MatchLifecycleService:
             data=notif_data,
             db=session,
         )
-        return {"status": "accepted", "request_id": str(request.id), "match_id": str(match.id)}
+        return {
+            "status": "accepted",
+            "request_id": str(request.id),
+            "match_id": str(match.id),
+            "conversation_id": str(conversation.id),
+        }
 
 
   

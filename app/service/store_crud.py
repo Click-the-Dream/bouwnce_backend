@@ -147,7 +147,7 @@ class StoreCRUDService:
         if name:
             filter["name"] = f"%{name}%"
 
-        stores = await Store.get_by(filter, db, page, page_size)
+        stores = await Store.get_by(db=db, filter=filter, page=page, page_size=page_size)
         store_response = [store.to_dict() for store in stores["data"]]
 
         return response_builder(

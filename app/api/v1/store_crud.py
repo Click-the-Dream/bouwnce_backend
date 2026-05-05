@@ -77,7 +77,7 @@ async def get_store_onboarding_status(current_store: CurrentStore):
 
 @router.get(
     "/{vendor_id}",
-    response_model=ListStoreResponse,
+    response_model=StoreResponse,
     status_code=status.HTTP_200_OK,
     summary="Get store rmation by user ID",
 )

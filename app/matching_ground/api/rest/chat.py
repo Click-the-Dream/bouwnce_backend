@@ -104,15 +104,7 @@ async def list_messages(
 
 @router.websocket("/ws/conversations/{conversation_id}")
 async def chat_ws(websocket: WebSocket, conversation_id: str) -> None:
-    """
-    WebSocket chat channel backed by Redis PubSub.
-    Auth: pass access token via query string `?token=...`.
 
-    Client -> server:
-      { "type": "message", "body": "hi" }
-    Server -> client:
-      { "type": "chat.message", "data": {...message dict...} }
-    """
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=1008)
@@ -136,7 +128,6 @@ async def chat_ws(websocket: WebSocket, conversation_id: str) -> None:
     await pubsub.subscribe(pubsub_channel)
 
     async with get_async_session() as db:
-        # Validate membership + get recipient id
         result = await db.execute(
             select(Conversation)
             .where(Conversation.id == conv_uuid)

@@ -38,7 +38,7 @@ class Product(BaseDocument):
     category: str
     state: str
     images: list[Images]
-    status: bool
+    status: str
     total_sales: Annotated[int, Field(default=0)]
 
     class Settings:
@@ -243,7 +243,7 @@ class ProductDomain:
 
         image_paths = data["image_paths"]
         state = "draft"
-        status = True
+        status = "active"
 
         data["state"] = state
 
@@ -362,7 +362,7 @@ class ProductDomain:
         filter = [
             In(self.Product.id, object_ids),
             self.Product.state == "live",
-            Eq(self.Product.status, True),
+            Eq(self.Product.status, "active"),
         ]
         products = await self.Product.find(*filter).to_list()
 
@@ -373,7 +373,7 @@ class ProductDomain:
         filter: dict[str, Any],
         page: int | None = 1,
         per_page: int | None = 10,
-    ) -> list[Product]:
+    ) -> dict[str, Any]:
 
         query = []
 
@@ -384,10 +384,10 @@ class ProductDomain:
         if len(query) > 0:
             print(query)
             results_query = self.Product.find(
-                {"$and": [{"$or": query}, {"state": "live"}, {"status": True}]}
+                {"$and": [{"$or": query}, {"state": "live"}, {"status": "active"}]}
             ).sort(-self.Product.updated_at)
         else:
-            results_query = self.Product.find({"state": "live", "status": True}).sort(
+            results_query = self.Product.find({"state": "live", "status": "active"}).sort(
                 -self.Product.updated_at
             )
 

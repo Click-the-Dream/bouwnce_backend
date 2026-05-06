@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import uuid
 import json
 from datetime import UTC, datetime
 
 from fastapi import status
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Conversation, Message
@@ -21,28 +20,30 @@ from app.worker.event_system import (
 
 
 class ChatService:
-    async def get_or_create_conversation(
-        self, *, db: AsyncSession, user1_id: uuid.UUID, user2_id: uuid.UUID
-    ) -> Conversation:
-        if user1_id == user2_id:
-            raise ForbiddenException("You can't chat with yourself")
-        return await Conversation.get_or_create_between(db, user1_id, user2_id)
-
     # -----------------------------
     # Core methods (domain-level)
     # -----------------------------
+    async def get_or_create_conversation(
+        self, *, db: AsyncSession, user1_id: str, user2_id: str
+    ) -> Conversation:
+        if str(user1_id) == str(user2_id):
+            raise ForbiddenException("You can't chat with yourself")
+        return await Conversation.get_or_create_between(db, user1_id, user2_id)
+
     async def send_message(
         self,
         *,
         db: AsyncSession,
         redis,
         sender: User,
-        recipient_id: uuid.UUID,
+        recipient_id: str,
         body: str,
+        commit: bool = False,
+        as_response: bool = False,
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
         conversation = await self.get_or_create_conversation(
-            db=db, user1_id=sender.id, user2_id=recipient.id
+            db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
 
         msg = Message(
@@ -94,168 +95,70 @@ class ChatService:
             redis=redis,
         )
 
-        return {
-            "conversation_id": str(conversation.id),
-            "message": msg.to_dict(),
-        }
+        result = {"conversation_id": str(conversation.id), "message": msg.to_dict()}
 
-    # -----------------------------
-    # API-friendly wrappers (standard response_builder)
-    # -----------------------------
-    async def send_message_api(
-        self,
-        *,
-        db: AsyncSession,
-        redis,
-        current_user: User,
-        recipient_id: str,
-        body: str,
-    ) -> dict:
-        result = await self.send_message(
-            db=db,
-            redis=redis,
-            sender=current_user,
-            recipient_id=uuid.UUID(recipient_id),
-            body=body,
-        )
-        await db.commit()
-        return response_builder(
-            status_code=status.HTTP_201_CREATED,
-            status="success",
-            message="Message sent",
-            data=result,
-        )
+        if commit:
+            await db.commit()
 
-    async def list_conversations_api(
-        self,
-        *,
-        db: AsyncSession,
-        user_id: uuid.UUID,
-        page: int,
-        page_size: int,
-    ) -> dict:
-        data = await self.list_conversations(
-            db=db, user_id=user_id, page=page, page_size=page_size
-        )
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Conversations fetched successfully",
-            data=data,
-        )
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_201_CREATED,
+                status="success",
+                message="Message sent",
+                data=result,
+            )
 
-    async def list_user_conversations_api(
-        self,
-        *,
-        db: AsyncSession,
-        current_user: User,
-        user_id: str,
-        page: int,
-        page_size: int,
-    ) -> dict:
-        target_id = uuid.UUID(user_id)
-        if target_id != current_user.id:
-            raise ForbiddenException(message="Forbidden")
-        return await self.list_conversations_api(
-            db=db, user_id=target_id, page=page, page_size=page_size
-        )
-
-    async def get_conversation_api(
-        self,
-        *,
-        db: AsyncSession,
-        current_user_id: uuid.UUID,
-        conversation_id: str,
-    ) -> dict:
-        data = await self.get_conversation(
-            db=db,
-            conversation_id=uuid.UUID(conversation_id),
-            current_user_id=current_user_id,
-        )
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Conversation fetched successfully",
-            data=data,
-        )
-
-    async def get_or_create_conversation_with_user_api(
-        self,
-        *,
-        db: AsyncSession,
-        current_user_id: uuid.UUID,
-        user_id: str,
-    ) -> dict:
-        conv = await self.get_or_create_conversation(
-            db=db, user1_id=current_user_id, user2_id=uuid.UUID(user_id)
-        )
-        await db.commit()
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Conversation ready",
-            data=conv.to_dict(),
-        )
-
-    async def list_messages_api(
-        self,
-        *,
-        db: AsyncSession,
-        current_user_id: uuid.UUID,
-        conversation_id: str,
-        page: int,
-        page_size: int,
-    ) -> dict:
-        data = await self.list_messages(
-            db=db,
-            conversation_id=uuid.UUID(conversation_id),
-            current_user_id=current_user_id,
-            page=page,
-            page_size=page_size,
-        )
-        return response_builder(
-            status_code=status.HTTP_200_OK,
-            status="success",
-            message="Messages fetched successfully",
-            data=data,
-        )
+        return result
 
     async def list_conversations(
         self,
         *,
         db: AsyncSession,
-        user_id: uuid.UUID,
+        user_id: str,
         page: int = 1,
         page_size: int = 20,
+        as_response: bool = False,
     ) -> dict:
         offset = (page - 1) * page_size
         stmt = (
             select(Conversation)
-            .where((Conversation.user_a_id == user_id) | (Conversation.user_b_id == user_id))
+            .where(
+                (Conversation.user_a_id == user_id) | (Conversation.user_b_id == user_id)
+            )
             .order_by(desc(Conversation.last_message_at))
             .offset(offset)
             .limit(page_size)
         )
         result = await db.execute(stmt)
         rows = list(result.scalars().all())
-        return {
+        data = {
             "items": [c.to_dict() for c in rows],
             "page": page,
             "page_size": page_size,
             "total": len(rows),
         }
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Conversations fetched successfully",
+                data=data,
+            )
+        return data
 
     async def list_messages(
         self,
         *,
         db: AsyncSession,
-        conversation_id: uuid.UUID,
-        current_user_id: uuid.UUID,
+        conversation_id: str,
+        current_user_id: str,
         page: int = 1,
         page_size: int = 30,
+        as_response: bool = False,
     ) -> dict:
         conv = await Conversation.get_by_id(str(conversation_id), db)
-        if current_user_id not in {conv.user_a_id, conv.user_b_id}:
+        current_id = str(current_user_id)
+        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
         offset = (page - 1) * page_size
@@ -268,15 +171,118 @@ class ChatService:
         )
         result = await db.execute(stmt)
         items = [m.to_dict() for m in result.scalars().all()]
-        return {"items": items, "page": page, "page_size": page_size, "total": len(items)}
+        data = {"items": items, "page": page, "page_size": page_size, "total": len(items)}
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Messages fetched successfully",
+                data=data,
+            )
+        return data
 
     async def get_conversation(
-        self, *, db: AsyncSession, conversation_id: uuid.UUID, current_user_id: uuid.UUID
+        self,
+        *,
+        db: AsyncSession,
+        conversation_id: str,
+        current_user_id: str,
+        include_messages: bool = True,
+        as_response: bool = False,
     ) -> dict:
         conv = await Conversation.get_by_id(str(conversation_id), db)
-        if current_user_id not in {conv.user_a_id, conv.user_b_id}:
+        current_id = str(current_user_id)
+        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise NotFoundException("Conversation not found")
-        return conv.to_dict()
+        data: dict = {"conversation": conv.to_dict()}
+        if include_messages:
+            data["messages"] = await self.list_messages(
+                db=db,
+                conversation_id=str(conversation_id),
+                current_user_id=current_user_id,
+                page=1,
+                page_size=30,
+                as_response=False,
+            )
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Conversation fetched successfully",
+                data=data,
+            )
+        return data
+
+    async def get_or_create_conversation_with_user(
+        self,
+        *,
+        db: AsyncSession,
+        current_user_id: str,
+        user_id: str,
+        include_messages: bool = True,
+        commit: bool = False,
+        as_response: bool = False,
+    ) -> dict:
+        conv = await self.get_or_create_conversation(
+            db=db, user1_id=str(current_user_id), user2_id=str(user_id)
+        )
+        data: dict = {"conversation": conv.to_dict()}
+        if include_messages:
+            data["messages"] = await self.list_messages(
+                db=db,
+                conversation_id=str(conv.id),
+                current_user_id=current_user_id,
+                page=1,
+                page_size=30,
+                as_response=False,
+            )
+        if commit:
+            await db.commit()
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Conversation ready",
+                data=data,
+            )
+        return data
+
+    async def mark_conversation_read(
+        self,
+        *,
+        db: AsyncSession,
+        conversation_id: str,
+        current_user_id: str,
+        commit: bool = False,
+        as_response: bool = False,
+    ) -> dict:
+        conv = await Conversation.get_by_id(str(conversation_id), db)
+        current_id = str(current_user_id)
+        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
+            raise ForbiddenException("You cannot access this conversation")
+
+        stmt = (
+            update(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.recipient_id == current_user_id,
+                Message.read_at.is_(None),
+            )
+            .values(read_at=datetime.now(UTC))
+        )
+        result = await db.execute(stmt)
+        updated = int(result.rowcount or 0)
+        data = {"conversation_id": str(conv.id), "updated": updated}
+        if commit:
+            await db.commit()
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Conversation marked as read",
+                data=data,
+            )
+        return data
 
 
 chat_service = ChatService()

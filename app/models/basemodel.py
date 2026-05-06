@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from enum import Enum
 from typing import Any, Self, TypeVar
 from uuid import UUID as UUID_Type
 from uuid import uuid4
@@ -7,6 +8,7 @@ from uuid import uuid4
 from sqlalchemy import Boolean, DateTime, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.orm import Mapped, mapped_column, selectinload
 from sqlalchemy.sql import text
 
@@ -35,18 +37,29 @@ class BaseModel(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     def to_dict(self) -> dict:
+        """
+        Serialize this SQLAlchemy model to a JSON-safe dict.
 
-        obj_dict = self.__dict__.copy()
-        del obj_dict["_sa_instance_state"]
-        del obj_dict["is_deleted"]
-        del obj_dict["deleted_at"]
+        Note: Only mapped column attributes are included (relationships are excluded)
+        to prevent non-serializable objects leaking into API/Redis payloads.
+        """
+        mapper = sa_inspect(self).mapper
+        obj_dict: dict[str, Any] = {}
 
-        for key, value in obj_dict.items():
-            if isinstance(value, (UUID_Type,)):
-                obj_dict[key] = str(value)
+        for attr in mapper.column_attrs:
+            key = attr.key
+            if key in {"is_deleted", "deleted_at"}:
+                continue
+            value = getattr(self, key)
 
-            if isinstance(value, datetime):
-                obj_dict[key] = value.isoformat()
+            if isinstance(value, UUID_Type):
+                value = str(value)
+            elif isinstance(value, datetime):
+                value = value.isoformat()
+            elif isinstance(value, Enum):
+                value = value.value
+
+            obj_dict[key] = value
 
         return obj_dict
 

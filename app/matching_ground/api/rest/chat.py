@@ -33,12 +33,14 @@ async def send_message(
     redis: redisSessionDep,
     current_user: CurrentActiveUser,
 ) -> dict:
-    return await chat_service.send_message_api(
+    return await chat_service.send_message(
         db=db,
         redis=redis,
-        current_user=current_user,
+        sender=current_user,
         recipient_id=payload.recipient_id,
         body=payload.body,
+        commit=True,
+        as_response=True,
     )
 
 
@@ -54,30 +56,8 @@ async def list_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> dict:
-    return await chat_service.list_conversations_api(
-        db=db, user_id=current_user.id, page=page, page_size=page_size
-    )
-
-
-@router.get(
-    "/users/{user_id}/conversations",
-    summary="List conversations for a user id (self only)",
-    status_code=status.HTTP_200_OK,
-    response_model=dict,
-)
-async def list_user_conversations(
-    user_id: str,
-    db: dbSessionDep,
-    current_user: CurrentActiveUser,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-) -> dict:
-    return await chat_service.list_user_conversations_api(
-        db=db,
-        current_user=current_user,
-        user_id=user_id,
-        page=page,
-        page_size=page_size,
+    return await chat_service.list_conversations(
+        db=db, user_id=current_user.id, page=page, page_size=page_size, as_response=True
     )
 
 
@@ -88,12 +68,16 @@ async def list_user_conversations(
     response_model=dict,
 )
 async def get_conversation(
-    conversation_id: str,
+    conversation_id: uuid.UUID,
     db: dbSessionDep,
     current_user: CurrentActiveUser,
 ) -> dict:
-    return await chat_service.get_conversation_api(
-        db=db, current_user_id=current_user.id, conversation_id=conversation_id
+    return await chat_service.get_conversation(
+        db=db,
+        current_user_id=current_user.id,
+        conversation_id=conversation_id,
+        include_messages=True,
+        as_response=True,
     )
 
 @router.get(
@@ -103,12 +87,36 @@ async def get_conversation(
     response_model=dict,
 )
 async def get_conversation_with_user(
-    user_id: str,
+    user_id: uuid.UUID,
     db: dbSessionDep,
     current_user: CurrentActiveUser,
 ) -> dict:
-    return await chat_service.get_or_create_conversation_with_user_api(
-        db=db, current_user_id=current_user.id, user_id=user_id
+    return await chat_service.get_or_create_conversation_with_user(
+        db=db,
+        current_user_id=current_user.id,
+        user_id=user_id,
+        include_messages=True,
+        commit=True,
+        as_response=True,
+    )
+
+@router.patch(
+    "/conversations/{conversation_id}/read",
+    summary="Mark a conversation as read (recipient messages only)",
+    status_code=status.HTTP_200_OK,
+    response_model=dict,
+)
+async def mark_conversation_read(
+    conversation_id: uuid.UUID,
+    db: dbSessionDep,
+    current_user: CurrentActiveUser,
+) -> dict:
+    return await chat_service.mark_conversation_read(
+        db=db,
+        current_user_id=current_user.id,
+        conversation_id=conversation_id,
+        commit=True,
+        as_response=True,
     )
 
 
@@ -119,23 +127,24 @@ async def get_conversation_with_user(
     response_model=dict,
 )
 async def list_messages(
-    conversation_id: str,
+    conversation_id: uuid.UUID,
     db: dbSessionDep,
     current_user: CurrentActiveUser,
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
 ) -> dict:
-    return await chat_service.list_messages_api(
+    return await chat_service.list_messages(
         db=db,
         current_user_id=current_user.id,
         conversation_id=conversation_id,
         page=page,
         page_size=page_size,
+        as_response=True,
     )
 
 
 @router.websocket("/ws/conversations/{conversation_id}")
-async def chat_ws(websocket: WebSocket, conversation_id: str) -> None:
+async def chat_ws(websocket: WebSocket, conversation_id: uuid.UUID) -> None:
 
     token = websocket.query_params.get("token")
     if not token:
@@ -152,7 +161,7 @@ async def chat_ws(websocket: WebSocket, conversation_id: str) -> None:
         await websocket.close(code=1008)
         return
 
-    conv_uuid = uuid.UUID(conversation_id)
+    conv_uuid = str(conversation_id)
     pubsub_channel = f"chat:conversation:{conversation_id}"
 
     redis = await get_redis_client()
@@ -172,16 +181,23 @@ async def chat_ws(websocket: WebSocket, conversation_id: str) -> None:
             await pubsub.close()
             return
 
-        current_id = uuid.UUID(str(user_id))
-        if current_id not in {conv.user_a_id, conv.user_b_id}:
+        current_id = str(user_id)
+        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             await websocket.close(code=1008)
             await pubsub.unsubscribe(pubsub_channel)
             await pubsub.close()
             return
 
-        recipient_id = conv.user_b_id if current_id == conv.user_a_id else conv.user_a_id
+        recipient_id = (
+            conv.user_b_id if current_id == str(conv.user_a_id) else conv.user_a_id
+        )
 
         await websocket.accept()
+        # Mark any unread incoming messages as read once the user opens the conversation.
+        await chat_service.mark_conversation_read(
+            db=db, conversation_id=str(conversation_id), current_user_id=current_id
+        )
+        await db.commit()
 
         async def forward_pubsub() -> None:
             try:

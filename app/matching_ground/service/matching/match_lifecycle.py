@@ -87,6 +87,8 @@ class MatchLifecycleService:
         )
         filtered_matches = []
         for item in result.matches:
+            if str(item.user_id) == str(requester_id):
+                continue
             if await UserBlock.is_blocked_between(session, requester_id, uuid.UUID(item.user_id)):
                 continue
             filtered_matches.append(item)

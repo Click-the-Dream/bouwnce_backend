@@ -60,7 +60,12 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                 EventNames.MOBILE_EVENT,
                 MobileEvent(
                     event_name="payment.processing.started",
-                    payload={"reference": reference, "order_id": str(order.id), "progress": 5},
+                    payload={
+                        "reference": reference,
+                        "order_id": str(order.id),
+                        "user_id": str(order.user_id),
+                        "progress": 5,
+                    },
                 ),
                 db=db,
                 redis=redis,
@@ -76,6 +81,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                         payload={
                             "reference": reference,
                             "order_id": str(order.id),
+                            "user_id": str(order.user_id),
                             "progress": -100,
                         },
                     ),
@@ -91,6 +97,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                     payload={
                         "reference": reference,
                         "order_id": str(order.id),
+                        "user_id": str(order.user_id),
                         "progress": 25,
                     },
                 ),
@@ -203,6 +210,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                     payload={
                         "reference": reference,
                         "order_id": str(order.id),
+                        "user_id": str(order.user_id),
                         "progress": 75,
                     },
                 ),
@@ -220,6 +228,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                     payload={
                         "reference": reference,
                         "order_id": str(order.id),
+                        "user_id": str(order.user_id),
                         "progress": 100,
                     },
                 ),
@@ -273,6 +282,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                     payload={
                         "reference": reference,
                         "order_id": str(order.id),
+                        "user_id": str(order.user_id),
                         "progress": 90,
                     },
                 ),

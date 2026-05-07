@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, status
-
-from app.api.dependencies import CurrentActiveUser, redisSessionDep
+import asyncio
 import json
 
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+
+from app.api.dependencies import CurrentActiveUser, redisSessionDep
+
+from app.core.security import verify_token
 from app.utils.exception import NotFoundException
 from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
+from app.db.redis import get_redis_client
+from app.db.postgres_db_conn import get_async_session
+from app.models.user import User
+from app.matching_ground.schema.chat import SendMessagePayload
+from app.matching_ground.service.chat_service import chat_service
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -81,3 +89,141 @@ async def get_payment_progress(
     except Exception:
         data = {"raw": value}
     return {"status": "success", "data": data}
+
+
+@router.websocket("/ws")
+async def events_ws(websocket: WebSocket) -> None:
+    """
+    One websocket for multiple realtime states:
+    - Chat: Redis PubSub channel `chat:user:{user_id}`
+    - Events: Redis Stream `events:mobile:stream` (filtered by payload.user_id)
+
+    Connect:
+      `wss://<domain>/api/v1/events/ws?token=<access_token>`
+
+    Send chat messages over the same socket:
+      `{"type":"chat.send","recipient_id":"<uuid>","body":"hi"}`
+    """
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    token_payload = verify_token(token)
+    if token_payload.get("type") != "access":
+        await websocket.close(code=1008)
+        return
+
+    user_id = token_payload.get("sub")
+    if not user_id:
+        await websocket.close(code=1008)
+        return
+
+    redis = await get_redis_client()
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(f"chat:user:{user_id}")
+
+    await websocket.accept()
+
+    async def forward_pubsub() -> None:
+        try:
+            async for msg in pubsub.listen():
+                if msg is None:
+                    continue
+                if msg.get("type") != "message":
+                    continue
+                data = msg.get("data")
+                if isinstance(data, (bytes, bytearray)):
+                    data = data.decode()
+                # Chat service publishes JSON strings; forward as JSON when possible
+                try:
+                    await websocket.send_json(json.loads(data))
+                except Exception:
+                    await websocket.send_text(str(data))
+        except Exception:
+            return
+
+    async def forward_stream() -> None:
+        last_id = "$"
+        try:
+            while True:
+                streams = await redis.xread(
+                    streams={MOBILE_EVENTS_STREAM_KEY: last_id}, count=50, block=25000
+                )
+                for _stream_name, messages in streams or []:
+                    for msg_id, fields in messages:
+                        last_id = msg_id
+                        event_name = fields.get("event_name")
+                        payload_raw = fields.get("payload")
+                        if not event_name or not payload_raw:
+                            continue
+                        try:
+                            payload_obj = json.loads(payload_raw)
+                        except Exception:
+                            continue
+                        if str(payload_obj.get("user_id") or "") != str(user_id):
+                            continue
+                        await websocket.send_json(
+                            {
+                                "type": "event",
+                                "event_name": event_name,
+                                "payload": payload_obj,
+                            }
+                        )
+        except Exception:
+            return
+
+    pubsub_task = asyncio.create_task(forward_pubsub())
+    stream_task = asyncio.create_task(forward_stream())
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                incoming = json.loads(raw)
+            except Exception:
+                # Ignore non-JSON payloads
+                continue
+
+            msg_type = str(incoming.get("type") or "").strip().lower()
+            if not msg_type:
+                continue
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+
+            if msg_type == "chat.send":
+                try:
+                    payload = SendMessagePayload.model_validate(incoming)
+                except Exception:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "error": "invalid_payload",
+                            "message": "Expected: {type:'chat.send', recipient_id:'<uuid>', body:'...'}",
+                        }
+                    )
+                    continue
+
+                async with get_async_session() as db:
+                    sender = await User.get_by_id(str(user_id), db)
+                    result = await chat_service.send_message(
+                        db=db,
+                        redis=redis,
+                        sender=sender,
+                        recipient_id=payload.recipient_id,
+                        body=payload.body,
+                        commit=False,
+                        as_response=False,
+                    )
+
+                await websocket.send_json({"type": "chat.sent", "data": result})
+                continue
+    except WebSocketDisconnect:
+        pass
+    finally:
+        pubsub_task.cancel()
+        stream_task.cancel()
+        await pubsub.unsubscribe(f"chat:user:{user_id}")
+        await pubsub.close()

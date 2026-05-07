@@ -20,6 +20,50 @@ from app.worker.event_system import (
 
 
 class ChatService:
+    @staticmethod
+    def _serialize_user(user: User) -> dict:
+        return {
+            "id": str(user.id),
+            "username": user.username,
+            "full_name": user.full_name,
+        }
+
+    @staticmethod
+    def _serialize_conversation(conv: Conversation, *, current_user_id: str) -> dict:
+        """
+        API-safe conversation dict including the other participant's identity.
+        """
+        base = {
+            "id": str(conv.id),
+            "user_a_id": str(conv.user_a_id),
+            "user_b_id": str(conv.user_b_id),
+            "last_message_at": conv.last_message_at.isoformat()
+            if getattr(conv, "last_message_at", None)
+            else None,
+            "created_at": conv.created_at.isoformat() if conv.created_at else None,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        }
+
+        current_id = str(current_user_id)
+        other = conv.user_b if current_id == str(conv.user_a_id) else conv.user_a
+        base["other_user"] = {
+            "id": str(other.id),
+            "username": other.username,
+            "full_name": other.full_name,
+        }
+        return base
+
+    @classmethod
+    def _serialize_message(
+        cls, msg: Message, *, sender: User | None = None, recipient: User | None = None
+    ) -> dict:
+        data = msg.to_dict()
+        if sender is not None:
+            data["sender"] = cls._serialize_user(sender)
+        if recipient is not None:
+            data["recipient"] = cls._serialize_user(recipient)
+        return data
+
     # -----------------------------
     # Core methods (domain-level)
     # -----------------------------
@@ -59,10 +103,15 @@ class ChatService:
         await db.refresh(msg)
 
         if redis is not None:
+            msg_payload = self._serialize_message(msg, sender=sender, recipient=recipient)
             await redis.publish(
                 f"chat:conversation:{conversation.id}",
-                json.dumps({"type": "chat.message", "data": msg.to_dict()}),
+                json.dumps({"type": "chat.message", "data": msg_payload}),
             )
+            # User-level fanout (single inbox websocket can subscribe to this)
+            payload = json.dumps({"type": "chat.message", "data": msg_payload})
+            await redis.publish(f"chat:user:{sender.id}", payload)
+            await redis.publish(f"chat:user:{recipient.id}", payload)
 
         await dispatch_event(
             EventNames.PUSH_NOTIFICATION,
@@ -95,7 +144,10 @@ class ChatService:
             redis=redis,
         )
 
-        result = {"conversation_id": str(conversation.id), "message": msg.to_dict()}
+        result = {
+            "conversation_id": str(conversation.id),
+            "message": self._serialize_message(msg, sender=sender, recipient=recipient),
+        }
 
         if commit:
             await db.commit()
@@ -132,7 +184,7 @@ class ChatService:
         result = await db.execute(stmt)
         rows = list(result.scalars().all())
         data = {
-            "items": [c.to_dict() for c in rows],
+            "items": [self._serialize_conversation(c, current_user_id=user_id) for c in rows],
             "page": page,
             "page_size": page_size,
             "total": len(rows),
@@ -170,7 +222,26 @@ class ChatService:
             .limit(page_size)
         )
         result = await db.execute(stmt)
-        items = [m.to_dict() for m in result.scalars().all()]
+        msgs = list(result.scalars().all())
+
+        user_ids: set[str] = set()
+        for m in msgs:
+            user_ids.add(str(m.sender_id))
+            user_ids.add(str(m.recipient_id))
+
+        users_by_id: dict[str, User] = {}
+        if user_ids:
+            users_result = await db.execute(select(User).where(User.id.in_(list(user_ids))))
+            users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+
+        items = [
+            self._serialize_message(
+                m,
+                sender=users_by_id.get(str(m.sender_id)),
+                recipient=users_by_id.get(str(m.recipient_id)),
+            )
+            for m in msgs
+        ]
         data = {"items": items, "page": page, "page_size": page_size, "total": len(items)}
         if as_response:
             return response_builder(
@@ -194,7 +265,9 @@ class ChatService:
         current_id = str(current_user_id)
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise NotFoundException("Conversation not found")
-        data: dict = {"conversation": conv.to_dict()}
+        data: dict = {
+            "conversation": self._serialize_conversation(conv, current_user_id=current_user_id)
+        }
         if include_messages:
             data["messages"] = await self.list_messages(
                 db=db,
@@ -226,7 +299,9 @@ class ChatService:
         conv = await self.get_or_create_conversation(
             db=db, user1_id=str(current_user_id), user2_id=str(user_id)
         )
-        data: dict = {"conversation": conv.to_dict()}
+        data: dict = {
+            "conversation": self._serialize_conversation(conv, current_user_id=current_user_id)
+        }
         if include_messages:
             data["messages"] = await self.list_messages(
                 db=db,

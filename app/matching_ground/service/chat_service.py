@@ -46,7 +46,7 @@ class ChatService:
 
         current_id = str(current_user_id)
         other = conv.user_b if current_id == str(conv.user_a_id) else conv.user_a
-        base["other_user"] = {
+        base["user"] = {
             "id": str(other.id),
             "username": other.username,
             "full_name": other.full_name,

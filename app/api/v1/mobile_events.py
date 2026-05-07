@@ -13,7 +13,7 @@ from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFI
 from app.db.redis import get_redis_client
 from app.db.postgres_db_conn import get_async_session
 from app.models.user import User
-from app.matching_ground.schema.chat import SendMessagePayload
+from app.matching_ground.schema.chat import MarkConversationReadPayload, SendMessagePayload
 from app.matching_ground.service.chat_service import chat_service
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -103,6 +103,9 @@ async def events_ws(websocket: WebSocket) -> None:
 
     Send chat messages over the same socket:
       `{"type":"chat.send","recipient_id":"<uuid>","body":"hi"}`
+
+    Mark a conversation as read (by other user id):
+      `{"type":"chat.read","conversation_id":"<uuid>","message_id":"<uuid>"}`
     """
     token = websocket.query_params.get("token")
     if not token:
@@ -219,6 +222,33 @@ async def events_ws(websocket: WebSocket) -> None:
                     )
 
                 await websocket.send_json({"type": "chat.sent", "data": result})
+                continue
+
+            if msg_type == "chat.read":
+                try:
+                    payload = MarkConversationReadPayload.model_validate(incoming)
+                except Exception:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "error": "invalid_payload",
+                            "message": "Expected: {type:'chat.read', conversation_id:'<uuid>', message_id:'<uuid>'}",
+                        }
+                    )
+                    continue
+
+                async with get_async_session() as db:
+                    result = await chat_service.mark_conversation_read_up_to_message(
+                        db=db,
+                        redis=redis,
+                        current_user_id=str(user_id),
+                        conversation_id=str(payload.conversation_id),
+                        message_id=str(payload.message_id),
+                        commit=False,
+                        as_response=False,
+                    )
+
+                await websocket.send_json({"type": "chat.read.ack", "data": result})
                 continue
     except WebSocketDisconnect:
         pass

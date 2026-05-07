@@ -90,26 +90,6 @@ async def get_conversation_with_user(
         as_response=True,
     )
 
-@router.patch(
-    "/conversations/{conversation_id}/read",
-    summary="Mark a conversation as read (recipient messages only)",
-    status_code=status.HTTP_200_OK,
-    response_model=dict,
-)
-async def mark_conversation_read(
-    conversation_id: uuid.UUID,
-    db: dbSessionDep,
-    current_user: CurrentActiveUser,
-) -> dict:
-    return await chat_service.mark_conversation_read(
-        db=db,
-        current_user_id=current_user.id,
-        conversation_id=conversation_id,
-        commit=True,
-        as_response=True,
-    )
-
-
 @router.get(
     "/conversations/{conversation_id}/messages",
     summary="List messages in a conversation (paginated)",

@@ -6,9 +6,11 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.matching_ground.core.interest_normalization import normalize_interest_name
+from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.notification import Notification
@@ -22,11 +24,11 @@ from app.utils.emails import generate_email_content, send_email
 @dataclass
 class MatchLifecycleService:
     @staticmethod
-    def _parse_search_message(message: str) -> tuple[str | None, float]:
+    def _parse_radius_km(message: str) -> float:
   
         text = (message or "").strip()
         if not text:
-            return None, 10.0
+            return 10.0
 
         radius_km = 10.0
         radius_match = re.search(
@@ -38,8 +40,38 @@ class MatchLifecycleService:
             except ValueError:
                 radius_km = 10.0
 
-        interest_hint = normalize_interest_name(text)
-        return interest_hint, radius_km
+        return radius_km
+
+    @staticmethod
+    async def _extract_interest_hints(
+        session: AsyncSession, message: str, *, max_hints: int = 5
+    ) -> set[str]:
+        """
+        Extract interests from a natural language message by matching against
+        known interests in the database (no AI models).
+
+        Returns normalized interest names.
+        """
+        text = (message or "").strip()
+        if not text:
+            return set()
+
+        normalized_message = normalize_interest_name(text)
+        # Fetch only names (keep it cheap)
+        rows = await session.execute(select(Interest.name))
+        known_names = [r[0] for r in rows.all() if r and r[0]]
+
+        hits: list[str] = []
+        for name in known_names:
+            n = normalize_interest_name(name)
+            if not n:
+                continue
+            if n in normalized_message:
+                hits.append(n)
+                if len(hits) >= max_hints:
+                    break
+
+        return set(hits)
 
     async def search_candidates_from_message(
         self,
@@ -50,11 +82,12 @@ class MatchLifecycleService:
         page: int = 1,
         page_size: int = 10,
     ) -> dict:
-        interest_hint, radius_km = self._parse_search_message(message)
+        radius_km = self._parse_radius_km(message)
+        interest_hints = await self._extract_interest_hints(session, message)
         result = await self.suggest_candidates(
             session=session,
             requester_id=requester_id,
-            interest_hint=interest_hint,
+            interest_hints=interest_hints,
             radius_km=radius_km,
         )
 
@@ -71,19 +104,23 @@ class MatchLifecycleService:
             "query": {
                 "message": message,
                 "radius_km": radius_km,
-                "interest_hint": interest_hint,
+                "interest_hints": sorted(interest_hints),
             },
         }
     
     async def suggest_candidates(
-        self, session: AsyncSession, requester_id: uuid.UUID, interest_hint: str | None = None, radius_km: float = 10.0
+        self,
+        session: AsyncSession,
+        requester_id: uuid.UUID,
+        interest_hints: set[str] | None = None,
+        radius_km: float = 10.0,
     ) -> dict:
         buddy_search_service = BuddySearchService()
         result = await buddy_search_service.search(
             session=session,
             requester_id=requester_id,
             radius_km=radius_km,
-            interest_hint=interest_hint,
+            interest_hints=interest_hints,
         )
         filtered_matches = []
         for item in result.matches:

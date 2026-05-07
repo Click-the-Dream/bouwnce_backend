@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import UTC, datetime
 
 from fastapi import status
-from sqlalchemy import desc, select, update
+from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Conversation, Message
@@ -326,6 +327,7 @@ class ChatService:
         self,
         *,
         db: AsyncSession,
+        redis=None,
         conversation_id: str,
         current_user_id: str,
         commit: bool = False,
@@ -336,6 +338,7 @@ class ChatService:
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
+        read_at = datetime.now(UTC)
         stmt = (
             update(Message)
             .where(
@@ -343,11 +346,30 @@ class ChatService:
                 Message.recipient_id == current_user_id,
                 Message.read_at.is_(None),
             )
-            .values(read_at=datetime.now(UTC))
+            .values(read_at=read_at)
         )
         result = await db.execute(stmt)
         updated = int(result.rowcount or 0)
-        data = {"conversation_id": str(conv.id), "updated": updated}
+
+        unread_stmt = select(func.count()).select_from(Message).where(
+            Message.conversation_id == conv.id,
+            Message.recipient_id == current_user_id,
+            Message.read_at.is_(None),
+        )
+        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
+
+        data = {
+            "conversation_id": str(conv.id),
+            "reader_id": str(current_user_id),
+            "read": unread_remaining == 0,
+            "read_at": read_at.isoformat() if updated > 0 else False,
+            "updated": updated,
+        }
+
+        if redis is not None and updated > 0:
+            payload = json.dumps({"type": "chat.read.updated", "data": data})
+            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
+            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
         if commit:
             await db.commit()
         if as_response:
@@ -357,6 +379,82 @@ class ChatService:
                 message="Conversation marked as read",
                 data=data,
             )
+        return data
+
+    async def mark_conversation_read_up_to_message(
+        self,
+        *,
+        db: AsyncSession,
+        redis=None,
+        current_user_id: str,
+        conversation_id: str,
+        message_id: str,
+        commit: bool = False,
+        as_response: bool = False,
+    ) -> dict:
+        conv = await Conversation.get_by_id(str(conversation_id), db)
+        current_id = str(current_user_id)
+        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
+            raise ForbiddenException("You cannot access this conversation")
+
+        target = await Message.get_by_id(str(message_id), db)
+        if str(target.conversation_id) != str(conv.id):
+            raise NotFoundException("Message not found")
+        if str(target.recipient_id) != current_id:
+            raise ForbiddenException("You can only mark received messages as read")
+
+        read_at = datetime.now(UTC)
+        stmt = (
+            update(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.recipient_id == current_id,
+                Message.read_at.is_(None),
+                Message.created_at <= target.created_at,
+            )
+            .values(read_at=read_at)
+        )
+        result = await db.execute(stmt)
+        updated = int(result.rowcount or 0)
+
+        unread_stmt = select(func.count()).select_from(Message).where(
+            Message.conversation_id == conv.id,
+            Message.recipient_id == current_id,
+            Message.read_at.is_(None),
+        )
+        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
+
+        data = {
+            "conversation_id": str(conv.id),
+            "message_id": str(target.id),
+            "read": unread_remaining == 0,
+            "updated": updated,
+        }
+
+        if redis is not None and updated > 0:
+            payload = json.dumps(
+                {
+                    "type": "chat.read.updated",
+                    "data": {
+                        **data,
+                        "reader_id": current_id,
+                    },
+                }
+            )
+            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
+            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
+
+        if commit:
+            await db.commit()
+
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Messages marked as read",
+                data=data,
+            )
+
         return data
 
 

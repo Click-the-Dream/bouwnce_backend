@@ -199,6 +199,27 @@ class ChatService:
             )
         return data
 
+    async def get_conversation_partner_ids(
+        self, *, db: AsyncSession, user_id: str
+    ) -> set[str]:
+        """
+        Return ids of users that have a conversation with `user_id`.
+        Used for presence fanout (online/offline).
+        """
+        stmt = select(Conversation.user_a_id, Conversation.user_b_id).where(
+            (Conversation.user_a_id == user_id) | (Conversation.user_b_id == user_id)
+        )
+        result = await db.execute(stmt)
+        partner_ids: set[str] = set()
+        for a_id, b_id in result.all():
+            a = str(a_id)
+            b = str(b_id)
+            if a != str(user_id):
+                partner_ids.add(a)
+            if b != str(user_id):
+                partner_ids.add(b)
+        return partner_ids
+
     async def list_messages(
         self,
         *,

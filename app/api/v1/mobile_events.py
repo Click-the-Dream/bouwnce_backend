@@ -4,6 +4,7 @@ import asyncio
 import json
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import select
 
 from app.api.dependencies import CurrentActiveUser, redisSessionDep
 
@@ -17,6 +18,9 @@ from app.matching_ground.schema.chat import MarkConversationReadPayload, SendMes
 from app.matching_ground.service.chat_service import chat_service
 
 router = APIRouter(prefix="/events", tags=["Events"])
+
+PRESENCE_KEY_PREFIX = "presence:user:"
+PRESENCE_TTL_SECONDS = 75
 
 
 @router.get(
@@ -128,6 +132,74 @@ async def events_ws(websocket: WebSocket) -> None:
 
     await websocket.accept()
 
+    async def publish_presence(online: bool) -> None:
+        async with get_async_session() as db:
+            partner_ids = await chat_service.get_conversation_partner_ids(
+                db=db, user_id=str(user_id)
+            )
+            me = await User.get_by_id(str(user_id), db)
+
+        payload = json.dumps(
+            {
+                "type": "user.online",
+                "data": {
+                    "user": {
+                        "id": str(me.id),
+                        "username": me.username,
+                        "full_name": me.full_name,
+                    },
+                    "online": online,
+                },
+            }
+        )
+        for pid in partner_ids:
+            await redis.publish(f"chat:user:{pid}", payload)
+        # also tell the connected user (useful for debugging/UX)
+        await redis.publish(f"chat:user:{user_id}", payload)
+
+    async def presence_heartbeat() -> None:
+        try:
+            key = f"{PRESENCE_KEY_PREFIX}{user_id}"
+            while True:
+                await redis.set(key, "1", ex=PRESENCE_TTL_SECONDS)
+                await asyncio.sleep(max(PRESENCE_TTL_SECONDS // 2, 10))
+        except Exception:
+            return
+
+    # Mark online + broadcast
+    await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
+    await publish_presence(True)
+
+    # Send a presence snapshot of conversation partners to the connected client
+    try:
+        async with get_async_session() as db:
+            partner_ids = await chat_service.get_conversation_partner_ids(
+                db=db, user_id=str(user_id)
+            )
+            users_result = await db.execute(select(User).where(User.id.in_(list(partner_ids))))
+            users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+
+        keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_ids]
+        values = await redis.mget(*keys) if keys else []
+        items: list[dict] = []
+        for pid, val in zip(partner_ids, values, strict=False):
+            u = users_by_id.get(str(pid))
+            if u is None:
+                continue
+            items.append(
+                {
+                    "user": {
+                        "id": str(u.id),
+                        "username": u.username,
+                        "full_name": u.full_name,
+                    },
+                    "online": bool(val),
+                }
+            )
+        await websocket.send_json({"type": "user.online.snapshot", "data": {"items": items}})
+    except Exception:
+        pass
+
     async def forward_pubsub() -> None:
         try:
             async for msg in pubsub.listen():
@@ -178,6 +250,7 @@ async def events_ws(websocket: WebSocket) -> None:
 
     pubsub_task = asyncio.create_task(forward_pubsub())
     stream_task = asyncio.create_task(forward_stream())
+    presence_task = asyncio.create_task(presence_heartbeat())
 
     try:
         while True:
@@ -255,5 +328,11 @@ async def events_ws(websocket: WebSocket) -> None:
     finally:
         pubsub_task.cancel()
         stream_task.cancel()
+        presence_task.cancel()
         await pubsub.unsubscribe(f"chat:user:{user_id}")
         await pubsub.close()
+        try:
+            await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
+            await publish_presence(False)
+        except Exception:
+            pass

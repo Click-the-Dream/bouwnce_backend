@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, UploadFile
 
 from app.api.dependencies import (
     CurrentActiveUser,
@@ -111,3 +111,26 @@ async def undelete_user(
 ) -> BaseResponse:
 
     return await user_service.undelete_user_by_id(user_id, db)
+
+
+@router.put(
+    "/profile-picture",
+    response_model=UserResponse
+)
+async def upload_user_pic(
+    current_user: CurrentActiveUser,
+    db: dbSessionDep,
+    picture: UploadFile
+):
+    return await user_service.update_user_profile_pic(current_user, db, picture)
+
+
+@router.delete(
+    "/profile-picture",
+    response_model=BaseResponse
+)
+async def delete_user_pic(
+    current_user: CurrentActiveUser,
+    db: dbSessionDep
+):
+    return await user_service.deleter_user_profile_pic(current_user, db)

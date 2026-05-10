@@ -46,7 +46,7 @@ class BuddySearchService:
         session: AsyncSession,
         requester_id: uuid.UUID,
         radius_km: float = 10.0,
-        interest_hint: str | None = None,
+        interest_hints: set[str] | None = None,
         limit: int = 10,
     ) -> BuddySearchResult:
         requester_geo = await self.geolocation_model.get_by_user_id(session, requester_id)
@@ -55,9 +55,10 @@ class BuddySearchService:
             for i in await self.interest_model.get_user_interests(session, str(requester_id))
         }
 
-        hint = normalize_interest_name(interest_hint) if interest_hint else None
-        if hint:
-            requester_interests.add(hint)
+        hints = {normalize_interest_name(h) for h in (interest_hints or set()) if h}
+        hints.discard("")
+        if hints:
+            requester_interests.update(hints)
 
         center = (
             Coordinates(lat=requester_geo.lat, lon=requester_geo.lon)
@@ -97,6 +98,10 @@ class BuddySearchService:
             candidate_interests = {
                 normalize_interest_name(i.name) for i in candidate_interests_rows
             }
+
+            # If query included explicit interests, require at least one hit.
+            if hints and not (candidate_interests.intersection(hints)):
+                continue
 
             features = build_user_matching_features(
                 source_interests=requester_interests,

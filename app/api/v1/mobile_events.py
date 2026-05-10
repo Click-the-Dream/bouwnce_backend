@@ -1,14 +1,26 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, status
-
-from app.api.dependencies import CurrentActiveUser, redisSessionDep
+import asyncio
 import json
 
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import select
+
+from app.api.dependencies import CurrentActiveUser, redisSessionDep
+
+from app.core.security import verify_token
 from app.utils.exception import NotFoundException
 from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
+from app.db.redis import get_redis_client
+from app.db.postgres_db_conn import get_async_session
+from app.models.user import User
+from app.matching_ground.schema.chat import MarkConversationReadPayload, SendMessagePayload
+from app.matching_ground.service.chat_service import chat_service
 
 router = APIRouter(prefix="/events", tags=["Events"])
+
+PRESENCE_KEY_PREFIX = "presence:user:"
+PRESENCE_TTL_SECONDS = 75
 
 
 @router.get(
@@ -81,3 +93,246 @@ async def get_payment_progress(
     except Exception:
         data = {"raw": value}
     return {"status": "success", "data": data}
+
+
+@router.websocket("/ws")
+async def events_ws(websocket: WebSocket) -> None:
+    """
+    One websocket for multiple realtime states:
+    - Chat: Redis PubSub channel `chat:user:{user_id}`
+    - Events: Redis Stream `events:mobile:stream` (filtered by payload.user_id)
+
+    Connect:
+      `wss://<domain>/api/v1/events/ws?token=<access_token>`
+
+    Send chat messages over the same socket:
+      `{"type":"chat.send","recipient_id":"<uuid>","body":"hi"}`
+
+    Mark a conversation as read (by other user id):
+      `{"type":"chat.read","conversation_id":"<uuid>","message_id":"<uuid>"}`
+    """
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    token_payload = verify_token(token)
+    if token_payload.get("type") != "access":
+        await websocket.close(code=1008)
+        return
+
+    user_id = token_payload.get("sub")
+    if not user_id:
+        await websocket.close(code=1008)
+        return
+
+    redis = await get_redis_client()
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(f"chat:user:{user_id}")
+
+    await websocket.accept()
+
+    async def publish_presence(online: bool) -> None:
+        async with get_async_session() as db:
+            partner_ids = await chat_service.get_conversation_partner_ids(
+                db=db, user_id=str(user_id)
+            )
+            me = await User.get_by_id(str(user_id), db)
+
+        payload = json.dumps(
+            {
+                "type": "user.online",
+                "data": {
+                    "user": {
+                        "id": str(me.id),
+                        "username": me.username,
+                        "full_name": me.full_name,
+                    },
+                    "online": online,
+                },
+            }
+        )
+        for pid in partner_ids:
+            await redis.publish(f"chat:user:{pid}", payload)
+        # also tell the connected user (useful for debugging/UX)
+        await redis.publish(f"chat:user:{user_id}", payload)
+
+    async def presence_heartbeat() -> None:
+        try:
+            key = f"{PRESENCE_KEY_PREFIX}{user_id}"
+            while True:
+                await redis.set(key, "1", ex=PRESENCE_TTL_SECONDS)
+                await asyncio.sleep(max(PRESENCE_TTL_SECONDS // 2, 10))
+        except Exception:
+            return
+
+    # Mark online + broadcast
+    await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
+    await publish_presence(True)
+
+    # Send a presence snapshot of conversation partners to the connected client
+    try:
+        async with get_async_session() as db:
+            partner_ids = await chat_service.get_conversation_partner_ids(
+                db=db, user_id=str(user_id)
+            )
+            users_result = await db.execute(select(User).where(User.id.in_(list(partner_ids))))
+            users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+
+        keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_ids]
+        values = await redis.mget(*keys) if keys else []
+        items: list[dict] = []
+        for pid, val in zip(partner_ids, values, strict=False):
+            u = users_by_id.get(str(pid))
+            if u is None:
+                continue
+            items.append(
+                {
+                    "user": {
+                        "id": str(u.id),
+                        "username": u.username,
+                        "full_name": u.full_name,
+                    },
+                    "online": bool(val),
+                }
+            )
+        await websocket.send_json({"type": "user.online.snapshot", "data": {"items": items}})
+    except Exception:
+        pass
+
+    async def forward_pubsub() -> None:
+        try:
+            async for msg in pubsub.listen():
+                if msg is None:
+                    continue
+                if msg.get("type") != "message":
+                    continue
+                data = msg.get("data")
+                if isinstance(data, (bytes, bytearray)):
+                    data = data.decode()
+                # Chat service publishes JSON strings; forward as JSON when possible
+                try:
+                    await websocket.send_json(json.loads(data))
+                except Exception:
+                    await websocket.send_text(str(data))
+        except Exception:
+            return
+
+    async def forward_stream() -> None:
+        last_id = "$"
+        try:
+            while True:
+                streams = await redis.xread(
+                    streams={MOBILE_EVENTS_STREAM_KEY: last_id}, count=50, block=25000
+                )
+                for _stream_name, messages in streams or []:
+                    for msg_id, fields in messages:
+                        last_id = msg_id
+                        event_name = fields.get("event_name")
+                        payload_raw = fields.get("payload")
+                        if not event_name or not payload_raw:
+                            continue
+                        try:
+                            payload_obj = json.loads(payload_raw)
+                        except Exception:
+                            continue
+                        if str(payload_obj.get("user_id") or "") != str(user_id):
+                            continue
+                        await websocket.send_json(
+                            {
+                                "type": "event",
+                                "event_name": event_name,
+                                "payload": payload_obj,
+                            }
+                        )
+        except Exception:
+            return
+
+    pubsub_task = asyncio.create_task(forward_pubsub())
+    stream_task = asyncio.create_task(forward_stream())
+    presence_task = asyncio.create_task(presence_heartbeat())
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                incoming = json.loads(raw)
+            except Exception:
+                # Ignore non-JSON payloads
+                continue
+
+            msg_type = str(incoming.get("type") or "").strip().lower()
+            if not msg_type:
+                continue
+
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+
+            if msg_type == "chat.send":
+                try:
+                    payload = SendMessagePayload.model_validate(incoming)
+                except Exception:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "error": "invalid_payload",
+                            "message": "Expected: {type:'chat.send', recipient_id:'<uuid>', body:'...'}",
+                        }
+                    )
+                    continue
+
+                async with get_async_session() as db:
+                    sender = await User.get_by_id(str(user_id), db)
+                    result = await chat_service.send_message(
+                        db=db,
+                        redis=redis,
+                        sender=sender,
+                        recipient_id=payload.recipient_id,
+                        body=payload.body,
+                        commit=False,
+                        as_response=False,
+                    )
+
+                await websocket.send_json({"type": "chat.sent", "data": result})
+                continue
+
+            if msg_type == "chat.read":
+                try:
+                    payload = MarkConversationReadPayload.model_validate(incoming)
+                except Exception:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "error": "invalid_payload",
+                            "message": "Expected: {type:'chat.read', conversation_id:'<uuid>', message_id:'<uuid>'}",
+                        }
+                    )
+                    continue
+
+                async with get_async_session() as db:
+                    result = await chat_service.mark_conversation_read_up_to_message(
+                        db=db,
+                        redis=redis,
+                        current_user_id=str(user_id),
+                        conversation_id=str(payload.conversation_id),
+                        message_id=str(payload.message_id),
+                        commit=False,
+                        as_response=False,
+                    )
+
+                await websocket.send_json({"type": "chat.read.ack", "data": result})
+                continue
+    except WebSocketDisconnect:
+        pass
+    finally:
+        pubsub_task.cancel()
+        stream_task.cancel()
+        presence_task.cancel()
+        await pubsub.unsubscribe(f"chat:user:{user_id}")
+        await pubsub.close()
+        try:
+            await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
+            await publish_presence(False)
+        except Exception:
+            pass

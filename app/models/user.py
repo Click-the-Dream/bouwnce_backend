@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
-from sqlalchemy import Boolean, DateTime, Enum, String, or_, select, text
+from sqlalchemy import Boolean, DateTime, Enum, String, or_, select, text, JSON
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +33,7 @@ class User(BaseModel):
     username: Mapped[str | None] = mapped_column(String, nullable=True)
     date_of_birth: Mapped[str | None] = mapped_column(String, nullable=True)
     institution: Mapped[str | None] = mapped_column(String, nullable=True)
+    profile_pic: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     role: Mapped[str] = mapped_column(
         Enum("user", "vendor", "admin", name="user_role_enum"), default="user"

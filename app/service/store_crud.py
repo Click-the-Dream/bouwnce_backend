@@ -257,7 +257,7 @@ class StoreCRUDService:
                 if store_banner:
                     store.store_banner = None
 
-                store.save(db)
+                await store.save(db)
                 return response_builder(
                     status_code=status.HTTP_204_NO_CONTENT,
                     status="success",

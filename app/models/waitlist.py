@@ -16,6 +16,7 @@ class Waitlist(BaseModel):
     phone_number: Mapped[str] = mapped_column(String, nullable=False)
     institution: Mapped[str] = mapped_column(String, nullable=True)
     location: Mapped[str] = mapped_column(String, nullable=True)
+    platform: Mapped[str] = mapped_column(String, nullable=True)
 
     @classmethod
     async def get_today_count(cls, db: AsyncSession) -> int:

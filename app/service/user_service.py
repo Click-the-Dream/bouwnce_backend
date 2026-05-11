@@ -1,15 +1,23 @@
 # me, get user by ID, update user, delete user, list users (with search and pagination)
 from typing import Any
 
-from fastapi import status
+from fastapi import status, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.utils.exception import (
     BadRequestException,
     NotFoundException,
+    ConflictException,
+    InternalServerErrorException
 )
 from app.utils.responses import response_builder
+from app.utils.cloudinary_utils import (
+    cleanup_temp_files,
+    delete_images,
+    save_uploaded_file_temp,
+    upload_image
+)
 
 
 class UserService:
@@ -169,6 +177,60 @@ class UserService:
                 "page_size": users["page_size"],
             },
         )
+        
+    async def update_user_profile_pic(
+        self,
+        user: User,
+        db: AsyncSession,
+        profile_pic: UploadFile
+    ) -> dict[str, Any]:
+        
+        if not profile_pic:
+            raise BadRequestException("Profile pic not provided")
+        
+        data = {}
+        try:
+            path = await save_uploaded_file_temp([profile_pic])
+            image_result = await upload_image(path[0], str(user.id))
+            data["profile_pic"] = image_result
+            
+            if user.profile_pic:
+                previous_profile_id = user.profile_pic["public_id"]
+                delete_images([previous_profile_id])
+        except Exception:
+            raise InternalServerErrorException("Something went wrong") from None
+        finally:
+            await cleanup_temp_files(path)
+            
+        
+        await user.update(db=db, data=data)
+        
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="successfully upload user profile",
+            data=user.to_dict()
+        )
+        
+    async def deleter_user_profile_pic(
+        self,
+        user: User,
+        db: AsyncSession
+    ):
+        if user.profile_pic:
+            is_deleted = delete_images([user.profile_pic["public_id"]])
+            if is_deleted:
+                user.profile_pic = None
+                
+                await user.save(db)
+
+                return response_builder(
+                    status_code=status.HTTP_200_OK,
+                    status="success",
+                    message="successfully deleted user profile picture"
+                )
+        
+        raise ConflictException("Nothing to delete")
 
 
 user_service = UserService()

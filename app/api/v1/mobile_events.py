@@ -14,7 +14,11 @@ from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFI
 from app.db.redis import get_redis_client
 from app.db.postgres_db_conn import get_async_session
 from app.models.user import User
-from app.matching_ground.schema.chat import MarkConversationReadPayload, SendMessagePayload
+from app.matching_ground.schema.chat import (
+    MarkConversationReadPayload,
+    SendMessagePayload,
+    TypingPayload,
+)
 from app.matching_ground.service.chat_service import chat_service
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -176,14 +180,19 @@ async def events_ws(websocket: WebSocket) -> None:
             partner_ids = await chat_service.get_conversation_partner_ids(
                 db=db, user_id=str(user_id)
             )
-            users_result = await db.execute(select(User).where(User.id.in_(list(partner_ids))))
-            users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+            partner_id_list = sorted({str(pid) for pid in partner_ids})
+            users_by_id: dict[str, User] = {}
+            if partner_id_list:
+                users_result = await db.execute(
+                    select(User).where(User.id.in_(partner_id_list))
+                )
+                users_by_id = {str(u.id): u for u in users_result.scalars().all()}
 
-        keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_ids]
+        keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_id_list]
         values = await redis.mget(*keys) if keys else []
         items: list[dict] = []
-        for pid, val in zip(partner_ids, values, strict=False):
-            u = users_by_id.get(str(pid))
+        for pid, val in zip(partner_id_list, values, strict=False):
+            u = users_by_id.get(pid)
             if u is None:
                 continue
             items.append(
@@ -322,6 +331,47 @@ async def events_ws(websocket: WebSocket) -> None:
                     )
 
                 await websocket.send_json({"type": "chat.read.ack", "data": result})
+                continue
+
+            if msg_type == "chat.typing":
+                try:
+                    payload = TypingPayload.model_validate(incoming)
+                except Exception:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "error": "invalid_payload",
+                            "message": "Expected: {type:'chat.typing', conversation_id:'<uuid>', is_typing:true|false}",
+                        }
+                    )
+                    continue
+
+                async with get_async_session() as db:
+                    conv = await chat_service.get_conversation(
+                        db=db,
+                        conversation_id=str(payload.conversation_id),
+                        current_user_id=str(user_id),
+                        include_messages=False,
+                        as_response=False,
+                    )
+
+                # Determine the other user from the conversation serialization
+                other_user = (conv.get("conversation") or {}).get("user") or {}
+                other_user_id = other_user.get("id")
+                if other_user_id:
+                    await redis.publish(
+                        f"chat:user:{other_user_id}",
+                        json.dumps(
+                            {
+                                "type": "chat.typing",
+                                "data": {
+                                    "conversation_id": str(payload.conversation_id),
+                                    "user_id": str(user_id),
+                                    "is_typing": bool(payload.is_typing),
+                                },
+                            }
+                        ),
+                    )
                 continue
     except WebSocketDisconnect:
         pass

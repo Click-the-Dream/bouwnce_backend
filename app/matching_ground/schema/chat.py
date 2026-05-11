@@ -13,3 +13,10 @@ class MarkConversationReadPayload(BaseModel):
         uuid.UUID, Field(..., description="Conversation id (uuid)")
     ]
     message_id: Annotated[uuid.UUID, Field(..., description="Message id (uuid)")]
+
+
+class TypingPayload(BaseModel):
+    conversation_id: Annotated[
+        uuid.UUID, Field(..., description="Conversation id (uuid)")
+    ]
+    is_typing: Annotated[bool, Field(..., description="Whether the user is typing")]

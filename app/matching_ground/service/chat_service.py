@@ -236,9 +236,14 @@ class ChatService:
             raise ForbiddenException("You cannot access this conversation")
 
         offset = (page - 1) * page_size
+        total_stmt = select(func.count()).select_from(Message).where(
+            Message.conversation_id == conv.id
+        )
+        total = int((await db.execute(total_stmt)).scalar() or 0)
+
         stmt = (
             select(Message)
-            .where(Message.conversation_id == conversation_id)
+            .where(Message.conversation_id == conv.id)
             .order_by(desc(Message.created_at))
             .offset(offset)
             .limit(page_size)
@@ -264,7 +269,7 @@ class ChatService:
             )
             for m in msgs
         ]
-        data = {"items": items, "page": page, "page_size": page_size, "total": len(items)}
+        data = {"items": items, "page": page, "page_size": page_size, "total": total}
         if as_response:
             return response_builder(
                 status_code=status.HTTP_200_OK,

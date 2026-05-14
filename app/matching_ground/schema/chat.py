@@ -16,18 +16,20 @@ class MarkConversationReadPayload(BaseModel):
 
 
 class TypingPayload(BaseModel):
-    conversation_id: Annotated[
+    user_id: Annotated[
         uuid.UUID,
         Field(
             ...,
-            description="Conversation id (uuid)"
+            description="Other user id (uuid)",
+            validation_alias="userId",
         ),
     ]
     is_typing: Annotated[
         bool,
         Field(
             ...,
-            description="Whether the user is typing"
+            description="Whether the user is typing",
+            validation_alias="isTyping",
         ),
     ]
 

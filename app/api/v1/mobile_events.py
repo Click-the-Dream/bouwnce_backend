@@ -5,6 +5,7 @@ import json
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
+import uuid
 
 from app.api.dependencies import CurrentActiveUser, redisSessionDep
 
@@ -342,15 +343,16 @@ async def events_ws(websocket: WebSocket) -> None:
                         {
                             "type": "error",
                             "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.typing', conversation_id:'<uuid>', is_typing:true|false}",
+                            "message": "Expected: {type:'chat.typing', user_id:'<uuid>', is_typing:true|false}",
                         }
                     )
                     continue
 
                 async with get_async_session() as db:
-                    conv = await Conversation.get_by_id(str(payload.conversation_id), db)
-                    current_id = str(user_id)
-                    if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
+                    conv = await Conversation.get_between(
+                        db, uuid.UUID(str(user_id)), uuid.UUID(str(payload.user_id))
+                    )
+                    if conv is None:
                         raise NotFoundException("Conversation not found")
 
                     sender = await User.get_by_id(str(user_id), db)
@@ -360,7 +362,7 @@ async def events_ws(websocket: WebSocket) -> None:
                     {
                         "type": "chat.typing",
                         "data": {
-                            "conversation_id": str(payload.conversation_id),
+                            "conversation_id": str(conv.id),
                             "user": {
                                 "id": str(sender.id),
                                 "username": sender.username,
@@ -378,7 +380,8 @@ async def events_ws(websocket: WebSocket) -> None:
                     {
                         "type": "chat.typing.ack",
                         "data": {
-                            "conversation_id": str(payload.conversation_id),
+                            "conversation_id": str(conv.id),
+                            "user_id": str(payload.user_id),
                             "is_typing": bool(payload.is_typing),
                         },
                     }

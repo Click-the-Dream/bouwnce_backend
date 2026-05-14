@@ -22,6 +22,10 @@ class Config(BaseModel):
 
     BASE_URL: str = config("BASE_URL")
     REDIS_URL: str = config("REDIS_URL")
+    REDIS_MAX_CONNECTIONS: int = config("REDIS_MAX_CONNECTIONS", default=200, cast=int)
+    REDIS_HEALTH_CHECK_INTERVAL: int = config(
+        "REDIS_HEALTH_CHECK_INTERVAL", default=30, cast=int
+    )
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")
 

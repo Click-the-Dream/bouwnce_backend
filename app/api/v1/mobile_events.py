@@ -14,6 +14,7 @@ from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFI
 from app.db.redis import get_redis_client
 from app.db.postgres_db_conn import get_async_session
 from app.models.user import User
+from app.models.chat import Conversation
 from app.matching_ground.schema.chat import (
     MarkConversationReadPayload,
     SendMessagePayload,
@@ -347,31 +348,41 @@ async def events_ws(websocket: WebSocket) -> None:
                     continue
 
                 async with get_async_session() as db:
-                    conv = await chat_service.get_conversation(
-                        db=db,
-                        conversation_id=str(payload.conversation_id),
-                        current_user_id=str(user_id),
-                        include_messages=False,
-                        as_response=False,
-                    )
+                    conv = await Conversation.get_by_id(str(payload.conversation_id), db)
+                    current_id = str(user_id)
+                    if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
+                        raise NotFoundException("Conversation not found")
 
-                # Determine the other user from the conversation serialization
-                other_user = (conv.get("conversation") or {}).get("user") or {}
-                other_user_id = other_user.get("id")
-                if other_user_id:
-                    await redis.publish(
-                        f"chat:user:{other_user_id}",
-                        json.dumps(
-                            {
-                                "type": "chat.typing",
-                                "data": {
-                                    "conversation_id": str(payload.conversation_id),
-                                    "user_id": str(user_id),
-                                    "is_typing": bool(payload.is_typing),
-                                },
-                            }
-                        ),
-                    )
+                    sender = await User.get_by_id(str(user_id), db)
+                    targets = {str(conv.user_a_id), str(conv.user_b_id)}
+
+                event_payload = json.dumps(
+                    {
+                        "type": "chat.typing",
+                        "data": {
+                            "conversation_id": str(payload.conversation_id),
+                            "user": {
+                                "id": str(sender.id),
+                                "username": sender.username,
+                                "full_name": sender.full_name,
+                            },
+                            "is_typing": bool(payload.is_typing),
+                        },
+                    }
+                )
+
+                for target_id in targets:
+                    await redis.publish(f"chat:user:{target_id}", event_payload)
+
+                await websocket.send_json(
+                    {
+                        "type": "chat.typing.ack",
+                        "data": {
+                            "conversation_id": str(payload.conversation_id),
+                            "is_typing": bool(payload.is_typing),
+                        },
+                    }
+                )
                 continue
     except WebSocketDisconnect:
         pass

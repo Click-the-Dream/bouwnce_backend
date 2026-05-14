@@ -17,6 +17,18 @@ class MarkConversationReadPayload(BaseModel):
 
 class TypingPayload(BaseModel):
     conversation_id: Annotated[
-        uuid.UUID, Field(..., description="Conversation id (uuid)")
+        uuid.UUID,
+        Field(
+            ...,
+            description="Conversation id (uuid)"
+        ),
     ]
-    is_typing: Annotated[bool, Field(..., description="Whether the user is typing")]
+    is_typing: Annotated[
+        bool,
+        Field(
+            ...,
+            description="Whether the user is typing"
+        ),
+    ]
+
+    model_config = {"populate_by_name": True}

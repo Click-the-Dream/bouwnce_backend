@@ -11,10 +11,11 @@
       .email-card { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06); }
       .header { background: #ff6b35; background-image: linear-gradient(135deg, #ff3b0a, #ff6a3d); }
       .header-text { font-weight: 800; letter-spacing: 3px; font-size: 18px; color: #ffffff; }
-      .subject { font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase; color: #9ca3af; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; }
       .greeting { font-size: 16px; font-weight: 600; color: #111827; }
       /* Avoid breaking words into letters; only wrap when needed */
-      .content { word-break: normal; overflow-wrap: break-word; word-wrap: break-word; hyphens: auto; }
+      /* MJML injects inline `word-break: break-word` on <td>; override with !important */
+      .content { word-break: normal !important; overflow-wrap: break-word !important; word-wrap: break-word !important; hyphens: auto; white-space: normal !important; }
+      .content div { word-break: normal !important; }
       .content img { max-width: 100% !important; height: auto !important; }
       .content table { width: 100% !important; }
       .footer { background: #fafafa; border-top: 1px solid #eee; color: #6b7280; font-size: 12px; }
@@ -34,7 +35,6 @@
       <!-- Body -->
       <mj-section padding="38px 30px" background-color="#ffffff">
         <mj-column>
-          <mj-text css-class="subject" padding="0 0 18px">SUBJECT · {{ subject or "No Subject" }}</mj-text>
           <mj-text css-class="greeting" padding="0 0 14px">Hi {{ user_name or "there" }},</mj-text>
           <mj-text css-class="content" padding="0">
             {{ body or "Start typing your content..." }}
@@ -66,38 +66,40 @@
         </mj-column>
       </mj-section>
 
-      <!-- Socials: no mj-group so columns can stack on mobile -->
+      <!-- Socials: keep horizontal (even on mobile) -->
       <mj-section padding="0 20px 28px" css-class="footer">
-        <mj-column width="33.33%">
-          <mj-image
-            href="https://www.instagram.com/bouwnceofficial?igsh=bjFvem92Y28wMWhl"
-            src="https://img.icons8.com/ios-filled/50/ff3b0a/instagram-new.png"
-            width="20px"
-            padding="16px 0 0"
-            align="center"
-            alt="Instagram"
-          />
-        </mj-column>
-        <mj-column width="33.33%">
-          <mj-image
-            href="https://www.tiktok.com/@bouwnceofficial?_r=1&_t=ZS-961mkz2wt4H"
-            src="https://img.icons8.com/ios-filled/50/ff3b0a/tiktok.png"
-            width="20px"
-            padding="16px 0 0"
-            align="center"
-            alt="TikTok"
-          />
-        </mj-column>
-        <mj-column width="33.33%">
-          <mj-image
-            href="https://www.linkedin.com/company/bouwnce-official/"
-            src="https://img.icons8.com/ios-filled/50/ff3b0a/linkedin.png"
-            width="20px"
-            padding="16px 0 0"
-            align="center"
-            alt="LinkedIn"
-          />
-        </mj-column>
+        <mj-group>
+          <mj-column width="33.33%">
+            <mj-image
+              href="https://www.instagram.com/bouwnceofficial?igsh=bjFvem92Y28wMWhl"
+              src="https://img.icons8.com/ios-filled/50/ff3b0a/instagram-new.png"
+              width="20px"
+              padding="16px 0 0"
+              align="center"
+              alt="Instagram"
+            />
+          </mj-column>
+          <mj-column width="33.33%">
+            <mj-image
+              href="https://www.tiktok.com/@bouwnceofficial?_r=1&_t=ZS-961mkz2wt4H"
+              src="https://img.icons8.com/ios-filled/50/ff3b0a/tiktok.png"
+              width="20px"
+              padding="16px 0 0"
+              align="center"
+              alt="TikTok"
+            />
+          </mj-column>
+          <mj-column width="33.33%">
+            <mj-image
+              href="https://www.linkedin.com/company/bouwnce-official/"
+              src="https://img.icons8.com/ios-filled/50/ff3b0a/linkedin.png"
+              width="20px"
+              padding="16px 0 0"
+              align="center"
+              alt="LinkedIn"
+            />
+          </mj-column>
+        </mj-group>
       </mj-section>
     </mj-wrapper>
   </mj-body>

@@ -34,3 +34,44 @@ class TypingPayload(BaseModel):
     ]
 
     model_config = {"populate_by_name": True}
+
+
+class UploadImagePayload(BaseModel):
+    recipient_id: Annotated[
+        uuid.UUID, Field(..., description="Recipient user id (uuid)", validation_alias="recipientId")
+    ]
+    image_url: Annotated[
+        str, Field(..., description="Cloudinary secure URL", validation_alias="imageUrl")
+    ]
+    caption: Annotated[
+        str | None, Field(None, max_length=4000, validation_alias="caption")
+    ]
+
+    model_config = {"populate_by_name": True}
+
+
+class UploadVideoPayload(BaseModel):
+    recipient_id: Annotated[
+        uuid.UUID, Field(..., description="Recipient user id (uuid)", validation_alias="recipientId")
+    ]
+    video_url: Annotated[
+        str, Field(..., description="Cloudinary secure URL", validation_alias="videoUrl")
+    ]
+    caption: Annotated[str | None, Field(None, max_length=4000)]
+
+    model_config = {"populate_by_name": True}
+
+
+class UploadFilePayload(BaseModel):
+    recipient_id: Annotated[
+        uuid.UUID, Field(..., description="Recipient user id (uuid)", validation_alias="recipientId")
+    ]
+    file_url: Annotated[
+        str, Field(..., description="Cloudinary secure URL", validation_alias="fileUrl")
+    ]
+    file_name: Annotated[str | None, Field(None, max_length=255, validation_alias="fileName")]
+    file_mime: Annotated[str | None, Field(None, max_length=127, validation_alias="fileMime")]
+    file_size: Annotated[int | None, Field(None, ge=0, validation_alias="fileSize")]
+    caption: Annotated[str | None, Field(None, max_length=4000)]
+
+    model_config = {"populate_by_name": True}

@@ -61,12 +61,16 @@ async def get_conversation(
     conversation_id: uuid.UUID,
     db: dbSessionDep,
     current_user: CurrentActiveUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
 ) -> dict:
     return await chat_service.get_conversation(
         db=db,
         current_user_id=current_user.id,
         conversation_id=conversation_id,
         include_messages=True,
+        messages_page=page,
+        messages_page_size=page_size,
         as_response=True,
     )
 
@@ -80,12 +84,16 @@ async def get_conversation_with_user(
     user_id: uuid.UUID,
     db: dbSessionDep,
     current_user: CurrentActiveUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
 ) -> dict:
     return await chat_service.get_or_create_conversation_with_user(
         db=db,
         current_user_id=current_user.id,
         user_id=user_id,
         include_messages=True,
+        messages_page=page,
+        messages_page_size=page_size,
         commit=True,
         as_response=True,
     )

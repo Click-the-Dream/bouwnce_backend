@@ -29,6 +29,25 @@ class Config(BaseModel):
     SECRET_KEY: str = config("SECRET_KEY")
     PROJECT_NAME: str = config("PROJECT_NAME")
 
+    # Chat uploads (Cloudinary presets configured outside the app)
+    CHAT_IMAGES_PRESET: str = config("CHAT_IMAGES_PRESET", default="chat_images")
+    CHAT_VIDEOS_PRESET: str = config("CHAT_VIDEOS_PRESET", default="chat_videos")
+    CHAT_FILES_PRESET: str = config("CHAT_FILES_PRESET", default="chat_files")
+
+    CHAT_IMAGES_MAX_BYTES: int = config("CHAT_IMAGES_MAX_BYTES", default=10_485_760, cast=int)
+    CHAT_VIDEOS_MAX_BYTES: int = config("CHAT_VIDEOS_MAX_BYTES", default=26_214_400, cast=int)
+    CHAT_FILES_MAX_BYTES: int = config("CHAT_FILES_MAX_BYTES", default=10_485_760, cast=int)
+
+    CHAT_IMAGES_ALLOWED_FORMATS: str = config(
+        "CHAT_IMAGES_ALLOWED_FORMATS", default="jpg,jpeg,png,webp"
+    )
+    CHAT_VIDEOS_ALLOWED_FORMATS: str = config(
+        "CHAT_VIDEOS_ALLOWED_FORMATS", default="mp4,webm"
+    )
+    CHAT_FILES_ALLOWED_FORMATS: str = config(
+        "CHAT_FILES_ALLOWED_FORMATS", default="pdf,doc,docx,xls,xlsx,ppt,pptx"
+    )
+
     # Optional self-ping job (used to keep some hosts from idling)
     SELF_PING_ENABLED: bool = config("SELF_PING_ENABLED", default=False, cast=bool)
     SELF_PING_URL: str | None = config("SELF_PING_URL", default=None)

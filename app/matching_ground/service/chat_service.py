@@ -163,6 +163,69 @@ class ChatService:
 
         return result
 
+    async def send_media_message(
+        self,
+        *,
+        db: AsyncSession,
+        redis,
+        sender: User,
+        recipient_id: str,
+        caption: str | None = None,
+        image_url: str | None = None,
+        video_url: str | None = None,
+        file_url: str | None = None,
+        file_name: str | None = None,
+        file_mime: str | None = None,
+        file_size: int | None = None,
+        commit: bool = False,
+        as_response: bool = False,
+    ) -> dict:
+        recipient = await User.get_by_id(str(recipient_id), db)
+        conversation = await self.get_or_create_conversation(
+            db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
+        )
+
+        msg = Message(
+            conversation_id=conversation.id,
+            sender_id=sender.id,
+            recipient_id=recipient.id,
+            body="",
+            caption=(caption or None),
+            image_url=image_url,
+            video_url=video_url,
+            file_url=file_url,
+            file_name=file_name,
+            file_mime=file_mime,
+            file_size=file_size,
+        )
+        db.add(msg)
+
+        conversation.last_message_at = datetime.now(UTC)
+        await db.flush()
+        await db.refresh(msg)
+
+        if redis is not None:
+            msg_payload = self._serialize_message(msg, sender=sender, recipient=recipient)
+            payload = json.dumps({"type": "chat.message", "data": msg_payload})
+            await redis.publish(f"chat:conversation:{conversation.id}", payload)
+            await redis.publish(f"chat:user:{sender.id}", payload)
+            await redis.publish(f"chat:user:{recipient.id}", payload)
+
+        result = {"conversation_id": str(conversation.id), "message": self._serialize_message(msg, sender=sender, recipient=recipient)}
+
+        if commit:
+            await db.commit()
+
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_201_CREATED,
+                status="success",
+                message="Message sent",
+                data=result,
+            )
+
+        return result
+
     async def list_conversations(
         self,
         *,
@@ -286,6 +349,8 @@ class ChatService:
         conversation_id: str,
         current_user_id: str,
         include_messages: bool = True,
+        messages_page: int = 1,
+        messages_page_size: int = 30,
         as_response: bool = False,
     ) -> dict:
         conv = await Conversation.get_by_id(str(conversation_id), db)
@@ -300,8 +365,8 @@ class ChatService:
                 db=db,
                 conversation_id=str(conversation_id),
                 current_user_id=current_user_id,
-                page=1,
-                page_size=30,
+                page=messages_page,
+                page_size=messages_page_size,
                 as_response=False,
             )
         if as_response:
@@ -320,6 +385,8 @@ class ChatService:
         current_user_id: str,
         user_id: str,
         include_messages: bool = True,
+        messages_page: int = 1,
+        messages_page_size: int = 30,
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
@@ -334,8 +401,8 @@ class ChatService:
                 db=db,
                 conversation_id=str(conv.id),
                 current_user_id=current_user_id,
-                page=1,
-                page_size=30,
+                page=messages_page,
+                page_size=messages_page_size,
                 as_response=False,
             )
         if commit:

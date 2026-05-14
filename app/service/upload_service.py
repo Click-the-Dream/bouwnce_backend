@@ -61,4 +61,3 @@ class UploadService:
 
 
 upload_service = UploadService()
-

@@ -517,7 +517,6 @@ class ChatService:
                 Message.conversation_id == conv.id,
                 Message.recipient_id == current_id,
                 Message.read_at.is_(None),
-                Message.created_at <= target.created_at,
             )
             .values(read_at=read_at)
         )

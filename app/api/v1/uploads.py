@@ -21,13 +21,14 @@ async def sign_chat_image_upload(current_user: CurrentActiveUser) -> dict:
     signed = upload_service.sign_chat_upload(
         preset=settings.CHAT_IMAGES_PRESET, folder=folder
     )
+    constraints = upload_service.chat_image_constraints()
     return response_builder(
         status_code=status.HTTP_200_OK,
         status="success",
         message="Chat image upload signature generated",
         data={
-            **signed,
-            "constraints": upload_service.chat_image_constraints(),
+            "fields": signed,
+            "constraints": constraints,
         },
     )
 
@@ -43,13 +44,14 @@ async def sign_chat_video_upload(current_user: CurrentActiveUser) -> dict:
     signed = upload_service.sign_chat_upload(
         preset=settings.CHAT_VIDEOS_PRESET, folder=folder
     )
+    constraints = upload_service.chat_video_constraints()
     return response_builder(
         status_code=status.HTTP_200_OK,
         status="success",
         message="Chat video upload signature generated",
         data={
-            **signed,
-            "constraints": upload_service.chat_video_constraints(),
+            "fields": signed,
+            "constraints": constraints,
         },
     )
 
@@ -65,12 +67,13 @@ async def sign_chat_file_upload(current_user: CurrentActiveUser) -> dict:
     signed = upload_service.sign_chat_upload(
         preset=settings.CHAT_FILES_PRESET, folder=folder
     )
+    constraints = upload_service.chat_file_constraints()
     return response_builder(
         status_code=status.HTTP_200_OK,
         status="success",
         message="Chat file upload signature generated",
         data={
-            **signed,
-            "constraints": upload_service.chat_file_constraints(),
+            "fields": signed,
+            "constraints": constraints,
         },
     )

@@ -14,7 +14,8 @@
       .greeting { font-size: 16px; font-weight: 600; color: #111827; }
       /* Avoid breaking words into letters; only wrap when needed */
       /* MJML injects inline `word-break: break-word` on <td>; override with !important */
-      .content { word-break: normal !important; overflow-wrap: break-word !important; word-wrap: break-word !important; hyphens: auto; white-space: normal !important; }
+      /* Also disable hyphenation (some clients break at apostrophes like "That' s"). */
+      .content { word-break: normal !important; overflow-wrap: break-word !important; word-wrap: break-word !important; hyphens: none !important; -webkit-hyphens: none !important; -ms-hyphens: none !important; white-space: normal !important; }
       .content div { word-break: normal !important; }
       .content img { max-width: 100% !important; height: auto !important; }
       .content table { width: 100% !important; }

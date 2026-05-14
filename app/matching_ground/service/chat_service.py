@@ -171,12 +171,8 @@ class ChatService:
         sender: User,
         recipient_id: str,
         caption: str | None = None,
-        image_url: str | None = None,
-        video_url: str | None = None,
-        file_url: str | None = None,
-        file_name: str | None = None,
-        file_mime: str | None = None,
-        file_size: int | None = None,
+        media_url: str,
+        media_type: str,
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
@@ -191,12 +187,8 @@ class ChatService:
             recipient_id=recipient.id,
             body="",
             caption=(caption or None),
-            image_url=image_url,
-            video_url=video_url,
-            file_url=file_url,
-            file_name=file_name,
-            file_mime=file_mime,
-            file_size=file_size,
+            media_url=media_url,
+            media_type=media_type,
         )
         db.add(msg)
 
@@ -247,12 +239,34 @@ class ChatService:
         )
         result = await db.execute(stmt)
         rows = list(result.scalars().all())
+
+        last_by_conversation_id: dict[str, Message] = {}
+        if rows:
+            conv_ids = [c.id for c in rows]
+            last_stmt = (
+                select(Message)
+                .where(Message.conversation_id.in_(conv_ids))
+                # Postgres DISTINCT ON via SQLAlchemy .distinct(col)
+                .order_by(Message.conversation_id, desc(Message.created_at))
+                .distinct(Message.conversation_id)
+            )
+            last_result = await db.execute(last_stmt)
+            last_msgs = list(last_result.scalars().all())
+            last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
+
         data = {
-            "items": [self._serialize_conversation(c, current_user_id=user_id) for c in rows],
+            "items": [],
             "page": page,
             "page_size": page_size,
             "total": len(rows),
         }
+
+        for conv in rows:
+            conv_data = self._serialize_conversation(conv, current_user_id=user_id)
+            last = last_by_conversation_id.get(str(conv.id))
+            conv_data["last_message"] = last.to_dict() if last is not None else False
+            data["items"].append(conv_data)
+
         if as_response:
             return response_builder(
                 status_code=status.HTTP_200_OK,

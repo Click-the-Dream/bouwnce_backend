@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint, func, select
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -88,13 +88,9 @@ class Message(BaseModel):
 
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Media support (optional)
+    # Minimal media support
     caption: Mapped[str | None] = mapped_column(String, nullable=True)
-    image_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    video_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    file_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    file_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    file_mime: Mapped[str | None] = mapped_column(String, nullable=True)
-    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    media_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String, nullable=True)  # image|video|file
 
     conversation: Mapped[Conversation] = relationship(lazy="joined")

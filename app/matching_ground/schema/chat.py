@@ -69,9 +69,6 @@ class UploadFilePayload(BaseModel):
     file_url: Annotated[
         str, Field(..., description="Cloudinary secure URL", validation_alias="fileUrl")
     ]
-    file_name: Annotated[str | None, Field(None, max_length=255, validation_alias="fileName")]
-    file_mime: Annotated[str | None, Field(None, max_length=127, validation_alias="fileMime")]
-    file_size: Annotated[int | None, Field(None, ge=0, validation_alias="fileSize")]
     caption: Annotated[str | None, Field(None, max_length=4000)]
 
     model_config = {"populate_by_name": True}

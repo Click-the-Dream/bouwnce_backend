@@ -351,7 +351,8 @@ async def events_ws(websocket: WebSocket) -> None:
                         sender=sender,
                         recipient_id=str(payload.recipient_id),
                         caption=payload.caption,
-                        image_url=payload.image_url,
+                        media_url=payload.image_url,
+                        media_type="image",
                         commit=False,
                         as_response=False,
                     )
@@ -392,7 +393,8 @@ async def events_ws(websocket: WebSocket) -> None:
                         sender=sender,
                         recipient_id=str(payload.recipient_id),
                         caption=payload.caption,
-                        video_url=payload.video_url,
+                        media_url=payload.video_url,
+                        media_type="video",
                         commit=False,
                         as_response=False,
                     )
@@ -433,10 +435,8 @@ async def events_ws(websocket: WebSocket) -> None:
                         sender=sender,
                         recipient_id=str(payload.recipient_id),
                         caption=payload.caption,
-                        file_url=payload.file_url,
-                        file_name=payload.file_name,
-                        file_mime=payload.file_mime,
-                        file_size=payload.file_size,
+                        media_url=payload.file_url,
+                        media_type="file",
                         commit=False,
                         as_response=False,
                     )

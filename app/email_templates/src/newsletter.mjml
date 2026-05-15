@@ -1,5 +1,6 @@
 <mjml>
   <mj-head>
+    <mj-breakpoint width="600px" />
     <mj-attributes>
       <mj-all font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" />
       <mj-text font-size="15px" color="#374151" line-height="1.8" />
@@ -10,90 +11,97 @@
       .email-card { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06); }
       .header { background: #ff6b35; background-image: linear-gradient(135deg, #ff3b0a, #ff6a3d); }
       .header-text { font-weight: 800; letter-spacing: 3px; font-size: 18px; color: #ffffff; }
-      .subject { font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase; color: #9ca3af; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; }
       .greeting { font-size: 16px; font-weight: 600; color: #111827; }
-      .content { word-break: break-word; }
+      /* Avoid breaking words into letters; only wrap when needed */
+      /* MJML injects inline `word-break: break-word` on <td>; override with !important */
+      /* Also disable hyphenation (some clients break at apostrophes like "That' s"). */
+      .content { word-break: keep-all !important; overflow-wrap: break-word !important; word-wrap: break-word !important; hyphens: none !important; -webkit-hyphens: none !important; -ms-hyphens: none !important; white-space: normal !important; }
+      .content div { word-break: keep-all !important; }
+      .content img { max-width: 100% !important; height: auto !important; }
+      .content table { width: 100% !important; }
       .footer { background: #fafafa; border-top: 1px solid #eee; color: #6b7280; font-size: 12px; }
       .cta a { color: #ffffff !important; text-decoration: none !important; }
     </mj-style>
   </mj-head>
 
   <mj-body background-color="#f3f4f6">
-    <mj-wrapper css-class="email-wrapper" padding="40px 14px">
-      <mj-wrapper css-class="email-card" padding="0" background-color="#ffffff">
-        <!-- Header -->
-        <mj-section padding="26px 20px" css-class="header">
-          <mj-column>
-            <mj-text align="center" css-class="header-text" padding="0">BOUWNCE</mj-text>
+    <mj-wrapper padding="40px 14px" css-class="email-card" background-color="#ffffff">
+      <!-- Header -->
+      <mj-section padding="26px 20px" css-class="header">
+        <mj-column>
+          <mj-text align="center" css-class="header-text" padding="0">BOUWNCE</mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Body -->
+      <mj-section padding="38px 30px" background-color="#ffffff">
+        <mj-column>
+          <mj-text css-class="greeting" padding="0 0 14px">Hi {{ user_name or "there" }},</mj-text>
+          <mj-text css-class="content" padding="0">
+            {{ body or "Start typing your content..." }}
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Footer -->
+      <mj-section padding="28px 20px 10px" css-class="footer">
+        <mj-column>
+          <mj-button
+            css-class="cta"
+            href="https://bouwnce.com"
+            background-color="#ff3b0a"
+            color="#ffffff"
+            border-radius="8px"
+            font-weight="600"
+            font-size="13px"
+            padding="0 0 10px"
+            inner-padding="12px 15px"
+          >
+            Visit Bouwnce
+          </mj-button>
+
+          <mj-text align="center" padding="0">
+            © {{ year }} Bouwnce. All rights reserved.<br />
+            You’re receiving this because you subscribed to our updates.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Socials: keep horizontal (even on mobile) -->
+      <mj-section padding="0 20px 28px" css-class="footer">
+        <mj-group>
+          <mj-column width="33.33%">
+            <mj-image
+              href="https://www.instagram.com/bouwnceofficial?igsh=bjFvem92Y28wMWhl"
+              src="https://img.icons8.com/ios-filled/50/ff3b0a/instagram-new.png"
+              width="20px"
+              padding="16px 0 0"
+              align="center"
+              alt="Instagram"
+            />
           </mj-column>
-        </mj-section>
-
-        <!-- Body -->
-        <mj-section padding="38px 30px" background-color="#ffffff">
-          <mj-column>
-            <mj-text css-class="subject" padding="0 0 18px">SUBJECT · {{ subject or "No Subject" }}</mj-text>
-            <mj-text css-class="greeting" padding="0 0 14px">Hi {{ user_name or "there" }},</mj-text>
-            <mj-text css-class="content" padding="0">
-              {{ body or "Start typing your content..." }}
-            </mj-text>
+          <mj-column width="33.33%">
+            <mj-image
+              href="https://www.tiktok.com/@bouwnceofficial?_r=1&_t=ZS-961mkz2wt4H"
+              src="https://img.icons8.com/ios-filled/50/ff3b0a/tiktok.png"
+              width="20px"
+              padding="16px 0 0"
+              align="center"
+              alt="TikTok"
+            />
           </mj-column>
-        </mj-section>
-
-        <!-- Footer -->
-        <mj-section padding="28px 20px" css-class="footer">
-          <mj-column>
-            <mj-button
-              css-class="cta"
-              href="https://bouwnce.com"
-              background-color="#ff3b0a"
-              color="#ffffff"
-              border-radius="8px"
-              font-weight="600"
-              font-size="13px"
-              padding="0 0 10px"
-              inner-padding="12px 15px"
-            >
-              Visit Bouwnce
-            </mj-button>
-
-            <mj-text align="center" padding="0">
-              © {{ year }} Bouwnce. All rights reserved.<br />
-              You’re receiving this because you subscribed to our updates.
-            </mj-text>
-
-            <!-- Use images for socials (mj-social doesn't support TikTok icon reliably) -->
-            <mj-group>
-              <mj-column width="33.33%">
-                <mj-image
-                  href="https://www.instagram.com/bouwnceofficial?igsh=bjFvem92Y28wMWhl"
-                  src="https://img.icons8.com/ios-filled/50/ff3b0a/instagram-new.png"
-                  width="20px"
-                  padding="16px 0 0"
-                  alt="Instagram"
-                />
-              </mj-column>
-              <mj-column width="33.33%">
-                <mj-image
-                  href="https://www.tiktok.com/@bouwnceofficial?_r=1&_t=ZS-961mkz2wt4H"
-                  src="https://img.icons8.com/ios-filled/50/ff3b0a/tiktok.png"
-                  width="20px"
-                  padding="16px 0 0"
-                  alt="TikTok"
-                />
-              </mj-column>
-              <mj-column width="33.33%">
-                <mj-image
-                  href="https://www.linkedin.com/company/bouwnce-official/"
-                  src="https://img.icons8.com/ios-filled/50/ff3b0a/linkedin.png"
-                  width="20px"
-                  padding="16px 0 0"
-                  alt="LinkedIn"
-                />
-              </mj-column>
-            </mj-group>
+          <mj-column width="33.33%">
+            <mj-image
+              href="https://www.linkedin.com/company/bouwnce-official/"
+              src="https://img.icons8.com/ios-filled/50/ff3b0a/linkedin.png"
+              width="20px"
+              padding="16px 0 0"
+              align="center"
+              alt="LinkedIn"
+            />
           </mj-column>
-        </mj-section>
-      </mj-wrapper>
+        </mj-group>
+      </mj-section>
     </mj-wrapper>
   </mj-body>
 </mjml>

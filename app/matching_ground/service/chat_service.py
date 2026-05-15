@@ -163,6 +163,61 @@ class ChatService:
 
         return result
 
+    async def send_media_message(
+        self,
+        *,
+        db: AsyncSession,
+        redis,
+        sender: User,
+        recipient_id: str,
+        caption: str | None = None,
+        media_url: str,
+        media_type: str,
+        commit: bool = False,
+        as_response: bool = False,
+    ) -> dict:
+        recipient = await User.get_by_id(str(recipient_id), db)
+        conversation = await self.get_or_create_conversation(
+            db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
+        )
+
+        msg = Message(
+            conversation_id=conversation.id,
+            sender_id=sender.id,
+            recipient_id=recipient.id,
+            body="",
+            caption=(caption or None),
+            media_url=media_url,
+            media_type=media_type,
+        )
+        db.add(msg)
+
+        conversation.last_message_at = datetime.now(UTC)
+        await db.flush()
+        await db.refresh(msg)
+
+        if redis is not None:
+            msg_payload = self._serialize_message(msg, sender=sender, recipient=recipient)
+            payload = json.dumps({"type": "chat.message", "data": msg_payload})
+            await redis.publish(f"chat:conversation:{conversation.id}", payload)
+            await redis.publish(f"chat:user:{sender.id}", payload)
+            await redis.publish(f"chat:user:{recipient.id}", payload)
+
+        result = {"conversation_id": str(conversation.id), "message": self._serialize_message(msg, sender=sender, recipient=recipient)}
+
+        if commit:
+            await db.commit()
+
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_201_CREATED,
+                status="success",
+                message="Message sent",
+                data=result,
+            )
+
+        return result
+
     async def list_conversations(
         self,
         *,
@@ -184,12 +239,34 @@ class ChatService:
         )
         result = await db.execute(stmt)
         rows = list(result.scalars().all())
+
+        last_by_conversation_id: dict[str, Message] = {}
+        if rows:
+            conv_ids = [c.id for c in rows]
+            last_stmt = (
+                select(Message)
+                .where(Message.conversation_id.in_(conv_ids))
+                # Postgres DISTINCT ON via SQLAlchemy .distinct(col)
+                .order_by(Message.conversation_id, desc(Message.created_at))
+                .distinct(Message.conversation_id)
+            )
+            last_result = await db.execute(last_stmt)
+            last_msgs = list(last_result.scalars().all())
+            last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
+
         data = {
-            "items": [self._serialize_conversation(c, current_user_id=user_id) for c in rows],
+            "items": [],
             "page": page,
             "page_size": page_size,
             "total": len(rows),
         }
+
+        for conv in rows:
+            conv_data = self._serialize_conversation(conv, current_user_id=user_id)
+            last = last_by_conversation_id.get(str(conv.id))
+            conv_data["last_message"] = last.to_dict() if last is not None else False
+            data["items"].append(conv_data)
+
         if as_response:
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -236,9 +313,14 @@ class ChatService:
             raise ForbiddenException("You cannot access this conversation")
 
         offset = (page - 1) * page_size
+        total_stmt = select(func.count()).select_from(Message).where(
+            Message.conversation_id == conv.id
+        )
+        total = int((await db.execute(total_stmt)).scalar() or 0)
+
         stmt = (
             select(Message)
-            .where(Message.conversation_id == conversation_id)
+            .where(Message.conversation_id == conv.id)
             .order_by(desc(Message.created_at))
             .offset(offset)
             .limit(page_size)
@@ -264,7 +346,7 @@ class ChatService:
             )
             for m in msgs
         ]
-        data = {"items": items, "page": page, "page_size": page_size, "total": len(items)}
+        data = {"items": items, "page": page, "page_size": page_size, "total": total}
         if as_response:
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -281,6 +363,8 @@ class ChatService:
         conversation_id: str,
         current_user_id: str,
         include_messages: bool = True,
+        messages_page: int = 1,
+        messages_page_size: int = 30,
         as_response: bool = False,
     ) -> dict:
         conv = await Conversation.get_by_id(str(conversation_id), db)
@@ -295,8 +379,8 @@ class ChatService:
                 db=db,
                 conversation_id=str(conversation_id),
                 current_user_id=current_user_id,
-                page=1,
-                page_size=30,
+                page=messages_page,
+                page_size=messages_page_size,
                 as_response=False,
             )
         if as_response:
@@ -315,6 +399,8 @@ class ChatService:
         current_user_id: str,
         user_id: str,
         include_messages: bool = True,
+        messages_page: int = 1,
+        messages_page_size: int = 30,
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
@@ -329,8 +415,8 @@ class ChatService:
                 db=db,
                 conversation_id=str(conv.id),
                 current_user_id=current_user_id,
-                page=1,
-                page_size=30,
+                page=messages_page,
+                page_size=messages_page_size,
                 as_response=False,
             )
         if commit:
@@ -431,7 +517,6 @@ class ChatService:
                 Message.conversation_id == conv.id,
                 Message.recipient_id == current_id,
                 Message.read_at.is_(None),
-                Message.created_at <= target.created_at,
             )
             .values(read_at=read_at)
         )

@@ -15,6 +15,7 @@ from app.core.logger import log_internal_error
 from app.core.rate_limiter import rate_limiter
 from app.db.mongo import mongo_conn
 from app.db.postgres_db_conn import engine
+from app.db.redis import close_redis_client
 from app.worker.jobs import (
     call_health_endpoint_cron_task,
     mark_order_and_payment_abandoned,
@@ -50,6 +51,9 @@ async def fastapi_lifespan(app: FastAPI):
 
     client.close()
     print("✅ succeffully shutdown mongo client")
+
+    await close_redis_client()
+    print("✅ succeffully shutdown redis client")
 
     scheduler.shutdown()
     print("✅ succeffully closed all cron jobs")

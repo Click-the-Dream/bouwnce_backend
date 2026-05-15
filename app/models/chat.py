@@ -88,5 +88,9 @@ class Message(BaseModel):
 
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    conversation: Mapped[Conversation] = relationship(lazy="joined")
+    # Minimal media support
+    caption: Mapped[str | None] = mapped_column(String, nullable=True)
+    media_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    media_type: Mapped[str | None] = mapped_column(String, nullable=True)  # image|video|file
 
+    conversation: Mapped[Conversation] = relationship(lazy="joined")

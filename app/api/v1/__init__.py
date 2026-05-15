@@ -6,6 +6,7 @@ from app.api.v1 import (
     contact_info_crud,
     order_router,
     mobile_events,
+    uploads,
     payment,
     payout_info_crud,
     product_router,
@@ -87,4 +88,5 @@ api_router.include_router(interest.router)
 api_router.include_router(match.router)
 api_router.include_router(location.router)
 api_router.include_router(mobile_events.router)
+api_router.include_router(uploads.router)
 api_router.include_router(chat.router)

@@ -62,15 +62,28 @@ async def fastapi_lifespan(app: FastAPI):
 def custom_generate_unique_id(route: APIRoute) -> str:
     return f"{route.tags[0]}-{route.name}"
 
+is_prod = True if settings.FASTAPI_ENV == 'production' else False
 
-app = FastAPI(
+if is_prod:
+    app = FastAPI(
     title=settings.PROJECT_NAME,
+    docs_url=None,
+    redoc_url=None,
     openapi_url=f"{settings.API_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
     version="1.0.0",
     description="APIs for the Bouwnce Backend",
     lifespan=fastapi_lifespan,
 )
+else:
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        openapi_url=f"{settings.API_STR}/openapi.json",
+        generate_unique_id_function=custom_generate_unique_id,
+        version="1.0.0",
+        description="APIs for the Bouwnce Backend",
+        lifespan=fastapi_lifespan,
+    )
 
 
 def custom_openapi():

@@ -25,7 +25,7 @@ settings = config_options.get(normalized_env, config_options["development"])
 config = context.config
 
 DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL
-print(DATABASE_URL[[]])
+
 
 if DATABASE_URL is None:
     raise ValueError("SQLALCHEMY_DATABASE_URL is not set in .env file")

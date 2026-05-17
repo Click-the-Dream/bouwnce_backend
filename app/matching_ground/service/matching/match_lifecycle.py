@@ -137,6 +137,7 @@ class MatchLifecycleService:
                     "user_id": item.user_id,
                     "full_name": item.full_name,
                     "distance_km": item.distance_km,
+                    "profile_pic": item.profile_pic,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
                     "shared_traits": item.shared_traits,

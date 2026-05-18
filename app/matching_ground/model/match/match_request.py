@@ -45,6 +45,7 @@ class MatchRequest(BaseModel):
         session.add(row)
         await session.flush()
         return row
+        
 
     @classmethod
     async def find_open_for_pair(

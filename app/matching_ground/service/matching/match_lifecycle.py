@@ -256,7 +256,7 @@ class MatchLifecycleService:
 
         await request.set_status(session, "accepted")
         
-        match = await MatchRequest.create_accepted(session, request.requester_id, request.target_user_id)
+        match = await Match.create_accepted(session, request.requester_id, request.target_user_id)
         conversation = await Conversation.get_or_create_between(
             session, request.requester_id, request.target_user_id
         )

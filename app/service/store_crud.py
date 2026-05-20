@@ -40,6 +40,7 @@ class StoreCRUDService:
         new_store = await Store.create(data, db)
 
         user.is_store_owner = True
+        user.role = "vendor"
         await user.save(db)
 
         await Wallet.create({"store_id": new_store.id}, db)

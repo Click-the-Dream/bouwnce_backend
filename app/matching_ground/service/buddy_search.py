@@ -22,6 +22,7 @@ class BuddyMatch:
     user_id: str
     full_name: str | None
     profile_pic: str | None
+    bio: str | None
     distance_km: float
     score: float
     shared_interests: list[str]
@@ -98,6 +99,7 @@ class BuddySearchService:
                 self.user_model.id,
                 self.user_model.full_name,
                 self.user_model.profile_pic,
+                self.user_model.bio,
                 self.geolocation_model.lat,
                 self.geolocation_model.lon,
             )
@@ -115,7 +117,7 @@ class BuddySearchService:
             candidate_query.limit(max(limit * 25, 100))
         )
 
-        for candidate_id, full_name, profile_pic, candidate_lat, candidate_lon in candidate_rows.all():
+        for candidate_id, full_name, profile_pic, bio, candidate_lat, candidate_lon in candidate_rows.all():
             if str(candidate_id) == str(requester_id):
                 continue
             target = (
@@ -160,6 +162,7 @@ class BuddySearchService:
                     full_name=full_name,
                     distance_km=round(distance, 2) if distance >= 0 else -1.0,
                     profile_pic=profile_pic,
+                    bio=bio,
                     score=round(score, 4),
                     shared_interests=sorted(
                         requester_interests.intersection(candidate_interests)

@@ -151,8 +151,8 @@ class MatchLifecycleService:
             ],
         }
     
-    async def list_requests_for_user(self, session: AsyncSession, user_id: uuid.UUID) -> dict:
-        rows = await MatchRequest.list_for_user(session, user_id)
+    async def list_requests_for_user(self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int) -> dict:
+        rows = await MatchRequest.list_for_user(session, user_id, page, page_size)
         return {
             "items": [
                 {
@@ -165,22 +165,28 @@ class MatchLifecycleService:
                     "responded_at": row.responded_at.isoformat() if row.responded_at else None,
                 }
                 for row in rows
-            ]
+            ],
+            "page": page,
+            "page_size": page_size,
+            "total": len(rows),
         }
 
-    async def list_matches_for_user(self, session: AsyncSession, user_id: uuid.UUID) -> dict:
-        rows = await Match.list_for_user(session, user_id)
+    async def list_matches_for_user(self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int) -> dict:
+        rows = await Match.list_for_user(session, user_id, page, page_size)
         return {
             "items": [
                 {
                     "match_id": str(row.id),
-                    "user_id": str(row.user_id),
-                    "target_user_id": str(row.target_user_id),
+                    "user": row.user.to_dict() if row.user else None,
+                    "target_user": row.target_user.to_dict() if row.target_user else None,
                     "status": row.status,
                     "accepted_at": row.accepted_at.isoformat() if row.accepted_at else None,
                 }
                 for row in rows
-            ]
+            ],
+            "page": page,
+            "page_size": page_size,
+            "total": len(rows),
         }
 
 

@@ -19,6 +19,7 @@ class UserBase(BaseModel):
     full_name: Annotated[str, Field(min_length=2, examples=["John Doe"])]
     email: Annotated[EmailStr, Field(examples=["johndoe@example.com"])]
     username: Annotated[str, Field(min_length=2, examples=["johndoe"])]
+    bio: Annotated[str | None, Field(min_length=2, examples=["Hello I'm John!"])] = None
     date_of_birth: Annotated[str | None, Field(...)] = None
     role: Annotated[RoleEnum, Field(description="Role of user")]
     is_store_owner: Annotated[bool, Field(examples=[False])] = False
@@ -78,6 +79,7 @@ class UpdateUser(BaseModel):
     full_name: Annotated[str | None, Field(min_length=2, examples=["John Doe"])] = None
     email: Annotated[EmailStr | None, Field(examples=["johndoe@example.com"])] = None
     username: Annotated[str | None, Field(min_length=2, examples=["johnDoe"])] = None
+    bio: Annotated[str | None, Field(min_length=2, examples=["Hello I'm John!"])] = None
     institution: Annotated[
         str | None, Field(min_length=2, examples=["Jonio University"])
     ] = None

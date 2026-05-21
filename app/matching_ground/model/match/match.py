@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import DateTime, ForeignKey, String, select, and_
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Self
 
@@ -83,11 +83,14 @@ class Match(BaseModel):
         return self
 
     @classmethod
-    async def list_for_user(cls, session: AsyncSession, user_id: uuid.UUID) -> list[Self]:
+    async def list_for_user(cls, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int) -> list[Self]:
         result = await session.execute(
             select(cls)
             .where((cls.user_id == user_id) | (cls.target_user_id == user_id))
+            .options(selectinload(cls.user), selectinload(cls.target_user))
             .order_by(cls.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
         return list(result.scalars().all())
 

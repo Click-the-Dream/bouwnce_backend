@@ -31,6 +31,7 @@ class User(BaseModel):
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     full_name: Mapped[str | None] = mapped_column(String, nullable=True)
     username: Mapped[str | None] = mapped_column(String, nullable=True)
+    bio: Mapped[str | None] = mapped_column(String, nullable=True)
     date_of_birth: Mapped[str | None] = mapped_column(String, nullable=True)
     institution: Mapped[str | None] = mapped_column(String, nullable=True)
     profile_pic: Mapped[dict | None] = mapped_column(JSON, nullable=True)

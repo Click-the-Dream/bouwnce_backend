@@ -96,7 +96,7 @@ class ProductionConfig(Config):
     SQLALCHEMY_POOL_SIZE: int = config("SQLALCHEMY_POOL_SIZE")
     SQLALCHEMY_MAX_OVERFLOW: int = config("SQLALCHEMY_MAX_OVERFLOW")
     SQLALCHEMY_FUTURE: bool = config("SQLALCHEMY_FUTURE")
-    SQLALCHEMY_ECHO: bool = config("SQLALCHEMY_ECHO")
+    SQLALCHEMY_ECHO: bool = False
 
 
 class StagingConfig(Config):

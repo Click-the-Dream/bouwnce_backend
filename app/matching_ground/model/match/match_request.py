@@ -45,6 +45,7 @@ class MatchRequest(BaseModel):
         session.add(row)
         await session.flush()
         return row
+        
 
     @classmethod
     async def find_open_for_pair(
@@ -84,12 +85,14 @@ class MatchRequest(BaseModel):
         return list(result.scalars().all())
 
     @classmethod
-    async def list_for_user(cls, session: AsyncSession, user_id: uuid.UUID) -> list[Self]:
+    async def list_for_user(cls, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int) -> list[Self]:
         result = await session.execute(
             select(cls)
             .where(
                 (cls.requester_id == user_id) | (cls.target_user_id == user_id)
             )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
             .order_by(cls.created_at.desc())
         )
         return list(result.scalars().all())

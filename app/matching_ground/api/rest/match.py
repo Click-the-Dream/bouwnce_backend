@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Annotated
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Query
@@ -69,18 +70,22 @@ async def create_match_request(
 async def list_match_requests(
     db: dbSessionDep,
     current_user: CurrentUser,
+    page: Annotated[int, Query(gt=0, description="Page number")] = 1,
+    page_size: Annotated[int, Query(gt=0, le=100, description="Number of items per page")] = 10,
 ) -> dict:
     service = MatchLifecycleService()
-    return await service.list_requests_for_user(db, current_user.id)
+    return await service.list_requests_for_user(db, current_user.id, page, page_size)
 
 
 @router.get("/")
 async def list_matches(
     db: dbSessionDep,
     current_user: CurrentUser,
+    page: Annotated[int, Query(gt=0, description="Page number")] = 1,
+    page_size: Annotated[int, Query(gt=0, le=100, description="Number of items per page")] = 10,
 ) -> dict:
     service = MatchLifecycleService()
-    return await service.list_matches_for_user(db, current_user.id)
+    return await service.list_matches_for_user(db, current_user.id, page, page_size)
 
 
 @router.post("/requests/{request_id}/respond")

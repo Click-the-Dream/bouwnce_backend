@@ -6,20 +6,23 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.matching_ground.core.location import Coordinates, haversine_km, within_radius
 from app.matching_ground.core.interest_normalization import normalize_interest_name
+from app.matching_ground.core.location import Coordinates, haversine_km, within_radius
 from app.matching_ground.core.matching.aggregator import WeightedScore, aggregate
+from app.matching_ground.core.matching.matching_feature import build_user_matching_features
 from app.matching_ground.core.matching.score import interest_overlap_score, location_score
+from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.user_interest import UserInterest
 from app.models.user import User
-from app.matching_ground.core.matching.matching_feature import build_user_matching_features
 
 
 @dataclass(frozen=True)
 class BuddyMatch:
     user_id: str
     full_name: str | None
+    profile_pic: str | None
+    bio: str | None
     distance_km: float
     score: float
     shared_interests: list[str]
@@ -67,10 +70,36 @@ class BuddySearchService:
         )
 
         matches: list[BuddyMatch] = []
-        candidate_rows = await session.execute(
+        excluded_user_ids: set[uuid.UUID] = set()
+
+        active_match_rows = await session.execute(
+            select(Match.user_id, Match.target_user_id).where(
+                Match.status == "active",
+                (
+                    (Match.user_id == requester_id)
+                    | (Match.target_user_id == requester_id)
+                ),
+            )
+        )
+        for user_id, target_user_id in active_match_rows.all():
+            excluded_user_ids.add(
+                target_user_id if user_id == requester_id else user_id
+            )
+
+        outgoing_request_rows = await session.execute(
+            select(MatchRequest.target_user_id).where(
+                MatchRequest.requester_id == requester_id,
+                MatchRequest.status.in_(("pending", "accepted")),
+            )
+        )
+        excluded_user_ids.update(outgoing_request_rows.scalars().all())
+
+        candidate_query = (
             select(
                 self.user_model.id,
                 self.user_model.full_name,
+                self.user_model.profile_pic,
+                self.user_model.bio,
                 self.geolocation_model.lat,
                 self.geolocation_model.lon,
             )
@@ -78,10 +107,17 @@ class BuddySearchService:
                 self.geolocation_model, self.geolocation_model.user_id == self.user_model.id
             )
             .where(self.user_model.id != requester_id)
-            .limit(max(limit * 25, 100))
+        )
+        if excluded_user_ids:
+            candidate_query = candidate_query.where(
+                self.user_model.id.not_in(excluded_user_ids)
+            )
+
+        candidate_rows = await session.execute(
+            candidate_query.limit(max(limit * 25, 100))
         )
 
-        for candidate_id, full_name, candidate_lat, candidate_lon in candidate_rows.all():
+        for candidate_id, full_name, profile_pic, bio, candidate_lat, candidate_lon in candidate_rows.all():
             if str(candidate_id) == str(requester_id):
                 continue
             target = (
@@ -125,6 +161,8 @@ class BuddySearchService:
                     user_id=str(candidate_id),
                     full_name=full_name,
                     distance_km=round(distance, 2) if distance >= 0 else -1.0,
+                    profile_pic=profile_pic,
+                    bio=bio,
                     score=round(score, 4),
                     shared_interests=sorted(
                         requester_interests.intersection(candidate_interests)

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, status
+from uuid import UUID
 
 from app.matching_ground.schema.interest import UserInterestCreate, UserInterestReponse, InterestReponse, BaseResponse
 from app.matching_ground.service.interest_service import interest_service
@@ -30,6 +31,14 @@ async def get_user_interests(
     current_user: CurrentUser
 ): 
     return await interest_service.get_user_interests(db, str(current_user.id))
+
+@router.get("/user/{user_id}", response_model=UserInterestReponse, status_code=status.HTTP_200_OK)
+async def get_user_interest_by_id(
+    user_id: UUID,
+    db: dbSessionDep,
+    _: CurrentUser
+):
+    return await interest_service.get_user_interests(db, str(user_id))
 
 
 @router.put("/user", response_model=BaseResponse, status_code=status.HTTP_200_OK)

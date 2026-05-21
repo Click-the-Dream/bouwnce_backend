@@ -29,7 +29,7 @@ class StoreCRUDService:
 
         store = await Store.get_by_name(data["name"].lower(), db)
         if store:
-            raise BadRequestException("Store with name already exist")
+            raise ConflictException("Store with name already exist")
 
         data["user_id"] = user.id
         data["name"] = data["name"].lower()

@@ -311,6 +311,11 @@ async def events_ws(websocket: WebSocket) -> None:
                             sender=sender,
                             recipient_id=payload.recipient_id,
                             body=payload.body,
+                            reply_to_message_id=(
+                                str(payload.reply_to_message_id)
+                                if payload.reply_to_message_id
+                                else None
+                            ),
                             commit=False,
                             as_response=False,
                         )
@@ -432,6 +437,11 @@ async def events_ws(websocket: WebSocket) -> None:
                             media_url=urls[0],
                             media_urls=urls[1:] or None,
                             media_type=media_type,
+                            reply_to_message_id=(
+                                str(payload.reply_to_message_id)
+                                if payload.reply_to_message_id
+                                else None
+                            ),
                             commit=False,
                             as_response=False,
                         )

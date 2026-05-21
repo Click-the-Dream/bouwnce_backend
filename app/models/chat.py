@@ -94,5 +94,8 @@ class Message(BaseModel):
     media_url: Mapped[str | None] = mapped_column(String, nullable=True)
     media_type: Mapped[str | None] = mapped_column(String, nullable=True)  # image|video|file
     media_urls: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    reply_to_message_id: Mapped[UUID_Type | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
 
     conversation: Mapped[Conversation] = relationship(lazy="joined")

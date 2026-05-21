@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field
 class SendMessagePayload(BaseModel):
     recipient_id: Annotated[uuid.UUID, Field(..., description="Recipient user id (uuid)")]
     body: Annotated[str, Field(..., min_length=1, max_length=4000)]
+    client_id: Annotated[
+        str | None, Field(None, max_length=64, description="Client message id", validation_alias="clientId")
+    ]
+
+    model_config = {"populate_by_name": True}
 
 
 class MarkConversationReadPayload(BaseModel):
@@ -46,29 +51,25 @@ class UploadImagePayload(BaseModel):
     caption: Annotated[
         str | None, Field(None, max_length=4000, validation_alias="caption")
     ]
-
     model_config = {"populate_by_name": True}
 
 
-class UploadVideoPayload(BaseModel):
+class UploadMediaPayload(BaseModel):
     recipient_id: Annotated[
-        uuid.UUID, Field(..., description="Recipient user id (uuid)", validation_alias="recipientId")
+        uuid.UUID,
+        Field(..., description="Recipient user id (uuid)", validation_alias="recipientId"),
     ]
-    video_url: Annotated[
-        str, Field(..., description="Cloudinary secure URL", validation_alias="videoUrl")
+    media_url: Annotated[
+        str,
+        Field(..., description="Cloudinary secure URL", validation_alias="mediaUrl"),
+    ]
+    media_type: Annotated[
+        str,
+        Field(
+            ...,
+            description="Media type: image|video|file",
+            validation_alias="mediaType",
+        ),
     ]
     caption: Annotated[str | None, Field(None, max_length=4000)]
-
-    model_config = {"populate_by_name": True}
-
-
-class UploadFilePayload(BaseModel):
-    recipient_id: Annotated[
-        uuid.UUID, Field(..., description="Recipient user id (uuid)", validation_alias="recipientId")
-    ]
-    file_url: Annotated[
-        str, Field(..., description="Cloudinary secure URL", validation_alias="fileUrl")
-    ]
-    caption: Annotated[str | None, Field(None, max_length=4000)]
-
     model_config = {"populate_by_name": True}

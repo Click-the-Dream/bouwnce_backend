@@ -10,7 +10,7 @@ import uuid
 from app.api.dependencies import CurrentActiveUser, redisSessionDep
 
 from app.core.security import verify_token
-from app.utils.exception import NotFoundException
+from app.utils.exception import BadRequestException, ForbiddenException, NotFoundException
 from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX, settings
 from app.db.redis import get_redis_client
 from app.db.postgres_db_conn import get_async_session
@@ -20,9 +20,8 @@ from app.matching_ground.schema.chat import (
     MarkConversationReadPayload,
     SendMessagePayload,
     TypingPayload,
-    UploadFilePayload,
     UploadImagePayload,
-    UploadVideoPayload,
+    UploadMediaPayload,
 )
 from app.matching_ground.service.chat_service import chat_service
 
@@ -304,18 +303,26 @@ async def events_ws(websocket: WebSocket) -> None:
                     continue
 
                 async with get_async_session() as db:
-                    sender = await User.get_by_id(str(user_id), db)
-                    result = await chat_service.send_message(
-                        db=db,
-                        redis=redis,
-                        sender=sender,
-                        recipient_id=payload.recipient_id,
-                        body=payload.body,
-                        commit=False,
-                        as_response=False,
-                    )
+                    try:
+                        sender = await User.get_by_id(str(user_id), db)
+                        result = await chat_service.send_message(
+                            db=db,
+                            redis=redis,
+                            sender=sender,
+                            recipient_id=payload.recipient_id,
+                            body=payload.body,
+                            commit=False,
+                            as_response=False,
+                        )
+                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        await websocket.send_json(
+                            {"type": "error", "error": "chat.send.failed", "message": str(e)}
+                        )
+                        continue
 
-                await websocket.send_json({"type": "chat.sent", "data": result})
+                await websocket.send_json(
+                    {"type": "chat.sent", "client_id": payload.client_id, "data": result}
+                )
                 continue
 
             if msg_type == "chat.upload_image":
@@ -344,31 +351,41 @@ async def events_ws(websocket: WebSocket) -> None:
                     continue
 
                 async with get_async_session() as db:
-                    sender = await User.get_by_id(str(user_id), db)
-                    result = await chat_service.send_media_message(
-                        db=db,
-                        redis=redis,
-                        sender=sender,
-                        recipient_id=str(payload.recipient_id),
-                        caption=payload.caption,
-                        media_url=payload.image_url,
-                        media_type="image",
-                        commit=False,
-                        as_response=False,
-                    )
+                    try:
+                        sender = await User.get_by_id(str(user_id), db)
+                        result = await chat_service.send_media_message(
+                            db=db,
+                            redis=redis,
+                            sender=sender,
+                            recipient_id=str(payload.recipient_id),
+                            caption=payload.caption,
+                            media_url=payload.image_url,
+                            media_type="image",
+                            commit=False,
+                            as_response=False,
+                        )
+                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "error": "chat.upload_image.failed",
+                                "message": str(e),
+                            }
+                        )
+                        continue
 
                 await websocket.send_json({"type": "chat.sent", "data": result})
                 continue
 
-            if msg_type == "chat.upload_video":
+            if msg_type == "chat.upload_media":
                 try:
-                    payload = UploadVideoPayload.model_validate(incoming)
+                    payload = UploadMediaPayload.model_validate(incoming)
                 except Exception:
                     await websocket.send_json(
                         {
                             "type": "error",
                             "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_video', recipient_id:'<uuid>', video_url:'https://...', caption?:'...'}",
+                            "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_url:'https://...', media_type:'image|video|file', caption?:'...'}",
                         }
                     )
                     continue
@@ -379,69 +396,54 @@ async def events_ws(websocket: WebSocket) -> None:
                     )
                     continue
 
-                if not _is_cloudinary_secure_url(payload.video_url):
+                media_type = (payload.media_type or "").strip().lower()
+                if media_type not in {"image", "video", "file"}:
                     await websocket.send_json(
-                        {"type": "error", "error": "invalid_video_url"}
+                        {"type": "error", "error": "invalid_media_type"}
+                    )
+                    continue
+                if not _is_cloudinary_secure_url(payload.media_url):
+                    await websocket.send_json(
+                        {"type": "error", "error": "invalid_media_url"}
                     )
                     continue
 
                 async with get_async_session() as db:
-                    sender = await User.get_by_id(str(user_id), db)
-                    result = await chat_service.send_media_message(
-                        db=db,
-                        redis=redis,
-                        sender=sender,
-                        recipient_id=str(payload.recipient_id),
-                        caption=payload.caption,
-                        media_url=payload.video_url,
-                        media_type="video",
-                        commit=False,
-                        as_response=False,
-                    )
+                    try:
+                        sender = await User.get_by_id(str(user_id), db)
+                        result = await chat_service.send_media_message(
+                            db=db,
+                            redis=redis,
+                            sender=sender,
+                            recipient_id=str(payload.recipient_id),
+                            caption=payload.caption,
+                            media_url=payload.media_url,
+                            media_type=media_type,
+                            commit=False,
+                            as_response=False,
+                        )
+                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "error": "chat.upload_media.failed",
+                                "message": str(e),
+                            }
+                        )
+                        continue
 
                 await websocket.send_json({"type": "chat.sent", "data": result})
                 continue
 
-            if msg_type == "chat.upload_file":
-                try:
-                    payload = UploadFilePayload.model_validate(incoming)
-                except Exception:
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_file', recipient_id:'<uuid>', file_url:'https://...', file_name?:'...'}",
-                        }
-                    )
-                    continue
-
-                if str(payload.recipient_id) == str(user_id):
-                    await websocket.send_json(
-                        {"type": "error", "error": "self_send_not_allowed"}
-                    )
-                    continue
-
-                if not _is_cloudinary_secure_url(payload.file_url):
-                    await websocket.send_json(
-                        {"type": "error", "error": "invalid_file_url"}
-                    )
-                    continue
-
-                async with get_async_session() as db:
-                    sender = await User.get_by_id(str(user_id), db)
-                    result = await chat_service.send_media_message(
-                        db=db,
-                        redis=redis,
-                        sender=sender,
-                        recipient_id=str(payload.recipient_id),
-                        caption=payload.caption,
-                        media_url=payload.file_url,
-                        media_type="file",
-                        commit=False,
-                        as_response=False,
-                    )
-
-                await websocket.send_json({"type": "chat.sent", "data": result})
+            # Backwards-compat: accept legacy types and map them to chat.upload_media
+            if msg_type in {"chat.upload_video", "chat.upload_file"}:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "error": "deprecated",
+                        "message": "Use chat.upload_media with media_url + media_type (image|video|file).",
+                    }
+                )
                 continue
 
             if msg_type == "chat.read":
@@ -458,15 +460,21 @@ async def events_ws(websocket: WebSocket) -> None:
                     continue
 
                 async with get_async_session() as db:
-                    result = await chat_service.mark_conversation_read_up_to_message(
-                        db=db,
-                        redis=redis,
-                        current_user_id=str(user_id),
-                        conversation_id=str(payload.conversation_id),
-                        message_id=str(payload.message_id),
-                        commit=False,
-                        as_response=False,
-                    )
+                    try:
+                        result = await chat_service.mark_conversation_read_up_to_message(
+                            db=db,
+                            redis=redis,
+                            current_user_id=str(user_id),
+                            conversation_id=str(payload.conversation_id),
+                            message_id=str(payload.message_id),
+                            commit=False,
+                            as_response=False,
+                        )
+                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        await websocket.send_json(
+                            {"type": "error", "error": "chat.read.failed", "message": str(e)}
+                        )
+                        continue
 
                 await websocket.send_json({"type": "chat.read.ack", "data": result})
                 continue
@@ -485,14 +493,24 @@ async def events_ws(websocket: WebSocket) -> None:
                     continue
 
                 async with get_async_session() as db:
-                    conv = await Conversation.get_between(
-                        db, uuid.UUID(str(user_id)), uuid.UUID(str(payload.user_id))
-                    )
-                    if conv is None:
-                        raise NotFoundException("Conversation not found")
+                    try:
+                        conv = await Conversation.get_between(
+                            db, uuid.UUID(str(user_id)), uuid.UUID(str(payload.user_id))
+                        )
+                        if conv is None:
+                            raise NotFoundException("Conversation not found")
 
-                    sender = await User.get_by_id(str(user_id), db)
-                    targets = {str(conv.user_a_id), str(conv.user_b_id)}
+                        sender = await User.get_by_id(str(user_id), db)
+                        targets = {str(conv.user_a_id), str(conv.user_b_id)}
+                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "error": "chat.typing.failed",
+                                "message": str(e),
+                            }
+                        )
+                        continue
 
                 event_payload = json.dumps(
                     {

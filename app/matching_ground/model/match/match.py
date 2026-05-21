@@ -1,13 +1,16 @@
 import uuid
 from datetime import datetime, timezone, timedelta
+from typing import TYPE_CHECKING, Self
 
 from sqlalchemy import DateTime, ForeignKey, String, select, and_
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, selectinload
+from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Self
 
 from app.models.basemodel import BaseModel
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class Match(BaseModel):
@@ -25,6 +28,9 @@ class Match(BaseModel):
     chat_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_reason: Mapped[str | None] = mapped_column(String(120))
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id], lazy="joined")
+    target_user: Mapped["User"] = relationship(foreign_keys=[target_user_id], lazy="joined")
 
 
     @classmethod
@@ -108,4 +114,3 @@ class Match(BaseModel):
             )
         )
         return result.scalar_one_or_none()
-

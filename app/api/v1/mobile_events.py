@@ -20,9 +20,8 @@ from app.matching_ground.schema.chat import (
     MarkConversationReadPayload,
     SendMessagePayload,
     TypingPayload,
-    UploadFilePayload,
     UploadImagePayload,
-    UploadVideoPayload,
+    UploadMediaPayload,
 )
 from app.matching_ground.service.chat_service import chat_service
 
@@ -321,7 +320,9 @@ async def events_ws(websocket: WebSocket) -> None:
                         )
                         continue
 
-                await websocket.send_json({"type": "chat.sent", "data": result})
+                await websocket.send_json(
+                    {"type": "chat.sent", "client_id": payload.client_id, "data": result}
+                )
                 continue
 
             if msg_type == "chat.upload_image":
@@ -376,15 +377,15 @@ async def events_ws(websocket: WebSocket) -> None:
                 await websocket.send_json({"type": "chat.sent", "data": result})
                 continue
 
-            if msg_type == "chat.upload_video":
+            if msg_type == "chat.upload_media":
                 try:
-                    payload = UploadVideoPayload.model_validate(incoming)
+                    payload = UploadMediaPayload.model_validate(incoming)
                 except Exception:
                     await websocket.send_json(
                         {
                             "type": "error",
                             "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_video', recipient_id:'<uuid>', video_url:'https://...', caption?:'...'}",
+                            "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_url:'https://...', media_type:'image|video|file', caption?:'...'}",
                         }
                     )
                     continue
@@ -395,9 +396,15 @@ async def events_ws(websocket: WebSocket) -> None:
                     )
                     continue
 
-                if not _is_cloudinary_secure_url(payload.video_url):
+                media_type = (payload.media_type or "").strip().lower()
+                if media_type not in {"image", "video", "file"}:
                     await websocket.send_json(
-                        {"type": "error", "error": "invalid_video_url"}
+                        {"type": "error", "error": "invalid_media_type"}
+                    )
+                    continue
+                if not _is_cloudinary_secure_url(payload.media_url):
+                    await websocket.send_json(
+                        {"type": "error", "error": "invalid_media_url"}
                     )
                     continue
 
@@ -410,8 +417,8 @@ async def events_ws(websocket: WebSocket) -> None:
                             sender=sender,
                             recipient_id=str(payload.recipient_id),
                             caption=payload.caption,
-                            media_url=payload.video_url,
-                            media_type="video",
+                            media_url=payload.media_url,
+                            media_type=media_type,
                             commit=False,
                             as_response=False,
                         )
@@ -419,7 +426,7 @@ async def events_ws(websocket: WebSocket) -> None:
                         await websocket.send_json(
                             {
                                 "type": "error",
-                                "error": "chat.upload_video.failed",
+                                "error": "chat.upload_media.failed",
                                 "message": str(e),
                             }
                         )
@@ -428,56 +435,15 @@ async def events_ws(websocket: WebSocket) -> None:
                 await websocket.send_json({"type": "chat.sent", "data": result})
                 continue
 
-            if msg_type == "chat.upload_file":
-                try:
-                    payload = UploadFilePayload.model_validate(incoming)
-                except Exception:
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_file', recipient_id:'<uuid>', file_url:'https://...', file_name?:'...'}",
-                        }
-                    )
-                    continue
-
-                if str(payload.recipient_id) == str(user_id):
-                    await websocket.send_json(
-                        {"type": "error", "error": "self_send_not_allowed"}
-                    )
-                    continue
-
-                if not _is_cloudinary_secure_url(payload.file_url):
-                    await websocket.send_json(
-                        {"type": "error", "error": "invalid_file_url"}
-                    )
-                    continue
-
-                async with get_async_session() as db:
-                    try:
-                        sender = await User.get_by_id(str(user_id), db)
-                        result = await chat_service.send_media_message(
-                            db=db,
-                            redis=redis,
-                            sender=sender,
-                            recipient_id=str(payload.recipient_id),
-                            caption=payload.caption,
-                            media_url=payload.file_url,
-                            media_type="file",
-                            commit=False,
-                            as_response=False,
-                        )
-                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
-                        await websocket.send_json(
-                            {
-                                "type": "error",
-                                "error": "chat.upload_file.failed",
-                                "message": str(e),
-                            }
-                        )
-                        continue
-
-                await websocket.send_json({"type": "chat.sent", "data": result})
+            # Backwards-compat: accept legacy types and map them to chat.upload_media
+            if msg_type in {"chat.upload_video", "chat.upload_file"}:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "error": "deprecated",
+                        "message": "Use chat.upload_media with media_url + media_type (image|video|file).",
+                    }
+                )
                 continue
 
             if msg_type == "chat.read":

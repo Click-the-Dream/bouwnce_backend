@@ -6,6 +6,7 @@ from uuid import UUID as UUID_Type
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -92,5 +93,6 @@ class Message(BaseModel):
     caption: Mapped[str | None] = mapped_column(String, nullable=True)
     media_url: Mapped[str | None] = mapped_column(String, nullable=True)
     media_type: Mapped[str | None] = mapped_column(String, nullable=True)  # image|video|file
+    media_urls: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
     conversation: Mapped[Conversation] = relationship(lazy="joined")

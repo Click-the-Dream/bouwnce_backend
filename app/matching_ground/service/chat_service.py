@@ -171,7 +171,8 @@ class ChatService:
         sender: User,
         recipient_id: str,
         caption: str | None = None,
-        media_url: str,
+        media_url: str | None = None,
+        media_urls: list[str] | None = None,
         media_type: str,
         commit: bool = False,
         as_response: bool = False,
@@ -181,14 +182,22 @@ class ChatService:
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
 
+        urls = [u for u in (media_urls or []) if u]
+        if media_url:
+            urls = [media_url, *urls]
+        # de-dupe while preserving order
+        seen: set[str] = set()
+        urls = [u for u in urls if not (u in seen or seen.add(u))]
+
         msg = Message(
             conversation_id=conversation.id,
             sender_id=sender.id,
             recipient_id=recipient.id,
             body="",
             caption=(caption or None),
-            media_url=media_url,
+            media_url=(urls[0] if urls else None),
             media_type=media_type,
+            media_urls=(urls or None),
         )
         db.add(msg)
 

@@ -60,8 +60,16 @@ class UploadMediaPayload(BaseModel):
         Field(..., description="Recipient user id (uuid)", validation_alias="recipientId"),
     ]
     media_url: Annotated[
-        str,
-        Field(..., description="Cloudinary secure URL", validation_alias="mediaUrl"),
+        str | None,
+        Field(None, description="Cloudinary secure URL", validation_alias="mediaUrl"),
+    ]
+    media_urls: Annotated[
+        list[str] | None,
+        Field(
+            None,
+            description="List of Cloudinary secure URLs",
+            validation_alias="mediaUrls",
+        ),
     ]
     media_type: Annotated[
         str,

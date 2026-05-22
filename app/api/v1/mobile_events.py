@@ -311,6 +311,11 @@ async def events_ws(websocket: WebSocket) -> None:
                             sender=sender,
                             recipient_id=payload.recipient_id,
                             body=payload.body,
+                            reply_to_message_id=(
+                                str(payload.reply_to_message_id)
+                                if payload.reply_to_message_id
+                                else None
+                            ),
                             commit=False,
                             as_response=False,
                         )
@@ -402,7 +407,19 @@ async def events_ws(websocket: WebSocket) -> None:
                         {"type": "error", "error": "invalid_media_type"}
                     )
                     continue
-                if not _is_cloudinary_secure_url(payload.media_url):
+
+                urls: list[str] = []
+                if payload.media_url:
+                    urls.append(payload.media_url)
+                if payload.media_urls:
+                    urls.extend(payload.media_urls)
+                urls = [u for u in urls if u]
+                if not urls:
+                    await websocket.send_json(
+                        {"type": "error", "error": "missing_media_url"}
+                    )
+                    continue
+                if any(not _is_cloudinary_secure_url(u) for u in urls):
                     await websocket.send_json(
                         {"type": "error", "error": "invalid_media_url"}
                     )
@@ -417,8 +434,14 @@ async def events_ws(websocket: WebSocket) -> None:
                             sender=sender,
                             recipient_id=str(payload.recipient_id),
                             caption=payload.caption,
-                            media_url=payload.media_url,
+                            media_url=urls[0],
+                            media_urls=urls[1:] or None,
                             media_type=media_type,
+                            reply_to_message_id=(
+                                str(payload.reply_to_message_id)
+                                if payload.reply_to_message_id
+                                else None
+                            ),
                             commit=False,
                             as_response=False,
                         )

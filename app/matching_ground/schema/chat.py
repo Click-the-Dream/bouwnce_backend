@@ -9,6 +9,14 @@ class SendMessagePayload(BaseModel):
     client_id: Annotated[
         str | None, Field(None, max_length=64, description="Client message id", validation_alias="clientId")
     ]
+    reply_to_message_id: Annotated[
+        uuid.UUID | None,
+        Field(
+            None,
+            description="Reply to message id (uuid)",
+            validation_alias="replyToMessageId",
+        ),
+    ]
 
     model_config = {"populate_by_name": True}
 
@@ -60,8 +68,16 @@ class UploadMediaPayload(BaseModel):
         Field(..., description="Recipient user id (uuid)", validation_alias="recipientId"),
     ]
     media_url: Annotated[
-        str,
-        Field(..., description="Cloudinary secure URL", validation_alias="mediaUrl"),
+        str | None,
+        Field(None, description="Cloudinary secure URL", validation_alias="mediaUrl"),
+    ]
+    media_urls: Annotated[
+        list[str] | None,
+        Field(
+            None,
+            description="List of Cloudinary secure URLs",
+            validation_alias="mediaUrls",
+        ),
     ]
     media_type: Annotated[
         str,
@@ -72,4 +88,12 @@ class UploadMediaPayload(BaseModel):
         ),
     ]
     caption: Annotated[str | None, Field(None, max_length=4000)]
+    reply_to_message_id: Annotated[
+        uuid.UUID | None,
+        Field(
+            None,
+            description="Reply to message id (uuid)",
+            validation_alias="replyToMessageId",
+        ),
+    ]
     model_config = {"populate_by_name": True}

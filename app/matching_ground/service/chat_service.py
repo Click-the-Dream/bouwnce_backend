@@ -22,11 +22,28 @@ from app.worker.event_system import (
 
 class ChatService:
     @staticmethod
+    def _extract_profile_pic_url(user: User) -> str | None:
+        value = getattr(user, "profile_pic", None)
+        if not value:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            url_val = value.get("url")
+            if isinstance(url_val, str):
+                return url_val
+            if isinstance(url_val, dict):
+                nested = url_val.get("url")
+                return nested if isinstance(nested, str) else None
+        return None
+
+    @staticmethod
     def _serialize_user(user: User) -> dict:
         return {
             "id": str(user.id),
             "username": user.username,
             "full_name": user.full_name,
+            "profile_pic": ChatService._extract_profile_pic_url(user),
         }
 
     @staticmethod
@@ -51,6 +68,7 @@ class ChatService:
             "id": str(other.id),
             "username": other.username,
             "full_name": other.full_name,
+            "profile_pic": ChatService._extract_profile_pic_url(other),
         }
         return base
 
@@ -65,9 +83,7 @@ class ChatService:
             data["recipient"] = cls._serialize_user(recipient)
         return data
 
-    # -----------------------------
-    # Core methods (domain-level)
-    # -----------------------------
+
     async def get_or_create_conversation(
         self, *, db: AsyncSession, user1_id: str, user2_id: str
     ) -> Conversation:
@@ -83,6 +99,7 @@ class ChatService:
         sender: User,
         recipient_id: str,
         body: str,
+        reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
@@ -96,6 +113,7 @@ class ChatService:
             sender_id=sender.id,
             recipient_id=recipient.id,
             body=body.strip(),
+            reply_to_message_id=reply_to_message_id,
         )
         db.add(msg)
 
@@ -171,8 +189,10 @@ class ChatService:
         sender: User,
         recipient_id: str,
         caption: str | None = None,
-        media_url: str,
+        media_url: str | None = None,
+        media_urls: list[str] | None = None,
         media_type: str,
+        reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
@@ -181,14 +201,23 @@ class ChatService:
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
 
+        urls = [u for u in (media_urls or []) if u]
+        if media_url:
+            urls = [media_url, *urls]
+        # de-dupe while preserving order
+        seen: set[str] = set()
+        urls = [u for u in urls if not (u in seen or seen.add(u))]
+
         msg = Message(
             conversation_id=conversation.id,
             sender_id=sender.id,
             recipient_id=recipient.id,
             body="",
             caption=(caption or None),
-            media_url=media_url,
+            media_url=(urls[0] if urls else None),
             media_type=media_type,
+            media_urls=(urls or None),
+            reply_to_message_id=reply_to_message_id,
         )
         db.add(msg)
 

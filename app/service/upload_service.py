@@ -35,6 +35,11 @@ class UploadService:
             "public_id": public_id,
         }
 
+    @classmethod
+    def sign_chat_upload_batch(cls, *, preset: str, folder: str, count: int) -> list[dict]:
+        safe_count = max(1, min(int(count), 50))
+        return [cls.sign_chat_upload(preset=preset, folder=folder) for _ in range(safe_count)]
+
     @staticmethod
     def chat_image_constraints() -> dict:
         return {

@@ -78,6 +78,8 @@ if is_prod:
 else:
     app = FastAPI(
         title=settings.PROJECT_NAME,
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
         openapi_url=f"{settings.API_STR}/openapi.json",
         generate_unique_id_function=custom_generate_unique_id,
         version="1.0.0",

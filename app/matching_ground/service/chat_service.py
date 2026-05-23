@@ -38,12 +38,19 @@ class ChatService:
         return None
 
     @staticmethod
+    def _serialize_profile_pic(user: User) -> dict | None:
+        url = ChatService._extract_profile_pic_url(user)
+        if not url:
+            return None
+        return {"url": url}
+
+    @staticmethod
     def _serialize_user(user: User) -> dict:
         return {
             "id": str(user.id),
             "username": user.username,
             "full_name": user.full_name,
-            "profile_pic": ChatService._extract_profile_pic_url(user),
+            "profile_pic": ChatService._serialize_profile_pic(user),
         }
 
     @staticmethod
@@ -68,7 +75,7 @@ class ChatService:
             "id": str(other.id),
             "username": other.username,
             "full_name": other.full_name,
-            "profile_pic": ChatService._extract_profile_pic_url(other),
+            "profile_pic": ChatService._serialize_profile_pic(other),
         }
         return base
 

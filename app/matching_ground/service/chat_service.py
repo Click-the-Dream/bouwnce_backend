@@ -669,5 +669,126 @@ class ChatService:
 
         return data
 
+    async def mark_conversation_read_with_user_up_to_message(
+        self,
+        *,
+        db: AsyncSession,
+        redis=None,
+        current_user_id: str,
+        recipient_id: str,
+        message_id: str,
+        commit: bool = False,
+        as_response: bool = False,
+    ) -> dict:
+        current_id = str(current_user_id)
+        other_id = str(recipient_id)
+        if current_id == other_id:
+            raise ForbiddenException("You can't mark messages with yourself")
+
+        conv = await Conversation.get_between(
+            db, uuid.UUID(current_id), uuid.UUID(other_id)
+        )
+        if conv is None:
+            data = {
+                "conversation_id": False,
+                "message_id": str(message_id),
+                "read": False,
+                "updated": 0,
+                "found": False,
+            }
+            if as_response:
+                return response_builder(
+                    status_code=status.HTTP_200_OK,
+                    status="success",
+                    message="No conversation found",
+                    data=data,
+                )
+            return data
+
+        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
+            raise ForbiddenException("You cannot access this conversation")
+
+        target = (
+            await db.execute(
+                select(Message).where(Message.id == uuid.UUID(str(message_id)))
+            )
+        ).scalar_one_or_none()
+        if target is None or str(target.conversation_id) != str(conv.id):
+            data = {
+                "conversation_id": str(conv.id),
+                "message_id": str(message_id),
+                "read": False,
+                "updated": 0,
+                "found": True,
+            }
+            if as_response:
+                return response_builder(
+                    status_code=status.HTTP_200_OK,
+                    status="success",
+                    message="Message not found in conversation",
+                    data=data,
+                )
+            return data
+
+        if str(target.recipient_id) != current_id:
+            raise ForbiddenException("You can only mark received messages as read")
+
+        read_at = datetime.now(UTC)
+        stmt = (
+            update(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.recipient_id == current_id,
+                Message.read_at.is_(None),
+            )
+            .values(read_at=read_at)
+        )
+        result = await db.execute(stmt)
+        updated = int(result.rowcount or 0)
+
+        unread_stmt = select(func.count()).select_from(Message).where(
+            Message.conversation_id == conv.id,
+            Message.recipient_id == current_id,
+            Message.read_at.is_(None),
+        )
+        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
+
+        data = {
+            "conversation_id": str(conv.id),
+            "message_id": str(target.id),
+            "read": unread_remaining == 0,
+            "updated": updated,
+            "found": True,
+        }
+
+        if redis is not None and updated > 0:
+            payload = json.dumps(
+                {
+                    "type": "chat.read.updated",
+                    "data": {
+                        "conversation_id": str(conv.id),
+                        "message_id": str(target.id),
+                        "updated": updated,
+                        "read": unread_remaining == 0,
+                        "reader_id": current_id,
+                    },
+                }
+            )
+            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
+            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
+
+        if commit:
+            await db.commit()
+
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Messages marked as read",
+                data=data,
+            )
+
+        return data
+
 
 chat_service = ChatService()

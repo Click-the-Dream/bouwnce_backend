@@ -19,10 +19,8 @@ class SendMessagePayload(BaseModel):
 
 
 class MarkConversationReadPayload(BaseModel):
-    conversation_id: Annotated[
-        uuid.UUID, Field(..., description="Conversation id (uuid)")
-    ]
-    message_id: Annotated[uuid.UUID, Field(..., description="Message id (uuid)")]
+    recipient_id: Annotated[uuid.UUID, Field(..., description="Other user id (uuid)")]
+    message_id: Annotated[uuid.UUID, Field(..., description="Last read message id (uuid)")]
 
 
 class TypingPayload(BaseModel):

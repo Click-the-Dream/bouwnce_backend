@@ -95,7 +95,7 @@ class MatchRequest(BaseModel):
         result = await session.execute(
             select(cls)
             .where(
-                (cls.requester_id == user_id) | (cls.target_user_id == user_id)
+                cls.target_user_id == user_id
             )
             .options(selectinload(cls.requester), selectinload(cls.target_user))
             .offset((page - 1) * page_size)

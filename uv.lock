@@ -200,6 +200,7 @@ dependencies = [
     { name = "apscheduler" },
     { name = "asyncpg" },
     { name = "beanie" },
+    { name = "black" },
     { name = "celery" },
     { name = "chardet" },
     { name = "cloudinary" },
@@ -211,6 +212,7 @@ dependencies = [
     { name = "passlib" },
     { name = "paystack" },
     { name = "paystackapi" },
+    { name = "pre-commit" },
     { name = "psycopg2-binary" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
@@ -219,6 +221,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "redis" },
     { name = "resend" },
+    { name = "ruff" },
     { name = "sqlalchemy" },
 ]
 
@@ -237,6 +240,7 @@ requires-dist = [
     { name = "apscheduler", extras = ["asyncio"], specifier = ">=3.11.1" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "beanie", extras = ["odm"], specifier = ">=2.0.0" },
+    { name = "black", specifier = ">=26.3.1" },
     { name = "celery", specifier = ">=5.5.3" },
     { name = "chardet", specifier = "<6" },
     { name = "cloudinary", specifier = ">=1.44.1" },
@@ -248,6 +252,7 @@ requires-dist = [
     { name = "passlib", specifier = ">=1.7.4" },
     { name = "paystack", specifier = ">=1.5.0" },
     { name = "paystackapi", specifier = ">=2.1.3" },
+    { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pyjwt", specifier = ">=2.10.1" },
@@ -256,6 +261,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "redis", specifier = ">=6.4.0" },
     { name = "resend", specifier = ">=2.17.0" },
+    { name = "ruff", specifier = ">=0.15.6" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
 ]
 

@@ -53,11 +53,20 @@ class UploadImagePayload(BaseModel):
     recipient_id: Annotated[
         uuid.UUID, Field(..., description="Recipient user id (uuid)", validation_alias="recipientId")
     ]
-    image_url: Annotated[
-        str, Field(..., description="Cloudinary secure URL", validation_alias="imageUrl")
+    image_urls: Annotated[
+        list[str],
+        Field(
+            ...,
+            description="List of Cloudinary secure URLs"
+        ),
     ]
-    caption: Annotated[
-        str | None, Field(None, max_length=4000, validation_alias="caption")
+    body: Annotated[
+        str | None,
+        Field(
+            None,
+            max_length=4000,
+            description="Optional text message",
+        ),
     ]
     model_config = {"populate_by_name": True}
 
@@ -67,14 +76,10 @@ class UploadMediaPayload(BaseModel):
         uuid.UUID,
         Field(..., description="Recipient user id (uuid)", validation_alias="recipientId"),
     ]
-    media_url: Annotated[
-        str | None,
-        Field(None, description="Cloudinary secure URL", validation_alias="mediaUrl"),
-    ]
     media_urls: Annotated[
-        list[str] | None,
+        list[str],
         Field(
-            None,
+            ...,
             description="List of Cloudinary secure URLs",
             validation_alias="mediaUrls",
         ),
@@ -87,7 +92,14 @@ class UploadMediaPayload(BaseModel):
             validation_alias="mediaType",
         ),
     ]
-    caption: Annotated[str | None, Field(None, max_length=4000)]
+    body: Annotated[
+        str | None,
+        Field(
+            None,
+            max_length=4000,
+            description="Optional text message",
+        ),
+    ]
     reply_to_message_id: Annotated[
         uuid.UUID | None,
         Field(

@@ -188,9 +188,8 @@ class ChatService:
         redis,
         sender: User,
         recipient_id: str,
-        caption: str | None = None,
-        media_url: str | None = None,
-        media_urls: list[str] | None = None,
+        body: str | None = None,
+        media_urls: list[str],
         media_type: str,
         reply_to_message_id: str | None = None,
         commit: bool = False,
@@ -202,8 +201,6 @@ class ChatService:
         )
 
         urls = [u for u in (media_urls or []) if u]
-        if media_url:
-            urls = [media_url, *urls]
         # de-dupe while preserving order
         seen: set[str] = set()
         urls = [u for u in urls if not (u in seen or seen.add(u))]
@@ -212,9 +209,7 @@ class ChatService:
             conversation_id=conversation.id,
             sender_id=sender.id,
             recipient_id=recipient.id,
-            body="",
-            caption=(caption or None),
-            media_url=(urls[0] if urls else None),
+            body=(body or "").strip(),
             media_type=media_type,
             media_urls=(urls or None),
             reply_to_message_id=reply_to_message_id,

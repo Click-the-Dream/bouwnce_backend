@@ -338,7 +338,7 @@ async def events_ws(websocket: WebSocket) -> None:
                         {
                             "type": "error",
                             "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_image', recipient_id:'<uuid>', image_url:'https://...', caption?:'...'}",
+                            "message": "Expected: {type:'chat.upload_image', recipient_id:'<uuid>', image_urls:['https://...'], body?:'...'}",
                         }
                     )
                     continue
@@ -349,7 +349,13 @@ async def events_ws(websocket: WebSocket) -> None:
                     )
                     continue
 
-                if not _is_cloudinary_secure_url(payload.image_url):
+                urls = [u for u in (payload.image_urls or []) if u]
+                if not urls:
+                    await websocket.send_json(
+                        {"type": "error", "error": "missing_media_urls"}
+                    )
+                    continue
+                if any(not _is_cloudinary_secure_url(u) for u in urls):
                     await websocket.send_json(
                         {"type": "error", "error": "invalid_image_url"}
                     )
@@ -363,8 +369,8 @@ async def events_ws(websocket: WebSocket) -> None:
                             redis=redis,
                             sender=sender,
                             recipient_id=str(payload.recipient_id),
-                            caption=payload.caption,
-                            media_url=payload.image_url,
+                            body=payload.body,
+                            media_urls=urls,
                             media_type="image",
                             commit=False,
                             as_response=False,
@@ -390,7 +396,7 @@ async def events_ws(websocket: WebSocket) -> None:
                         {
                             "type": "error",
                             "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_url:'https://...', media_type:'image|video|file', caption?:'...'}",
+                            "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_urls:['https://...'], media_type:'image|video|file', body?:'...'}",
                         }
                     )
                     continue
@@ -408,20 +414,15 @@ async def events_ws(websocket: WebSocket) -> None:
                     )
                     continue
 
-                urls: list[str] = []
-                if payload.media_url:
-                    urls.append(payload.media_url)
-                if payload.media_urls:
-                    urls.extend(payload.media_urls)
-                urls = [u for u in urls if u]
+                urls = [u for u in (payload.media_urls or []) if u]
                 if not urls:
                     await websocket.send_json(
-                        {"type": "error", "error": "missing_media_url"}
+                        {"type": "error", "error": "missing_media_urls"}
                     )
                     continue
                 if any(not _is_cloudinary_secure_url(u) for u in urls):
                     await websocket.send_json(
-                        {"type": "error", "error": "invalid_media_url"}
+                        {"type": "error", "error": "invalid_media_urls"}
                     )
                     continue
 
@@ -433,9 +434,8 @@ async def events_ws(websocket: WebSocket) -> None:
                             redis=redis,
                             sender=sender,
                             recipient_id=str(payload.recipient_id),
-                            caption=payload.caption,
-                            media_url=urls[0],
-                            media_urls=urls[1:] or None,
+                            body=payload.body,
+                            media_urls=urls,
                             media_type=media_type,
                             reply_to_message_id=(
                                 str(payload.reply_to_message_id)
@@ -456,17 +456,6 @@ async def events_ws(websocket: WebSocket) -> None:
                         continue
 
                 await websocket.send_json({"type": "chat.sent", "data": result})
-                continue
-
-            # Backwards-compat: accept legacy types and map them to chat.upload_media
-            if msg_type in {"chat.upload_video", "chat.upload_file"}:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "error": "deprecated",
-                        "message": "Use chat.upload_media with media_url + media_type (image|video|file).",
-                    }
-                )
                 continue
 
             if msg_type == "chat.read":

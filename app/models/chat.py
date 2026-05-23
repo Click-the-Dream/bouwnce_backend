@@ -89,9 +89,7 @@ class Message(BaseModel):
 
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Minimal media support
-    caption: Mapped[str | None] = mapped_column(String, nullable=True)
-    media_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Media support
     media_type: Mapped[str | None] = mapped_column(String, nullable=True)  # image|video|file
     media_urls: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     reply_to_message_id: Mapped[UUID_Type | None] = mapped_column(

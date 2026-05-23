@@ -29,6 +29,9 @@ dependencies = [
   "apscheduler[asyncio]>=3.11.1",
   "paystack>=1.5.0",
   "celery>=5.5.3",
+  "ruff>=0.15.6",
+  "black>=26.3.1",
+  "pre-commit>=4.5.1",
 ]
 
 

@@ -7,18 +7,15 @@ class SendMessagePayload(BaseModel):
     recipient_id: Annotated[uuid.UUID, Field(..., description="Recipient user id (uuid)")]
     body: Annotated[str, Field(..., min_length=1, max_length=4000)]
     client_id: Annotated[
-        str | None, Field(None, max_length=64, description="Client message id", validation_alias="clientId")
+        str | None, Field(None, max_length=64, description="Client message id")
     ]
     reply_to_message_id: Annotated[
         uuid.UUID | None,
         Field(
             None,
             description="Reply to message id (uuid)",
-            validation_alias="replyToMessageId",
         ),
     ]
-
-    model_config = {"populate_by_name": True}
 
 
 class MarkConversationReadPayload(BaseModel):
@@ -34,7 +31,6 @@ class TypingPayload(BaseModel):
         Field(
             ...,
             description="Other user id (uuid)",
-            validation_alias="userId",
         ),
     ]
     is_typing: Annotated[
@@ -42,24 +38,20 @@ class TypingPayload(BaseModel):
         Field(
             ...,
             description="Whether the user is typing",
-            validation_alias="isTyping",
         ),
     ]
-
-    model_config = {"populate_by_name": True}
 
 
 class UploadMediaPayload(BaseModel):
     recipient_id: Annotated[
         uuid.UUID,
-        Field(..., description="Recipient user id (uuid)", validation_alias="recipientId"),
+        Field(..., description="Recipient user id (uuid)"),
     ]
     media_urls: Annotated[
         list[str],
         Field(
             ...,
             description="List of Cloudinary secure URLs",
-            validation_alias="mediaUrls",
         ),
     ]
     media_type: Annotated[
@@ -67,7 +59,6 @@ class UploadMediaPayload(BaseModel):
         Field(
             ...,
             description="Media type: image|video|file",
-            validation_alias="mediaType",
         ),
     ]
     body: Annotated[
@@ -83,7 +74,5 @@ class UploadMediaPayload(BaseModel):
         Field(
             None,
             description="Reply to message id (uuid)",
-            validation_alias="replyToMessageId",
         ),
     ]
-    model_config = {"populate_by_name": True}

@@ -157,8 +157,8 @@ class MatchLifecycleService:
             "items": [
                 {
                     "request_id": str(row.id),
-                    "requester_id": str(row.requester_id),
-                    "target_user_id": str(row.target_user_id),
+                    "requester": row.requester.to_dict() if row.requester else None,
+                    "target_user": row.target_user.to_dict() if row.target_user else None,
                     "status": row.status,
                     "note": row.note,
                     "created_at": row.created_at.isoformat(),

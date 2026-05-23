@@ -1,13 +1,16 @@
+from __future__ import annotations
 import uuid
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import DateTime, ForeignKey, String, select, and_
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
-from typing import Self
+from sqlalchemy.orm import Mapped, mapped_column, selectinload, relationship
+from typing import Self, TYPE_CHECKING
 
 from app.models.basemodel import BaseModel
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class MatchRequest(BaseModel):
@@ -25,6 +28,9 @@ class MatchRequest(BaseModel):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     
+    requester: Mapped["User"] = relationship( "User", foreign_keys=[requester_id])
+    target_user: Mapped["User"] = relationship("User", foreign_keys=[target_user_id])
+
     @classmethod
     async def create_pending(
         cls,
@@ -91,6 +97,7 @@ class MatchRequest(BaseModel):
             .where(
                 (cls.requester_id == user_id) | (cls.target_user_id == user_id)
             )
+            .options(selectinload(cls.requester), selectinload(cls.target_user))
             .offset((page - 1) * page_size)
             .limit(page_size)
             .order_by(cls.created_at.desc())

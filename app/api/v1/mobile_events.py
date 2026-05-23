@@ -20,7 +20,6 @@ from app.matching_ground.schema.chat import (
     MarkConversationReadPayload,
     SendMessagePayload,
     TypingPayload,
-    UploadImagePayload,
     UploadMediaPayload,
 )
 from app.matching_ground.service.chat_service import chat_service
@@ -330,64 +329,6 @@ async def events_ws(websocket: WebSocket) -> None:
                 )
                 continue
 
-            if msg_type == "chat.upload_image":
-                try:
-                    payload = UploadImagePayload.model_validate(incoming)
-                except Exception:
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_image', recipient_id:'<uuid>', image_urls:['https://...'], body?:'...'}",
-                        }
-                    )
-                    continue
-
-                if str(payload.recipient_id) == str(user_id):
-                    await websocket.send_json(
-                        {"type": "error", "error": "self_send_not_allowed"}
-                    )
-                    continue
-
-                urls = [u for u in (payload.image_urls or []) if u]
-                if not urls:
-                    await websocket.send_json(
-                        {"type": "error", "error": "missing_media_urls"}
-                    )
-                    continue
-                if any(not _is_cloudinary_secure_url(u) for u in urls):
-                    await websocket.send_json(
-                        {"type": "error", "error": "invalid_image_url"}
-                    )
-                    continue
-
-                async with get_async_session() as db:
-                    try:
-                        sender = await User.get_by_id(str(user_id), db)
-                        result = await chat_service.send_media_message(
-                            db=db,
-                            redis=redis,
-                            sender=sender,
-                            recipient_id=str(payload.recipient_id),
-                            body=payload.body,
-                            media_urls=urls,
-                            media_type="image",
-                            commit=False,
-                            as_response=False,
-                        )
-                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
-                        await websocket.send_json(
-                            {
-                                "type": "error",
-                                "error": "chat.upload_image.failed",
-                                "message": str(e),
-                            }
-                        )
-                        continue
-
-                await websocket.send_json({"type": "chat.sent", "data": result})
-                continue
-
             if msg_type == "chat.upload_media":
                 try:
                     payload = UploadMediaPayload.model_validate(incoming)
@@ -396,7 +337,7 @@ async def events_ws(websocket: WebSocket) -> None:
                         {
                             "type": "error",
                             "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_urls:['https://...'], media_type:'image|video|file', body?:'...'}",
+                            "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_type:'image|video|file', media_urls:['https://...'], body?:'...'}",
                         }
                     )
                     continue

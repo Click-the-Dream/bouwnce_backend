@@ -83,6 +83,20 @@ class ChatService:
             data["recipient"] = cls._serialize_user(recipient)
         return data
 
+    @classmethod
+    def _serialize_reply_message(
+        cls, msg: Message, *, sender: User | None = None, recipient: User | None = None
+    ) -> dict:
+        # Minimal, non-recursive representation for replies.
+        data = msg.to_dict()
+        if sender is not None:
+            data["sender"] = cls._serialize_user(sender)
+        if recipient is not None:
+            data["recipient"] = cls._serialize_user(recipient)
+        data.pop("reply_to_message_id", None)
+        data.pop("reply_to_message", None)
+        return data
+
 
     async def get_or_create_conversation(
         self, *, db: AsyncSession, user1_id: str, user2_id: str
@@ -121,8 +135,21 @@ class ChatService:
         await db.flush()
         await db.refresh(msg)
 
+        reply_obj: dict | bool = False
+        if msg.reply_to_message_id:
+            reply_row = (
+                await db.execute(select(Message).where(Message.id == msg.reply_to_message_id))
+            ).scalar_one_or_none()
+            if reply_row is not None:
+                reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
+                reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
+                reply_obj = self._serialize_reply_message(
+                    reply_row, sender=reply_sender, recipient=reply_recipient
+                )
+
         if redis is not None:
             msg_payload = self._serialize_message(msg, sender=sender, recipient=recipient)
+            msg_payload["reply_to_message"] = reply_obj
             await redis.publish(
                 f"chat:conversation:{conversation.id}",
                 json.dumps({"type": "chat.message", "data": msg_payload}),
@@ -165,7 +192,10 @@ class ChatService:
 
         result = {
             "conversation_id": str(conversation.id),
-            "message": self._serialize_message(msg, sender=sender, recipient=recipient),
+            "message": {
+                **self._serialize_message(msg, sender=sender, recipient=recipient),
+                "reply_to_message": reply_obj,
+            },
         }
 
         if commit:
@@ -220,14 +250,33 @@ class ChatService:
         await db.flush()
         await db.refresh(msg)
 
+        reply_obj: dict | bool = False
+        if msg.reply_to_message_id:
+            reply_row = (
+                await db.execute(select(Message).where(Message.id == msg.reply_to_message_id))
+            ).scalar_one_or_none()
+            if reply_row is not None:
+                reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
+                reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
+                reply_obj = self._serialize_reply_message(
+                    reply_row, sender=reply_sender, recipient=reply_recipient
+                )
+
         if redis is not None:
             msg_payload = self._serialize_message(msg, sender=sender, recipient=recipient)
+            msg_payload["reply_to_message"] = reply_obj
             payload = json.dumps({"type": "chat.message", "data": msg_payload})
             await redis.publish(f"chat:conversation:{conversation.id}", payload)
             await redis.publish(f"chat:user:{sender.id}", payload)
             await redis.publish(f"chat:user:{recipient.id}", payload)
 
-        result = {"conversation_id": str(conversation.id), "message": self._serialize_message(msg, sender=sender, recipient=recipient)}
+        result = {
+            "conversation_id": str(conversation.id),
+            "message": {
+                **self._serialize_message(msg, sender=sender, recipient=recipient),
+                "reply_to_message": reply_obj,
+            },
+        }
 
         if commit:
             await db.commit()
@@ -352,24 +401,50 @@ class ChatService:
         result = await db.execute(stmt)
         msgs = list(result.scalars().all())
 
+        reply_ids: set[str] = set()
         user_ids: set[str] = set()
         for m in msgs:
             user_ids.add(str(m.sender_id))
             user_ids.add(str(m.recipient_id))
+            if m.reply_to_message_id:
+                reply_ids.add(str(m.reply_to_message_id))
+
+        reply_by_id: dict[str, Message] = {}
+        if reply_ids:
+            reply_result = await db.execute(
+                select(Message).where(Message.id.in_(list(reply_ids)))
+            )
+            reply_rows = list(reply_result.scalars().all())
+            reply_by_id = {str(r.id): r for r in reply_rows}
+            for r in reply_rows:
+                user_ids.add(str(r.sender_id))
+                user_ids.add(str(r.recipient_id))
 
         users_by_id: dict[str, User] = {}
         if user_ids:
             users_result = await db.execute(select(User).where(User.id.in_(list(user_ids))))
             users_by_id = {str(u.id): u for u in users_result.scalars().all()}
 
-        items = [
-            self._serialize_message(
+        items: list[dict] = []
+        for m in msgs:
+            row = self._serialize_message(
                 m,
                 sender=users_by_id.get(str(m.sender_id)),
                 recipient=users_by_id.get(str(m.recipient_id)),
             )
-            for m in msgs
-        ]
+            if m.reply_to_message_id:
+                reply = reply_by_id.get(str(m.reply_to_message_id))
+                if reply is not None:
+                    row["reply_to_message"] = self._serialize_reply_message(
+                        reply,
+                        sender=users_by_id.get(str(reply.sender_id)),
+                        recipient=users_by_id.get(str(reply.recipient_id)),
+                    )
+                else:
+                    row["reply_to_message"] = False
+            else:
+                row["reply_to_message"] = False
+            items.append(row)
         data = {"items": items, "page": page, "page_size": page_size, "total": total}
         if as_response:
             return response_builder(

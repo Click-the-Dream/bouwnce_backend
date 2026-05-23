@@ -49,28 +49,6 @@ class TypingPayload(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class UploadImagePayload(BaseModel):
-    recipient_id: Annotated[
-        uuid.UUID, Field(..., description="Recipient user id (uuid)", validation_alias="recipientId")
-    ]
-    image_urls: Annotated[
-        list[str],
-        Field(
-            ...,
-            description="List of Cloudinary secure URLs"
-        ),
-    ]
-    body: Annotated[
-        str | None,
-        Field(
-            None,
-            max_length=4000,
-            description="Optional text message",
-        ),
-    ]
-    model_config = {"populate_by_name": True}
-
-
 class UploadMediaPayload(BaseModel):
     recipient_id: Annotated[
         uuid.UUID,

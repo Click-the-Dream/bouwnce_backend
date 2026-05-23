@@ -3,8 +3,11 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
+
 class SendMessagePayload(BaseModel):
-    recipient_id: Annotated[uuid.UUID, Field(..., description="Recipient user id (uuid)")]
+    recipient_id: Annotated[
+        uuid.UUID, Field(..., description="Recipient user id (uuid)")
+    ]
     body: Annotated[str, Field(..., min_length=1, max_length=4000)]
     client_id: Annotated[
         str | None, Field(None, max_length=64, description="Client message id")

@@ -101,7 +101,9 @@ class OrderService:
             {
                 "store_id": str(store.id),
                 "store_name": store.name,
-                "shipment_info": [shipment_info.to_dict() for shipment_info in store.shipment_info],
+                "shipment_info": [
+                    shipment_info.to_dict() for shipment_info in store.shipment_info
+                ],
             }
             for store in stores
         ]
@@ -170,16 +172,18 @@ class OrderService:
                 raise BadRequestException(message="User has no product in cart")
 
             # Check the  availability of the products in the carts
-            avaialble_products, unavailable_products = (
-                await Order.check_cart_availability(carts, redis)
-            )
+            (
+                avaialble_products,
+                unavailable_products,
+            ) = await Order.check_cart_availability(carts, redis)
 
             try:
                 # Reserve those available products
-                reserved_product, cannot_reserve_products = (
-                    await Order.reserve_products(
-                        avaialble_products, str(user.id), redis
-                    )
+                (
+                    reserved_product,
+                    cannot_reserve_products,
+                ) = await Order.reserve_products(
+                    avaialble_products, str(user.id), redis
                 )
 
                 # Add all the products that cannot be reserved to unvailable products
@@ -241,8 +245,11 @@ class OrderService:
                 total_price = (
                     Order.compute_total_amount(reserved_product) + total_shipping_fee
                 )
-                
-                payment_data = {"email": user.email, "amount": _naira_to_kobo(total_price)}
+
+                payment_data = {
+                    "email": user.email,
+                    "amount": _naira_to_kobo(total_price),
+                }
             except BadRequestException:
                 raise
             except GoneException:
@@ -301,7 +308,7 @@ class OrderService:
                 "reference_token": referenceToken,
                 "track_id": generate_order_track_id(),
             }
-            
+
             print(order_data)
 
             await Order.create(order_data, db)

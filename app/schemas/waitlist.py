@@ -12,7 +12,9 @@ class WaitlistBase(BaseModel):
         str, Field(min_length=11, max_length=14, examples=["08145326543"])
     ]
     location: Annotated[str | None, Field(examples=["your Location"])] = None
-    platform: Annotated[str | None, Field(examples=["What platform did you hear us from"])] = None
+    platform: Annotated[
+        str | None, Field(examples=["What platform did you hear us from"])
+    ] = None
 
 
 class WaitlistCreate(WaitlistBase):

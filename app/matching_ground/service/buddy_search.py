@@ -9,8 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.matching_ground.core.interest_normalization import normalize_interest_name
 from app.matching_ground.core.location import Coordinates, haversine_km, within_radius
 from app.matching_ground.core.matching.aggregator import WeightedScore, aggregate
-from app.matching_ground.core.matching.matching_feature import build_user_matching_features
-from app.matching_ground.core.matching.score import interest_overlap_score, location_score
+from app.matching_ground.core.matching.matching_feature import (
+    build_user_matching_features,
+)
+from app.matching_ground.core.matching.score import (
+    interest_overlap_score,
+    location_score,
+)
 from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.user_interest import UserInterest
@@ -52,10 +57,14 @@ class BuddySearchService:
         interest_hints: set[str] | None = None,
         limit: int = 10,
     ) -> BuddySearchResult:
-        requester_geo = await self.geolocation_model.get_by_user_id(session, requester_id)
+        requester_geo = await self.geolocation_model.get_by_user_id(
+            session, requester_id
+        )
         requester_interests = {
             normalize_interest_name(i.name)
-            for i in await self.interest_model.get_user_interests(session, str(requester_id))
+            for i in await self.interest_model.get_user_interests(
+                session, str(requester_id)
+            )
         }
 
         hints = {normalize_interest_name(h) for h in (interest_hints or set()) if h}
@@ -104,7 +113,8 @@ class BuddySearchService:
                 self.geolocation_model.lon,
             )
             .outerjoin(
-                self.geolocation_model, self.geolocation_model.user_id == self.user_model.id
+                self.geolocation_model,
+                self.geolocation_model.user_id == self.user_model.id,
             )
             .where(self.user_model.id != requester_id)
         )
@@ -117,7 +127,14 @@ class BuddySearchService:
             candidate_query.limit(max(limit * 25, 100))
         )
 
-        for candidate_id, full_name, profile_pic, bio, candidate_lat, candidate_lon in candidate_rows.all():
+        for (
+            candidate_id,
+            full_name,
+            profile_pic,
+            bio,
+            candidate_lat,
+            candidate_lon,
+        ) in candidate_rows.all():
             if str(candidate_id) == str(requester_id):
                 continue
             target = (
@@ -125,7 +142,11 @@ class BuddySearchService:
                 if candidate_lat is not None and candidate_lon is not None
                 else None
             )
-            if center is not None and target is not None and not within_radius(center, target, radius_km):
+            if (
+                center is not None
+                and target is not None
+                and not within_radius(center, target, radius_km)
+            ):
                 continue
 
             candidate_interests_rows = await self.interest_model.get_user_interests(

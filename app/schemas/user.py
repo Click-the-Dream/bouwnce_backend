@@ -14,7 +14,8 @@ class RoleEnum(Enum):
 
 class Image(BaseModel):
     url: Annotated[str, Field(examples=["http://image_url.png"])]
-    
+
+
 class UserBase(BaseModel):
     full_name: Annotated[str, Field(min_length=2, examples=["John Doe"])]
     email: Annotated[EmailStr, Field(examples=["johndoe@example.com"])]
@@ -54,7 +55,9 @@ class LoginUserResponse(BaseResponse):
 
 
 class PaginatedUserResponseSchema(BaseModel):
-    users: Annotated[list[UserResponsSchema], Field(description="List of User response")]
+    users: Annotated[
+        list[UserResponsSchema], Field(description="List of User response")
+    ]
     page: Annotated[int, Field(examples=[2])]
     page_size: Annotated[int, Field(examples=[10])]
     total: Annotated[int, Field(examples=[100])]

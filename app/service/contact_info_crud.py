@@ -13,7 +13,6 @@ from app.utils.responses import response_builder
 
 
 class ContactInfoCRUDService:
-
     async def create(
         self, db: AsyncSession, data: dict[str, Any], store: Store
     ) -> ContactInfoResponse:

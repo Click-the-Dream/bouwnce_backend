@@ -4,8 +4,11 @@ from dataclasses import dataclass
 
 from app.matching_ground.core.location import Coordinates, haversine_km
 from app.matching_ground.core.matching.aggregator import WeightedScore, aggregate
-from app.matching_ground.core.matching.score import interest_overlap_score, location_score, personality_score
 from app.matching_ground.core.matching.matching_feature import UserMatchingFeatures
+from app.matching_ground.core.matching.score import (
+    interest_overlap_score,
+    location_score,
+)
 
 
 @dataclass(frozen=True)
@@ -37,13 +40,14 @@ class MatchingService:
         )
 
     def score(self, inputs: MatchInputs) -> float:
-        i = interest_overlap_score(inputs.shared_interests, inputs.total_interests).value
+        interest = interest_overlap_score(
+            inputs.shared_interests, inputs.total_interests
+        ).value
         distance = haversine_km(inputs.user_location, inputs.target_location)
-        l = location_score(distance, inputs.max_distance_km).value
+        location = location_score(distance, inputs.max_distance_km).value
 
         scores = [
-            WeightedScore(p, self.weights.get("personality", 0.0)),
-            WeightedScore(i, self.weights.get("interests", 0.0)),
-            WeightedScore(l, self.weights.get("location", 0.0)),
+            WeightedScore(interest, self.weights.get("interests", 0.0)),
+            WeightedScore(location, self.weights.get("location", 0.0)),
         ]
         return aggregate(scores)

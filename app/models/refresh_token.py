@@ -5,9 +5,8 @@ from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import BaseModel
@@ -70,22 +69,26 @@ class RefreshToken(BaseModel):
         expires_at: datetime,
         db: AsyncSession,
     ):
-        stmt = insert(cls).values(
-            user_id=user_id,
-            token=token,
-            device_id=device_id,
-            user_agent=user_agent,
-            ip_address=ip_address,
-            expires_at=expires_at,
-        ).on_conflict_do_update(
-            index_elements=["user_id", "device_id"],
-            set_={
-                "token": token,
-                "user_agent": user_agent,
-                "ip_address": ip_address,
-                "expires_at": expires_at,
-                "issued_at": func.now(),
-            },
+        stmt = (
+            insert(cls)
+            .values(
+                user_id=user_id,
+                token=token,
+                device_id=device_id,
+                user_agent=user_agent,
+                ip_address=ip_address,
+                expires_at=expires_at,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "device_id"],
+                set_={
+                    "token": token,
+                    "user_agent": user_agent,
+                    "ip_address": ip_address,
+                    "expires_at": expires_at,
+                    "issued_at": func.now(),
+                },
+            )
         )
-        
+
         await db.execute(stmt)

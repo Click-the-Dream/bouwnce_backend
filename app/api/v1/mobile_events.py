@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
-import uuid
 
 from app.api.dependencies import CurrentActiveUser, redisSessionDep
-
+from app.core.config import (
+    MOBILE_EVENTS_STREAM_KEY,
+    PAYMENT_PROGRESS_KEY_PREFIX,
+    settings,
+)
 from app.core.security import verify_token
-from app.utils.exception import BadRequestException, ForbiddenException, NotFoundException
-from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX, settings
-from app.db.redis import get_redis_client
 from app.db.postgres_db_conn import get_async_session
-from app.models.user import User
-from app.models.chat import Conversation
+from app.db.redis import get_redis_client
 from app.matching_ground.schema.chat import (
     MarkConversationReadPayload,
     SendMessagePayload,
@@ -23,6 +23,13 @@ from app.matching_ground.schema.chat import (
     UploadMediaPayload,
 )
 from app.matching_ground.service.chat_service import chat_service
+from app.models.chat import Conversation
+from app.models.user import User
+from app.utils.exception import (
+    BadRequestException,
+    ForbiddenException,
+    NotFoundException,
+)
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -215,7 +222,9 @@ async def events_ws(websocket: WebSocket) -> None:
                     "online": bool(val),
                 }
             )
-        await websocket.send_json({"type": "user.online.snapshot", "data": {"items": items}})
+        await websocket.send_json(
+            {"type": "user.online.snapshot", "data": {"items": items}}
+        )
     except Exception:
         pass
 
@@ -318,14 +327,26 @@ async def events_ws(websocket: WebSocket) -> None:
                             commit=False,
                             as_response=False,
                         )
-                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                    except (
+                        NotFoundException,
+                        ForbiddenException,
+                        BadRequestException,
+                    ) as e:
                         await websocket.send_json(
-                            {"type": "error", "error": "chat.send.failed", "message": str(e)}
+                            {
+                                "type": "error",
+                                "error": "chat.send.failed",
+                                "message": str(e),
+                            }
                         )
                         continue
 
                 await websocket.send_json(
-                    {"type": "chat.sent", "client_id": payload.client_id, "data": result}
+                    {
+                        "type": "chat.sent",
+                        "client_id": payload.client_id,
+                        "data": result,
+                    }
                 )
                 continue
 
@@ -386,7 +407,11 @@ async def events_ws(websocket: WebSocket) -> None:
                             commit=False,
                             as_response=False,
                         )
-                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                    except (
+                        NotFoundException,
+                        ForbiddenException,
+                        BadRequestException,
+                    ) as e:
                         await websocket.send_json(
                             {
                                 "type": "error",
@@ -414,18 +439,28 @@ async def events_ws(websocket: WebSocket) -> None:
 
                 async with get_async_session() as db:
                     try:
-                        result = await chat_service.mark_conversation_read_up_to_message(
-                            db=db,
-                            redis=redis,
-                            current_user_id=str(user_id),
-                            conversation_id=str(payload.conversation_id),
-                            message_id=str(payload.message_id),
-                            commit=False,
-                            as_response=False,
+                        result = (
+                            await chat_service.mark_conversation_read_up_to_message(
+                                db=db,
+                                redis=redis,
+                                current_user_id=str(user_id),
+                                conversation_id=str(payload.conversation_id),
+                                message_id=str(payload.message_id),
+                                commit=False,
+                                as_response=False,
+                            )
                         )
-                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                    except (
+                        NotFoundException,
+                        ForbiddenException,
+                        BadRequestException,
+                    ) as e:
                         await websocket.send_json(
-                            {"type": "error", "error": "chat.read.failed", "message": str(e)}
+                            {
+                                "type": "error",
+                                "error": "chat.read.failed",
+                                "message": str(e),
+                            }
                         )
                         continue
 
@@ -455,7 +490,11 @@ async def events_ws(websocket: WebSocket) -> None:
 
                         sender = await User.get_by_id(str(user_id), db)
                         targets = {str(conv.user_a_id), str(conv.user_b_id)}
-                    except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                    except (
+                        NotFoundException,
+                        ForbiddenException,
+                        BadRequestException,
+                    ) as e:
                         await websocket.send_json(
                             {
                                 "type": "error",

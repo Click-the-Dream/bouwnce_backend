@@ -30,7 +30,9 @@ async def get_redis_client() -> redis.Redis:
             settings.REDIS_URL,
             decode_responses=True,
             max_connections=int(getattr(settings, "REDIS_MAX_CONNECTIONS", 200)),
-            health_check_interval=int(getattr(settings, "REDIS_HEALTH_CHECK_INTERVAL", 30)),
+            health_check_interval=int(
+                getattr(settings, "REDIS_HEALTH_CHECK_INTERVAL", 30)
+            ),
         )
         _redis_client = redis.Redis(connection_pool=pool)
         # Verify connection once at startup/first use

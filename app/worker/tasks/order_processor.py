@@ -73,7 +73,9 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
 
             if _naira_to_kobo(order.total_amount) != amount:
                 await order.update(db, {"status": "failed"})
-                await Payment.update_by_id(str(order.payment_id), {"status": "failed"}, db)
+                await Payment.update_by_id(
+                    str(order.payment_id), {"status": "failed"}, db
+                )
                 await dispatch_event(
                     EventNames.MOBILE_EVENT,
                     MobileEvent(
@@ -167,7 +169,8 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                 await dispatch_event(
                     EventNames.STORE_WALLET_CREDIT,
                     StoreWalletCreditEvent(
-                        store_id=str(store.id), amount=float(products_data["total_amount"])
+                        store_id=str(store.id),
+                        amount=float(products_data["total_amount"]),
                     ),
                     db=db,
                     redis=redis,
@@ -197,7 +200,10 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                         user_id=str(store.user_id),
                         title="New Order",
                         body="A new order has been placed and is awaiting your action.",
-                        data={"track_id": str(suborder.track_id), "order_id": str(order.id)},
+                        data={
+                            "track_id": str(suborder.track_id),
+                            "order_id": str(order.id),
+                        },
                     ),
                     db=db,
                     redis=redis,
@@ -219,7 +225,9 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
             )
 
             await order.update(db, {"status": "paid"})
-            await Payment.update_by_id(str(order.payment_id), {"status": "successful"}, db)
+            await Payment.update_by_id(
+                str(order.payment_id), {"status": "successful"}, db
+            )
 
             await dispatch_event(
                 EventNames.MOBILE_EVENT,

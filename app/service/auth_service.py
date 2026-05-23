@@ -19,7 +19,6 @@ from app.core.security import (
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.models.wallet import UserWallet
-from app.schemas.user import UserResponse
 from app.utils.emails import generate_login_verification_email, send_email
 from app.utils.exception import (
     BadRequestException,
@@ -49,13 +48,13 @@ class AuthService:
 
         try:
             new_user = await User.create(user_data, db)
-            
+
             await UserWallet.create({"user_id": new_user.id}, db=db)
             otp = await new_user.generate_otp(db)
             # Ensure OTP is persisted before returning it to the client (avoids race with /verify-code)
             await db.commit()
 
-        except Exception as e:
+        except Exception:
             raise InternalServerErrorException(
                 message="Error occured when creating user"
             ) from None
@@ -99,7 +98,12 @@ class AuthService:
 
         code = (user_data.get("code") or "").strip()
         now = datetime.now(UTC)
-        if not user.otp or not user.otp_time or user.otp != code or user.otp_time <= now:
+        if (
+            not user.otp
+            or not user.otp_time
+            or user.otp != code
+            or user.otp_time <= now
+        ):
             raise BadRequestException(message="Invalid or expired verification code")
 
         await user.clear_otp(db)

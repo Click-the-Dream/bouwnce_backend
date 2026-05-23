@@ -5,7 +5,7 @@ from uuid import UUID as UUID_Type
 
 from pydantic import BaseModel as PydnaticBaseModel
 from redis.asyncio import Redis
-from sqlalchemy import Enum, ForeignKey, Float, Integer, String, func, select
+from sqlalchemy import Enum, Float, ForeignKey, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
@@ -134,7 +134,6 @@ class Order(BaseModel):
             if (
                 product["stock"] - cart.quantity >= 0
             ):  # The stock field as been converted to avaialable stock
-
                 available_products.append(product_model)
             else:
                 product_model.error = "Product stock not enough"

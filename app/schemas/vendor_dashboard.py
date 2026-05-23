@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated
 
 from pydantic import BaseModel, Field
 
@@ -70,7 +70,7 @@ class WithdrawalItem(BaseModel):
         ),
     ]
     date: Annotated[
-        Optional[str],
+        str | None,
         Field(
             None,
             description="Formatted transaction date",
@@ -143,14 +143,18 @@ class WalletDashboardResponseSchema(BaseModel):
         ),
     ]
 
+
 class WalletDashboardResponse(BaseResponse):
-    data: Annotated[WalletDashboardResponseSchema, Field(description="Store wallet dashboard data")]
-    
+    data: Annotated[
+        WalletDashboardResponseSchema, Field(description="Store wallet dashboard data")
+    ]
+
+
 class VendorOrderItem(BaseModel):
     id: Annotated[str, Field(description="Order ID", examples=["ORD-001"])]
     buyer_name: Annotated[str, Field(description="Buyer name", examples=["John Doe"])]
     date: Annotated[
-        Optional[str],
+        str | None,
         Field(None, description="Order date", examples=["25-12-2023"]),
     ]
     amount: Annotated[float, Field(description="Order total", examples=[1500.00])]
@@ -194,8 +198,13 @@ class VendorOrdersDashboardResponseSchema(BaseModel):
         Field(description="Paginated data"),
     ]
 
+
 class VendorOrdersDashboardResponse(BaseResponse):
-    data: Annotated[VendorOrdersDashboardResponseSchema, Field(description="Store Order dashboard data")]
+    data: Annotated[
+        VendorOrdersDashboardResponseSchema,
+        Field(description="Store Order dashboard data"),
+    ]
+
 
 class VendorCustomerItem(BaseModel):
     name: Annotated[str, Field(examples=["Jane Smith"])]
@@ -229,8 +238,13 @@ class PaginatedCustomers(BaseModel):
 class VendorCustomersDashboardResponseSchema(BaseModel):
     customers: PaginatedCustomers
 
+
 class VendorCustomersDashboardResponse(BaseResponse):
-    data: Annotated[VendorCustomersDashboardResponseSchema, Field(description="paginated list of store customers")]
+    data: Annotated[
+        VendorCustomersDashboardResponseSchema,
+        Field(description="paginated list of store customers"),
+    ]
+
 
 class OverviewDashboardResponseSchema(BaseModel):
     total_revenue: Annotated[float, Field(examples=[15000.75])]
@@ -262,7 +276,10 @@ class OverviewDashboardResponseSchema(BaseModel):
             examples=[[{"name": "Product A", "sales": 44, "revenue": 4400.00}]],
         ),
     ]
-    
+
 
 class OverviewDashboardResponse(BaseResponse):
-    data: Annotated[OverviewDashboardResponseSchema, Field(description="The store overview dashboard response")]
+    data: Annotated[
+        OverviewDashboardResponseSchema,
+        Field(description="The store overview dashboard response"),
+    ]

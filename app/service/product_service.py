@@ -60,7 +60,6 @@ class ProductService:
     async def get_product_by_id(self, product_id: str, redis: Redis) -> dict[str, Any]:
 
         try:
-
             product = await product_domain.get_product_by_id(product_id)
             if product.state != "live":
                 raise NotFoundException(message="product with specified ID not found")
@@ -274,7 +273,6 @@ class ProductService:
         self, product_id: str, image_public_id: str, store_id: str, redis: Redis
     ) -> dict[str, Any]:
         try:
-
             product = await product_domain.get_product_by_id(product_id)
             if product.store_id != store_id:
                 raise ForbiddenException(

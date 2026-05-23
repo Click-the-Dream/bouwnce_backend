@@ -74,6 +74,7 @@ async def get_conversation(
         as_response=True,
     )
 
+
 @router.get(
     "/conversations/with/{user_id}",
     summary="Get or create a conversation with a user",
@@ -97,6 +98,7 @@ async def get_conversation_with_user(
         commit=True,
         as_response=True,
     )
+
 
 @router.get(
     "/conversations/{conversation_id}/messages",

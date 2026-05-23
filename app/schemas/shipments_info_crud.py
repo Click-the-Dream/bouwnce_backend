@@ -1,8 +1,6 @@
 from typing import Annotated
 
-from pydantic import BaseModel, Field, ConfigDict
-from uuid import UUID
-from datetime import datetime
+from pydantic import BaseModel, Field
 
 from app.utils.responses import BaseResponse
 
@@ -18,7 +16,6 @@ class ShipmentsInfoBase(BaseModel):
     delivery_time: Annotated[
         str, Field(min_length=2, examples=["3-5 business days", "1-2 business days"])
     ]
-    
 
 
 class ShipmentsInfoCreate(ShipmentsInfoBase):

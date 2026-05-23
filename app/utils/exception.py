@@ -1,7 +1,6 @@
 from typing import Any
 
 from fastapi import HTTPException, status
-from app.core.logger import log_internal_error
 
 
 class ApiException(HTTPException):

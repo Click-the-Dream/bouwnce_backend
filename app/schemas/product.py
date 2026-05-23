@@ -27,7 +27,9 @@ class ProductResponseSchema(ProductBase):
 
 
 class ProductResponse(BaseResponse):
-    data: Annotated[ProductResponseSchema | None, Field(description="Product response data")] = None
+    data: Annotated[
+        ProductResponseSchema | None, Field(description="Product response data")
+    ] = None
 
 
 class PaginatedProductResponseSchema(BaseModel):

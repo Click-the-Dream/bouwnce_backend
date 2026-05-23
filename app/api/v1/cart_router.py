@@ -109,5 +109,9 @@ async def checkout_cart(
     redis: redisSessionDep,
 ):
     return await order_service.checkout(
-        user=current_user, shipment_infos=shipment_list, redis=redis, request=request, db=db
+        user=current_user,
+        shipment_infos=shipment_list,
+        redis=redis,
+        request=request,
+        db=db,
     )

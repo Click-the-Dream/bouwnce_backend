@@ -1,4 +1,3 @@
-from app.utils.responses import BaseResponse
 from app.schemas.contact_info_crud import (
     ContactInfoCreate,
     ContactInfoResponse,
@@ -38,6 +37,7 @@ from app.schemas.vendor_dashboard import (
     WalletDashboardResponse,
     WithdrawalHistory,
 )
+from app.utils.responses import BaseResponse
 
 __all__ = [
     "BaseResponse",

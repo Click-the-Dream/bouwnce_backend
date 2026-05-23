@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Any, Dict, Tuple
+
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,9 +9,8 @@ from app.utils.helper import build_date_filter
 
 
 class MetricService:
-
     @staticmethod
-    def _prev_window(start, end) -> Tuple[Any, Any]:
+    def _prev_window(start, end) -> tuple[Any, Any]:
         """Return the previous window [start - (end-start), start)."""
         delta = end - start
         return start - delta, start
@@ -29,14 +29,16 @@ class MetricService:
         date_range_type: str = "month",
         start_date=None,
         end_date=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
 
         # current window from your helper
         cur_start, cur_end = build_date_filter(date_range_type, start_date, end_date)
         # previous window with identical duration
         prev_start, prev_end = MetricService._prev_window(cur_start, cur_end)
 
-        current = await SubOrderSnapshot.aggregate_suborders(db, store_id, cur_start, cur_end)
+        current = await SubOrderSnapshot.aggregate_suborders(
+            db, store_id, cur_start, cur_end
+        )
         previous = await SubOrderSnapshot.aggregate_suborders(
             db, store_id, prev_start, prev_end
         )

@@ -4,8 +4,8 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cart import Cart
-from app.models.store import Store
 from app.models.products import product_domain
+from app.models.store import Store
 from app.utils.exception import (
     BadRequestException,
     ForbiddenException,
@@ -16,7 +16,6 @@ from app.utils.responses import response_builder
 
 
 class CartService:
-
     async def _formulate_response(self, cart: Cart) -> dict[str, Any]:
         product = await product_domain.get_product_by_id(cart.product_id)
         if not product:
@@ -82,7 +81,7 @@ class CartService:
         try:
             user_carts = await Cart.get_by_user_id(user_id, db, page, page_size)
             carts = user_carts["data"]
-       
+
             if not carts:
                 return response_builder(
                     status_code=status.HTTP_200_OK,
@@ -110,14 +109,14 @@ class CartService:
 
             for cart in carts:
                 product = product_map.get(str(cart.product_id))
-                
+
                 if not product:
                     continue
 
                 store = store_map.get(product.store_id)
                 if not store:
                     continue
-                
+
                 cart_dict = cart.to_dict()
                 cart_dict["user_id"] = str(cart.user_id)
                 cart_dict["store"] = store.to_dict()

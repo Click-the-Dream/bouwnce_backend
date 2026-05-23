@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 
 from sqlalchemy.exc import OperationalError

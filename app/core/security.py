@@ -95,7 +95,13 @@ def set_cookies(response, key: str, value: str, max_age: int) -> None:
 
     else:
         response.set_cookie(
-            key=key, value=value, httponly=True, max_age=max_age, path="/", samesite="none", secure=True
+            key=key,
+            value=value,
+            httponly=True,
+            max_age=max_age,
+            path="/",
+            samesite="none",
+            secure=True,
         )
 
 

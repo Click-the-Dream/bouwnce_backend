@@ -1,8 +1,8 @@
-from typing import Annotated, Any, Literal
-
-from pydantic import BaseModel, Field, ConfigDict
-from uuid import UUID
 from datetime import datetime
+from typing import Annotated, Any, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BaseResponse(BaseModel):
@@ -11,13 +11,13 @@ class BaseResponse(BaseModel):
     message: Annotated[str, Field(examples=["message is successful"])]
     data: dict[str, Any] | list[Any] | None = None
 
-    
     model_config = ConfigDict(
         json_encoders={
             datetime: lambda v: v.isoformat(),
             UUID: lambda v: str(v),
         }
     )
+
 
 # 400
 class BadRequestResponse(BaseModel):

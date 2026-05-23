@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import CurrentActiveUser, CurrentVendor, dbSessionDep, redisSessionDep
+from app.api.dependencies import (
+    CurrentActiveUser,
+    CurrentVendor,
+    dbSessionDep,
+    redisSessionDep,
+)
 from app.service.order_srevice import order_service
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+
 
 class SubOrderStatusUpdatePayload(BaseModel):
     status: str = Field(
@@ -52,6 +58,7 @@ async def accept_order_item(
         redis=redis,
         current_user=current_user,
     )
+
 
 @router.patch(
     "/items/{order_item_id}/decline",

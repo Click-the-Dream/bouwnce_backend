@@ -3,6 +3,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
+
 def compile_mjml(input_file: str, output_file: str) -> None:
     input_file = str(BASE_DIR / input_file)
     output_file = str(BASE_DIR / output_file)

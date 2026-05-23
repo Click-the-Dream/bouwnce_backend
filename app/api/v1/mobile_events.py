@@ -432,13 +432,14 @@ async def events_ws(websocket: WebSocket) -> None:
                         {
                             "type": "error",
                             "error": "invalid_payload",
-                            "message": "Expected: {type:'chat.read', conversation_id:'<uuid>', message_id:'<uuid>'}",
+                            "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', message_id:'<uuid>'}",
                         }
                     )
                     continue
 
                 async with get_async_session() as db:
                     try:
+<<<<<<< HEAD
                         result = (
                             await chat_service.mark_conversation_read_up_to_message(
                                 db=db,
@@ -449,6 +450,16 @@ async def events_ws(websocket: WebSocket) -> None:
                                 commit=False,
                                 as_response=False,
                             )
+=======
+                        result = await chat_service.mark_conversation_read_with_user_up_to_message(
+                            db=db,
+                            redis=redis,
+                            current_user_id=str(user_id),
+                            recipient_id=str(payload.recipient_id),
+                            message_id=str(payload.message_id),
+                            commit=False,
+                            as_response=False,
+>>>>>>> 07c725411530216a3e8cbc7c6136a627a12d99e8
                         )
                     except (
                         NotFoundException,

@@ -55,6 +55,10 @@ jobs:
             source .venv/bin/activate
             uv sync --locked --no-dev
 
-            uv run alembic upgrade head
+            echo "Running database migrations..."
+            if ! uv run alembic upgrade head; then
+              echo "❌ Database migration failed. Aborting deployment."
+              exit 1
+            fi
 
             sudo systemctl restart backend

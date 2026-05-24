@@ -178,7 +178,11 @@ class UserService:
         )
 
     async def update_user_profile_pic(
-        self, user: User, db: AsyncSession, profile_pic: UploadFile | None = None, profile_banner: UploadFile | None = None
+        self,
+        user: User,
+        db: AsyncSession,
+        profile_pic: UploadFile | None = None,
+        profile_banner: UploadFile | None = None,
     ) -> dict[str, Any]:
 
         if not profile_pic:
@@ -201,11 +205,11 @@ class UserService:
             if user.profile_pic:
                 previous_profile_id = user.profile_pic["public_id"]
                 delete_images([previous_profile_id])
-                
-            if user.profile_banner and data.get("profile_banner", None):
+
+            if user.profile_banner and data.get("profile_banner"):
                 previous_banner_id = user.profile_banner["public_id"]
                 delete_images([previous_banner_id])
-                
+
         except Exception:
             raise InternalServerErrorException("Something went wrong") from None
         finally:
@@ -252,5 +256,6 @@ class UserService:
                 )
 
         raise ConflictException("Nothing to delete")
+
 
 user_service = UserService()

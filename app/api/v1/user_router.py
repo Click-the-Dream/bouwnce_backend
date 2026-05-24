@@ -51,9 +51,14 @@ async def list_users(
 
 @router.put("/profile-picture", response_model=UserResponse)
 async def upload_user_pic(
-    current_user: CurrentActiveUser, db: dbSessionDep, picture: UploadFile | None = None, profile_banner: UploadFile | None = None
+    current_user: CurrentActiveUser,
+    db: dbSessionDep,
+    picture: UploadFile | None = None,
+    profile_banner: UploadFile | None = None,
 ):
-    return await user_service.update_user_profile_pic(current_user, db, picture, profile_banner)
+    return await user_service.update_user_profile_pic(
+        current_user, db, picture, profile_banner
+    )
 
 
 @router.put("/me", summary="Update current user", response_model=UserResponse)
@@ -124,6 +129,7 @@ async def undelete_user(
 async def delete_user_pic(current_user: CurrentActiveUser, db: dbSessionDep):
     return await user_service.deleter_user_profile_pic(current_user, db)
 
+
 @router.delete("/profile-banner", response_model=BaseResponse)
 async def delete_user_banner(current_user: CurrentActiveUser, db: dbSessionDep):
-    return await user_service.delete_user_profile_banner(current_user, db) 
+    return await user_service.delete_user_profile_banner(current_user, db)

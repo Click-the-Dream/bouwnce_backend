@@ -772,10 +772,14 @@ class ChatService:
         result = await db.execute(stmt)
         updated = int(result.rowcount or 0)
 
-        unread_stmt = select(func.count()).select_from(Message).where(
-            Message.conversation_id == conv.id,
-            Message.recipient_id == current_id,
-            Message.read_at.is_(None),
+        unread_stmt = (
+            select(func.count())
+            .select_from(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.recipient_id == current_id,
+                Message.read_at.is_(None),
+            )
         )
         unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
 

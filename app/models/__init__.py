@@ -1,5 +1,6 @@
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
+from app.matching_ground.model.notification import Notification
 from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.user_interest import UserInterest
@@ -55,4 +56,5 @@ __all__ = [
     "Conversation",
     "Message",
     "DeviceToken",
+    "Notification",
 ]

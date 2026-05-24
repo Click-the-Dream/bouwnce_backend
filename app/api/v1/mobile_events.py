@@ -111,7 +111,9 @@ async def _send_presence_snapshot(*, websocket: WebSocket, redis, user_id: str) 
                 "online": bool(val),
             }
         )
-    await websocket.send_json({"type": "user.online.snapshot", "data": {"items": items}})
+    await websocket.send_json(
+        {"type": "user.online.snapshot", "data": {"items": items}}
+    )
 
 
 async def _forward_pubsub(*, websocket: WebSocket, pubsub) -> None:
@@ -300,11 +302,15 @@ async def events_ws(websocket: WebSocket) -> None:
     except Exception:
         pass
 
-    pubsub_task = asyncio.create_task(_forward_pubsub(websocket=websocket, pubsub=pubsub))
+    pubsub_task = asyncio.create_task(
+        _forward_pubsub(websocket=websocket, pubsub=pubsub)
+    )
     stream_task = asyncio.create_task(
         _forward_stream(websocket=websocket, redis=redis, user_id=str(user_id))
     )
-    presence_task = asyncio.create_task(_presence_heartbeat(redis=redis, user_id=str(user_id)))
+    presence_task = asyncio.create_task(
+        _presence_heartbeat(redis=redis, user_id=str(user_id))
+    )
 
     try:
         while True:

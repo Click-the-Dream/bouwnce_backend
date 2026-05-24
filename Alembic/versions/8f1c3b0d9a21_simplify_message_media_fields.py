@@ -5,9 +5,8 @@ Revises: 6a2d2b1f8c4e
 Create Date: 2026-05-14
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "8f1c3b0d9a21"
 down_revision = "6a2d2b1f8c4e"
@@ -63,4 +62,3 @@ def downgrade() -> None:
 
     op.drop_column("messages", "media_type")
     op.drop_column("messages", "media_url")
-

@@ -5,9 +5,8 @@ Revises: 9b2f6f0a1c7d
 Create Date: 2026-05-23
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "1d3c7a8b9e20"
 down_revision = "9b2f6f0a1c7d"
@@ -37,4 +36,3 @@ def downgrade() -> None:
         WHERE caption IS NULL AND body IS NOT NULL AND body <> ''
         """
     )
-

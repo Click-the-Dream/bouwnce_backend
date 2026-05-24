@@ -35,7 +35,9 @@ def upgrade() -> None:
             "user_wallets",
             sa.Column("user_id", sa.UUID(), nullable=False),
             sa.Column("balance", sa.Float(), nullable=False, server_default="0"),
-            sa.Column("pending_balance", sa.Float(), nullable=False, server_default="0"),
+            sa.Column(
+                "pending_balance", sa.Float(), nullable=False, server_default="0"
+            ),
             sa.Column("id", sa.UUID(), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -82,7 +84,9 @@ def upgrade() -> None:
             sa.ForeignKeyConstraint(
                 ["order_item_id"], ["order_items.id"], ondelete="SET NULL"
             ),
-            sa.ForeignKeyConstraint(["wallet_id"], ["user_wallets.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(
+                ["wallet_id"], ["user_wallets.id"], ondelete="CASCADE"
+            ),
             sa.PrimaryKeyConstraint("id"),
         )
 
@@ -95,4 +99,3 @@ def downgrade() -> None:
     sa.Enum("pending", "released", "failed", name="refund_status").drop(
         op.get_bind(), checkfirst=True
     )
-

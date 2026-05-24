@@ -5,10 +5,9 @@ Revises: b6811a2a7129
 Create Date: 2026-05-21
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 revision = "5a9d1a2c3c11"
 down_revision = "b6811a2a7129"
@@ -33,4 +32,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("messages", "media_urls")
-

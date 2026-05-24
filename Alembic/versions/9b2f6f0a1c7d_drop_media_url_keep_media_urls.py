@@ -5,9 +5,8 @@ Revises: 7c1a7e2d4b90
 Create Date: 2026-05-23
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "9b2f6f0a1c7d"
 down_revision = "7c1a7e2d4b90"
@@ -41,4 +40,3 @@ def downgrade() -> None:
         END
         """
     )
-

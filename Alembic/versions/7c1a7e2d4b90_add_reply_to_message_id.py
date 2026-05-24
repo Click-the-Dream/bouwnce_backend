@@ -5,9 +5,8 @@ Revises: 5a9d1a2c3c11
 Create Date: 2026-05-21
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "7c1a7e2d4b90"
 down_revision = "5a9d1a2c3c11"
@@ -35,4 +34,3 @@ def downgrade() -> None:
         "fk_messages_reply_to_message_id", "messages", type_="foreignkey"
     )
     op.drop_column("messages", "reply_to_message_id")
-

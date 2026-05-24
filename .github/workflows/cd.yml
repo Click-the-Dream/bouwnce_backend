@@ -3,6 +3,7 @@ name: Deploy Backend
 on:
   workflow_run:
     workflows: ["Backend CI"]
+    branches: [staging]
     types:
       - completed
 

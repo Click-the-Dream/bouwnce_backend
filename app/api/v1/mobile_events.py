@@ -37,6 +37,125 @@ def _is_cloudinary_secure_url(url: str) -> bool:
     return str(url).startswith(prefix)
 
 
+async def _publish_presence(*, redis, user_id: str, online: bool) -> None:
+    async with get_async_session() as db:
+        partner_ids = await chat_service.get_conversation_partner_ids(
+            db=db, user_id=str(user_id)
+        )
+        me = await User.get_by_id(str(user_id), db)
+
+    payload = json.dumps(
+        {
+            "type": "user.online",
+            "data": {
+                "user": {
+                    "id": str(me.id),
+                    "username": me.username,
+                    "full_name": me.full_name,
+                    "profile_pic": chat_service._serialize_profile_pic(me),
+                },
+                "online": online,
+            },
+        }
+    )
+    for pid in partner_ids:
+        await redis.publish(f"chat:user:{pid}", payload)
+    await redis.publish(f"chat:user:{user_id}", payload)
+
+
+async def _presence_heartbeat(*, redis, user_id: str) -> None:
+    try:
+        key = f"{PRESENCE_KEY_PREFIX}{user_id}"
+        while True:
+            await redis.set(key, "1", ex=PRESENCE_TTL_SECONDS)
+            await asyncio.sleep(max(PRESENCE_TTL_SECONDS // 2, 10))
+    except Exception:
+        return
+
+
+async def _send_presence_snapshot(*, websocket: WebSocket, redis, user_id: str) -> None:
+    async with get_async_session() as db:
+        partner_ids = await chat_service.get_conversation_partner_ids(
+            db=db, user_id=str(user_id)
+        )
+        partner_id_list = sorted({str(pid) for pid in partner_ids})
+        users_by_id: dict[str, User] = {}
+        if partner_id_list:
+            users_result = await db.execute(
+                select(User).where(User.id.in_(partner_id_list))
+            )
+            users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+
+    keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_id_list]
+    values = await redis.mget(*keys) if keys else []
+    items: list[dict] = []
+    for pid, val in zip(partner_id_list, values, strict=False):
+        u = users_by_id.get(pid)
+        if u is None:
+            continue
+        items.append(
+            {
+                "user": {
+                    "id": str(u.id),
+                    "username": u.username,
+                    "full_name": u.full_name,
+                    "profile_pic": chat_service._serialize_profile_pic(u),
+                },
+                "online": bool(val),
+            }
+        )
+    await websocket.send_json({"type": "user.online.snapshot", "data": {"items": items}})
+
+
+async def _forward_pubsub(*, websocket: WebSocket, pubsub) -> None:
+    try:
+        async for msg in pubsub.listen():
+            if msg is None:
+                continue
+            if msg.get("type") != "message":
+                continue
+            data = msg.get("data")
+            if isinstance(data, (bytes, bytearray)):
+                data = data.decode()
+            try:
+                await websocket.send_json(json.loads(data))
+            except Exception:
+                await websocket.send_text(str(data))
+    except Exception:
+        return
+
+
+async def _forward_stream(*, websocket: WebSocket, redis, user_id: str) -> None:
+    last_id = "$"
+    try:
+        while True:
+            streams = await redis.xread(
+                streams={MOBILE_EVENTS_STREAM_KEY: last_id}, count=50, block=25000
+            )
+            for _stream_name, messages in streams or []:
+                for msg_id, fields in messages:
+                    last_id = msg_id
+                    event_name = fields.get("event_name")
+                    payload_raw = fields.get("payload")
+                    if not event_name or not payload_raw:
+                        continue
+                    try:
+                        payload_obj = json.loads(payload_raw)
+                    except Exception:
+                        continue
+                    if str(payload_obj.get("user_id") or "") != str(user_id):
+                        continue
+                    await websocket.send_json(
+                        {
+                            "type": "event",
+                            "event_name": event_name,
+                            "payload": payload_obj,
+                        }
+                    )
+    except Exception:
+        return
+
+
 @router.get(
     "/mobile",
     summary="Read mobile events from Redis Stream (long-poll)",
@@ -111,20 +230,7 @@ async def get_payment_progress(
 
 @router.websocket("/ws")
 async def events_ws(websocket: WebSocket) -> None:
-    """
-    One websocket for multiple realtime states:
-    - Chat: Redis PubSub channel `chat:user:{user_id}`
-    - Events: Redis Stream `events:mobile:stream` (filtered by payload.user_id)
 
-    Connect:
-      `wss://<domain>/api/v1/events/ws?token=<access_token>`
-
-    Send chat messages over the same socket:
-      `{"type":"chat.send","recipient_id":"<uuid>","body":"hi"}`
-
-    Mark a conversation as read (by other user id):
-      `{"type":"chat.read","conversation_id":"<uuid>","message_id":"<uuid>"}`
-    """
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=1008)
@@ -146,130 +252,21 @@ async def events_ws(websocket: WebSocket) -> None:
 
     await websocket.accept()
 
-    async def publish_presence(online: bool) -> None:
-        async with get_async_session() as db:
-            partner_ids = await chat_service.get_conversation_partner_ids(
-                db=db, user_id=str(user_id)
-            )
-            me = await User.get_by_id(str(user_id), db)
-
-        payload = json.dumps(
-            {
-                "type": "user.online",
-                "data": {
-                    "user": {
-                        "id": str(me.id),
-                        "username": me.username,
-                        "full_name": me.full_name,
-                    },
-                    "online": online,
-                },
-            }
-        )
-        for pid in partner_ids:
-            await redis.publish(f"chat:user:{pid}", payload)
-        # also tell the connected user (useful for debugging/UX)
-        await redis.publish(f"chat:user:{user_id}", payload)
-
-    async def presence_heartbeat() -> None:
-        try:
-            key = f"{PRESENCE_KEY_PREFIX}{user_id}"
-            while True:
-                await redis.set(key, "1", ex=PRESENCE_TTL_SECONDS)
-                await asyncio.sleep(max(PRESENCE_TTL_SECONDS // 2, 10))
-        except Exception:
-            return
-
     # Mark online + broadcast
     await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
-    await publish_presence(True)
+    await _publish_presence(redis=redis, user_id=str(user_id), online=True)
 
     # Send a presence snapshot of conversation partners to the connected client
     try:
-        async with get_async_session() as db:
-            partner_ids = await chat_service.get_conversation_partner_ids(
-                db=db, user_id=str(user_id)
-            )
-            partner_id_list = sorted({str(pid) for pid in partner_ids})
-            users_by_id: dict[str, User] = {}
-            if partner_id_list:
-                users_result = await db.execute(
-                    select(User).where(User.id.in_(partner_id_list))
-                )
-                users_by_id = {str(u.id): u for u in users_result.scalars().all()}
-
-        keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_id_list]
-        values = await redis.mget(*keys) if keys else []
-        items: list[dict] = []
-        for pid, val in zip(partner_id_list, values, strict=False):
-            u = users_by_id.get(pid)
-            if u is None:
-                continue
-            items.append(
-                {
-                    "user": {
-                        "id": str(u.id),
-                        "username": u.username,
-                        "full_name": u.full_name,
-                    },
-                    "online": bool(val),
-                }
-            )
-        await websocket.send_json({"type": "user.online.snapshot", "data": {"items": items}})
+        await _send_presence_snapshot(websocket=websocket, redis=redis, user_id=str(user_id))
     except Exception:
         pass
 
-    async def forward_pubsub() -> None:
-        try:
-            async for msg in pubsub.listen():
-                if msg is None:
-                    continue
-                if msg.get("type") != "message":
-                    continue
-                data = msg.get("data")
-                if isinstance(data, (bytes, bytearray)):
-                    data = data.decode()
-                # Chat service publishes JSON strings; forward as JSON when possible
-                try:
-                    await websocket.send_json(json.loads(data))
-                except Exception:
-                    await websocket.send_text(str(data))
-        except Exception:
-            return
-
-    async def forward_stream() -> None:
-        last_id = "$"
-        try:
-            while True:
-                streams = await redis.xread(
-                    streams={MOBILE_EVENTS_STREAM_KEY: last_id}, count=50, block=25000
-                )
-                for _stream_name, messages in streams or []:
-                    for msg_id, fields in messages:
-                        last_id = msg_id
-                        event_name = fields.get("event_name")
-                        payload_raw = fields.get("payload")
-                        if not event_name or not payload_raw:
-                            continue
-                        try:
-                            payload_obj = json.loads(payload_raw)
-                        except Exception:
-                            continue
-                        if str(payload_obj.get("user_id") or "") != str(user_id):
-                            continue
-                        await websocket.send_json(
-                            {
-                                "type": "event",
-                                "event_name": event_name,
-                                "payload": payload_obj,
-                            }
-                        )
-        except Exception:
-            return
-
-    pubsub_task = asyncio.create_task(forward_pubsub())
-    stream_task = asyncio.create_task(forward_stream())
-    presence_task = asyncio.create_task(presence_heartbeat())
+    pubsub_task = asyncio.create_task(_forward_pubsub(websocket=websocket, pubsub=pubsub))
+    stream_task = asyncio.create_task(
+        _forward_stream(websocket=websocket, redis=redis, user_id=str(user_id))
+    )
+    presence_task = asyncio.create_task(_presence_heartbeat(redis=redis, user_id=str(user_id)))
 
     try:
         while True:
@@ -504,6 +501,6 @@ async def events_ws(websocket: WebSocket) -> None:
         await pubsub.close()
         try:
             await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
-            await publish_presence(False)
+            await _publish_presence(redis=redis, user_id=str(user_id), online=False)
         except Exception:
             pass

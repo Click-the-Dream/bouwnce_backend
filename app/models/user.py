@@ -35,6 +35,7 @@ class User(BaseModel):
     date_of_birth: Mapped[str | None] = mapped_column(String, nullable=True)
     institution: Mapped[str | None] = mapped_column(String, nullable=True)
     profile_pic: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    profile_banner: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     role: Mapped[str] = mapped_column(
         Enum("user", "vendor", "admin", name="user_role_enum"), default="user"

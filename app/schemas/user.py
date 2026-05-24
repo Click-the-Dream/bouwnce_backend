@@ -33,6 +33,7 @@ class UserCreate(UserBase):
 class UserResponsSchema(UserBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     profile_pic: Annotated[Image | None, Field(...)]
+    profile_banner: Annotated[Image | None, Field(...)]
     is_active: Annotated[bool, Field(examples=[True])]
     otp: Annotated[str | None, Field(examples=["123456"])] = None
     created_at: Annotated[str, Field(examples=["2025-04-03"])]

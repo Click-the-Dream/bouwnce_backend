@@ -1,0 +1,57 @@
+name: Backend CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [staging]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --no-dev
+
+      # ruff check
+      - name: Run ruff
+        run: uv run ruff check .
+
+      # Black check
+      - name: Run black
+        run: uv run black --check .
+
+  deploy:
+    needs: lint
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: SSH DEPLOY
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /var/www/backend
+            git pull origin staging
+
+            source .venv/bin/activate
+            uv sync --locked --no-dev
+
+            uv run alembic upgrade head
+
+            sudo systemctl restart backend

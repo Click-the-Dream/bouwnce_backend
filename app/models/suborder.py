@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import Enum, ForeignKey, Integer, String,  func, select, DateTime
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+    select,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import BaseModel
-from sqlalchemy.orm import relationship
-from sqlalchemy import UniqueConstraint
-from datetime import datetime
 
 if TYPE_CHECKING:
     from app.models import Order, OrderItem, Store
@@ -57,7 +64,7 @@ class SubOrder(BaseModel):
         single_parent=True,
         lazy="selectin",
     )
-    
+
     @classmethod
     async def get_top_products_paginated(
         cls, store_id: str, page: int, page_size: int, db: AsyncSession
@@ -101,13 +108,13 @@ class SubOrder(BaseModel):
             "has_previous": page > 1,
             "items": items_list,
         }
-    
+
     async def subtract_total_amount(self, amount: int, db: AsyncSession) -> None:
         self.total_amount -= amount
         self.order.total_amount -= amount
         await self.save(db)
 
-    
+
 class SubOrderSnapshot(BaseModel):
     __tablename__ = "suborder_snapshots"
 
@@ -161,17 +168,20 @@ class SubOrderSnapshot(BaseModel):
         end_date: datetime,
     ) -> dict[str, Any]:
 
-        stmt = (
-            select(
-                func.coalesce(func.sum(SubOrderSnapshot.total_orders), 0).label("total_orders"),
-                func.coalesce(func.sum(SubOrderSnapshot.total_revenue), 0).label("total_revenue"),
-                func.coalesce(func.sum(SubOrderSnapshot.total_customers), 0).label("total_customers"),
-            )
-            .where(
-                SubOrderSnapshot.store_id == store_id,
-                SubOrderSnapshot.snapshot_time >= start_date,
-                SubOrderSnapshot.snapshot_time < end_date,
-            )
+        stmt = select(
+            func.coalesce(func.sum(SubOrderSnapshot.total_orders), 0).label(
+                "total_orders"
+            ),
+            func.coalesce(func.sum(SubOrderSnapshot.total_revenue), 0).label(
+                "total_revenue"
+            ),
+            func.coalesce(func.sum(SubOrderSnapshot.total_customers), 0).label(
+                "total_customers"
+            ),
+        ).where(
+            SubOrderSnapshot.store_id == store_id,
+            SubOrderSnapshot.snapshot_time >= start_date,
+            SubOrderSnapshot.snapshot_time < end_date,
         )
 
         result = await db.execute(stmt)
@@ -181,11 +191,7 @@ class SubOrderSnapshot(BaseModel):
         total_revenue: float = float(row.total_revenue)
         total_customers: int = int(row.total_customers)
 
-        aov: float = (
-            total_revenue / total_orders
-            if total_orders > 0
-            else 0.0
-        )
+        aov: float = total_revenue / total_orders if total_orders > 0 else 0.0
 
         return {
             "total_orders": total_orders,

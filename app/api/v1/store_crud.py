@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from app.api.dependencies import (
     CurrentActiveStore,
     CurrentStore,
-    CurrentUser, 
+    CurrentUser,
     dbSessionDep,
 )
 from app.schemas.store_crud import (

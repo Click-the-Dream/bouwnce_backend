@@ -48,26 +48,27 @@ async def list_users(
 
     return await user_service.list_users(db, search, page, per_page)
 
-@router.put(
-    "/profile-picture",
-    response_model=UserResponse
-)
+
+@router.put("/profile-picture", response_model=UserResponse)
 async def upload_user_pic(
     current_user: CurrentActiveUser,
     db: dbSessionDep,
-    picture: UploadFile
+    picture: UploadFile | None = None,
+    profile_banner: UploadFile | None = None,
 ):
-    return await user_service.update_user_profile_pic(current_user, db, picture)
+    return await user_service.update_user_profile_pic(
+        current_user, db, picture, profile_banner
+    )
 
 
 @router.put("/me", summary="Update current user", response_model=UserResponse)
 async def update_me(
     user_data: UpdateUser, current_user: CurrentActiveUser, db: dbSessionDep
 ) -> UserResponse:
-    user_data = user_data.model_dump(exclude_unset=True)
-    if user_data.get("role", None) is not None:
-        user_data["role"] = user_data["role"].value
-    return await user_service.update_me(current_user, user_data, db)
+    user_data_dict = user_data.model_dump(exclude_unset=True)
+    if user_data_dict.get("role", None) is not None:
+        user_data_dict["role"] = user_data_dict["role"].value
+    return await user_service.update_me(current_user, user_data_dict, db)
 
 
 @router.put(
@@ -124,13 +125,11 @@ async def undelete_user(
     return await user_service.undelete_user_by_id(user_id, db)
 
 
-
-@router.delete(
-    "/profile-picture",
-    response_model=BaseResponse
-)
-async def delete_user_pic(
-    current_user: CurrentActiveUser,
-    db: dbSessionDep
-):
+@router.delete("/profile-picture", response_model=BaseResponse)
+async def delete_user_pic(current_user: CurrentActiveUser, db: dbSessionDep):
     return await user_service.deleter_user_profile_pic(current_user, db)
+
+
+@router.delete("/profile-banner", response_model=BaseResponse)
+async def delete_user_banner(current_user: CurrentActiveUser, db: dbSessionDep):
+    return await user_service.delete_user_profile_banner(current_user, db)

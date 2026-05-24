@@ -11,6 +11,7 @@ from app.service.order_srevice import order_service
 
 router = APIRouter(prefix="/payment", tags=["Payments"])
 
+
 class SimulatePaystackChargeSuccessRequest(BaseModel):
     reference: str = Field(min_length=1)
     amount_kobo: int = Field(gt=0)

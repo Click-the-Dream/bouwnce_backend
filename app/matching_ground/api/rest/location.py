@@ -1,10 +1,11 @@
 from fastapi import APIRouter, status
+
 from app.api.dependencies import CurrentUser, dbSessionDep
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.schema.location import LocationResponse, LocationUpsertRequest
 
-
 router = APIRouter(prefix="/location", tags=["User Location"])
+
 
 @router.put(
     "/me",

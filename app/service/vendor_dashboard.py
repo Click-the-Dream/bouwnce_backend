@@ -13,7 +13,6 @@ from app.utils.responses import response_builder
 
 
 class VendorDashBoardService:
-
     @staticmethod
     async def get_vendor_overview(
         session: AsyncSession,

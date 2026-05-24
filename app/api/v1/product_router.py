@@ -17,6 +17,12 @@ from app.schemas.product import (
 )
 from app.service.product_service import product_service
 
+fileListUpload = Annotated[
+    list[UploadFile] | None,
+    File(
+        description="Optional new product images (multipart/form-data).",
+    ),
+]
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
@@ -66,10 +72,7 @@ async def create_product(
     stock: Annotated[int, Form(ge=0, examples=[20])],
     category: Annotated[str, Form(examples=["cloth"])],
     db: dbSessionDep,
-    images: list[UploadFile] = File(
-        ...,
-        description="One or more product images (multipart/form-data).",
-    ),
+    images: fileListUpload = None,
 ):
 
     product_data = {
@@ -181,10 +184,7 @@ async def update_product(
     id: str,
     current_store: CurrentStore,
     redis: redisSessionDep,
-    images: list[UploadFile] | None = File(
-        None,
-        description="Optional new product images (multipart/form-data).",
-    ),
+    images: fileListUpload = None,
     name: Annotated[str | None, Form(min_length=2, examples=["Round Neck"])] = None,
     description: Annotated[
         str | None, Form(min_length=5, examples=["This is straight from New York"])

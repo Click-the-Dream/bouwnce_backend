@@ -4,10 +4,10 @@ from fastapi import APIRouter, status
 
 from app.api.dependencies import CurrentStore, dbSessionDep
 from app.schemas import (
+    BaseResponse,
     ShipmentsInfoCreate,
     ShipmentsInfoResponse,
     ShipmentsInfoUpdate,
-    BaseResponse
 )
 from app.service import shipment_info_service
 

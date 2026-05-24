@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Query
 
@@ -9,11 +9,11 @@ from app.api.dependencies import CurrentUser, dbSessionDep
 from app.matching_ground.schema.match import (
     CreateMatchRequestPayload,
     RespondMatchRequestPayload,
-
 )
 from app.matching_ground.service.matching.match_lifecycle import MatchLifecycleService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
+
 
 @router.get("/suggest")
 async def suggest_candidates(
@@ -21,10 +21,7 @@ async def suggest_candidates(
     current_user: CurrentUser,
 ) -> dict:
     service = MatchLifecycleService()
-    return await service.suggest_candidates(
-        session=db,
-        requester_id=current_user.id
-    )
+    return await service.suggest_candidates(session=db, requester_id=current_user.id)
 
 
 @router.get(
@@ -34,7 +31,10 @@ async def suggest_candidates(
 async def search_candidates(
     db: dbSessionDep,
     current_user: CurrentUser,
-    message: str = Query(..., description="Natural language search, e.g. 'I want someone into AI within 5km'"),
+    message: str = Query(
+        ...,
+        description="Natural language search, e.g. 'I want someone into AI within 5km'",
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
 ) -> dict:
@@ -47,12 +47,13 @@ async def search_candidates(
         page_size=page_size,
     )
 
+
 @router.post("/requests")
 async def create_match_request(
     payload: CreateMatchRequestPayload,
     db: dbSessionDep,
     current_user: CurrentUser,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
 ) -> dict:
     service = MatchLifecycleService()
     result = await service.create_request(
@@ -60,7 +61,7 @@ async def create_match_request(
         requester=current_user,
         target_user_id=uuid.UUID(payload.target_user_id),
         note=payload.note,
-        background_tasks=background_tasks
+        background_tasks=background_tasks,
     )
 
     return {k: v for k, v in result.items() if k != "recipient_email"}
@@ -71,7 +72,9 @@ async def list_match_requests(
     db: dbSessionDep,
     current_user: CurrentUser,
     page: Annotated[int, Query(gt=0, description="Page number")] = 1,
-    page_size: Annotated[int, Query(gt=0, le=100, description="Number of items per page")] = 10,
+    page_size: Annotated[
+        int, Query(gt=0, le=100, description="Number of items per page")
+    ] = 10,
 ) -> dict:
     service = MatchLifecycleService()
     return await service.list_requests_for_user(db, current_user.id, page, page_size)
@@ -82,7 +85,9 @@ async def list_matches(
     db: dbSessionDep,
     current_user: CurrentUser,
     page: Annotated[int, Query(gt=0, description="Page number")] = 1,
-    page_size: Annotated[int, Query(gt=0, le=100, description="Number of items per page")] = 10,
+    page_size: Annotated[
+        int, Query(gt=0, le=100, description="Number of items per page")
+    ] = 10,
 ) -> dict:
     service = MatchLifecycleService()
     return await service.list_matches_for_user(db, current_user.id, page, page_size)

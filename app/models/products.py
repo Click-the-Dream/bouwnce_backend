@@ -19,8 +19,6 @@ class Images(BaseModel):
     url: Annotated[str, Field(examples=["http://image_url.png"])]
 
 
-
-
 class Category(BaseDocument):
     name: Annotated[str, Field(min_length=3, max_length=20)]
     description: str | None
@@ -46,7 +44,6 @@ class Product(BaseDocument):
 
 
 class ProductDomain:
-
     def __init__(self):
         self.Product = Product
         self.Category = Category
@@ -70,7 +67,7 @@ class ProductDomain:
         reserved_stock = await redis.get(redis_key)
         if reserved_stock is None:
             return obj.stock
-        
+
         avaialble = obj.stock - int(reserved_stock)
         return max(avaialble, 0)
 
@@ -117,7 +114,6 @@ class ProductDomain:
 
                     return True, None
                 except WatchError:
-
                     # Retry if race condition occured
                     if attempt < self._max_tries - 1:
                         await asyncio.sleep(0.05)
@@ -125,7 +121,6 @@ class ProductDomain:
                     else:
                         return False, "Maximum WatchError reached"
                 except Exception as e:
-
                     await pipe.unwatch()
                     raise e
 
@@ -141,7 +136,6 @@ class ProductDomain:
         for attempt in range(self._max_tries):
             try:
                 async with redis.pipeline() as pipe:
-
                     # Prevent Race Condition
                     await pipe.watch(product_key, product_user_key)
 
@@ -160,7 +154,6 @@ class ProductDomain:
 
                     return True
             except WatchError:
-
                 if attempt < self._max_tries - 1:
                     await asyncio.sleep(0.05)
                     continue
@@ -331,12 +324,10 @@ class ProductDomain:
                 query.append({key: regrex})
 
         if len(query) > 0:
-
             filters = {"$and": [{"store_id": store_id}, {"$or": query}]}
             products_query = self.Product.find(filters).sort(-self.Product.updated_at)
 
         else:
-
             products_query = self.Product.find(self.Product.store_id == store_id).sort(
                 -self.Product.updated_at
             )
@@ -387,9 +378,9 @@ class ProductDomain:
                 {"$and": [{"$or": query}, {"state": "live"}, {"status": "active"}]}
             ).sort(-self.Product.updated_at)
         else:
-            results_query = self.Product.find({"state": "live", "status": "active"}).sort(
-                -self.Product.updated_at
-            )
+            results_query = self.Product.find(
+                {"state": "live", "status": "active"}
+            ).sort(-self.Product.updated_at)
 
         offset = (page - 1) * per_page
         count = await results_query.count()

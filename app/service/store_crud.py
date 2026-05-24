@@ -22,7 +22,6 @@ from app.utils.responses import response_builder
 
 
 class StoreCRUDService:
-
     async def create(
         self, db: AsyncSession, data: dict[str, Any], user: User
     ) -> dict[str, Any]:
@@ -144,7 +143,9 @@ class StoreCRUDService:
         if name:
             filter["name"] = f"%{name}%"
 
-        stores = await Store.get_by(db=db, filter=filter, page=page, page_size=page_size)
+        stores = await Store.get_by(
+            db=db, filter=filter, page=page, page_size=page_size
+        )
         store_response = [store.to_dict() for store in stores["data"]]
 
         return response_builder(

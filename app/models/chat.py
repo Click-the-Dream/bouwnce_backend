@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,8 +29,8 @@ class Conversation(BaseModel):
         DateTime(timezone=True), default=func.now(), nullable=False
     )
 
-    user_a: Mapped["User"] = relationship(foreign_keys=[user_a_id], lazy="joined")
-    user_b: Mapped["User"] = relationship(foreign_keys=[user_b_id], lazy="joined")
+    user_a: Mapped[User] = relationship(foreign_keys=[user_a_id], lazy="joined")
+    user_b: Mapped[User] = relationship(foreign_keys=[user_b_id], lazy="joined")
 
     __table_args__ = (
         UniqueConstraint("user_a_id", "user_b_id", name="uix_conversation_users"),
@@ -87,13 +86,19 @@ class Message(BaseModel):
     )
     body: Mapped[str] = mapped_column(String, nullable=False)
 
-    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Media support
-    media_type: Mapped[str | None] = mapped_column(String, nullable=True)  # image|video|file
+    media_type: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # image|video|file
     media_urls: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     reply_to_message_id: Mapped[UUID_Type | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     conversation: Mapped[Conversation] = relationship(lazy="joined")

@@ -30,7 +30,7 @@ class DeviceToken(BaseModel):
         DateTime(timezone=True), default=func.now(), nullable=False
     )
 
-    user: Mapped["User"] = relationship(lazy="joined")
+    user: Mapped[User] = relationship(lazy="joined")
 
     __table_args__ = (
         UniqueConstraint("user_id", "token", name="uix_user_device_token"),
@@ -53,4 +53,3 @@ class DeviceToken(BaseModel):
         await db.flush()
         await db.refresh(row)
         return row
-

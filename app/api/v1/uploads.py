@@ -12,14 +12,20 @@ from app.utils.responses import response_builder
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
-class UploadType(str, Enum):
+
+class UploadType(Enum):
     image = "image"
     video = "video"
     file = "file"
 
+
 class ChatSignRequest(BaseModel):
-    upload_type: UploadType = Field(..., description="image|video|file", alias="uploadType")
-    count: int = Field(1, ge=1, le=50, description="How many signed uploads to generate")
+    upload_type: UploadType = Field(
+        ..., description="image|video|file", alias="uploadType"
+    )
+    count: int = Field(
+        1, ge=1, le=50, description="How many signed uploads to generate"
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -39,23 +45,32 @@ def _constraints_for(upload_type: UploadType) -> dict:
         return upload_service.chat_video_constraints()
     return upload_service.chat_file_constraints()
 
+
 @router.post(
     "/chat/sign",
     summary="Get signed Cloudinary params for chat uploads (image/video/file)",
     status_code=status.HTTP_200_OK,
     response_model=dict,
 )
-async def sign_chat_upload(payload: ChatSignRequest, current_user: CurrentActiveUser) -> dict:
+async def sign_chat_upload(
+    payload: ChatSignRequest, current_user: CurrentActiveUser
+) -> dict:
     folder = f"chat/{current_user.id}"
     constraints = _constraints_for(payload.upload_type)
     preset = _preset_for(payload.upload_type)
 
     if payload.count == 1:
         fields = upload_service.sign_chat_upload(preset=preset, folder=folder)
-        data = {"upload_type": payload.upload_type, "fields": fields, "constraints": constraints}
+        data = {
+            "upload_type": payload.upload_type,
+            "fields": fields,
+            "constraints": constraints,
+        }
         message = "Chat upload signature generated"
     else:
-        items = upload_service.sign_chat_upload_batch(preset=preset, folder=folder, count=payload.count)
+        items = upload_service.sign_chat_upload_batch(
+            preset=preset, folder=folder, count=payload.count
+        )
         data = {
             "upload_type": payload.upload_type,
             "count": len(items),

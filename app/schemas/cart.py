@@ -15,13 +15,15 @@ class ProductResponse(BaseModel):
     amount: Annotated[int, Field(ge=0, examples=[25000])]
     images: list[Images]
 
+
 class StoreResponse(BaseModel):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     name: Annotated[str, Field(min_length=2, examples=["My Awesome Store"])]
     store_description: Annotated[str | None, Field(examples=["This is the best Store"])]
     store_logo: Annotated[Images | None, Field(...)]
     store_banner: Annotated[Images | None, Field(...)]
-    
+
+
 class CartCreate(BaseModel):
     product_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     quantity: Annotated[int, Field(gt=0, examples=[2])]
@@ -31,7 +33,9 @@ class CartResponseSchema(BaseModel):
     id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     user_id: Annotated[str, Field(examples=["cd7369f3-5f04-4dd0-a8f4-9b3566867e13"])]
     product: Annotated[ProductResponse, Field(description="Product detail response")]
-    store: Annotated[StoreResponse | None, Field(description="Store details response")] = None
+    store: Annotated[
+        StoreResponse | None, Field(description="Store details response")
+    ] = None
     quantity: Annotated[int, Field(gt=0, examples=[2])]
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
@@ -82,7 +86,8 @@ class CheckoutResponseSchema(BaseModel):
         list[ProductCheckoutInfo], Field(description="List of available products")
     ]
     unavailable_products: Annotated[
-        list[ProductCheckoutInfo] | None, Field(description="List of unavailable products")
+        list[ProductCheckoutInfo] | None,
+        Field(description="List of unavailable products"),
     ] = None
 
 

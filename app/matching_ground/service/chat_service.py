@@ -62,9 +62,11 @@ class ChatService:
             "id": str(conv.id),
             "user_a_id": str(conv.user_a_id),
             "user_b_id": str(conv.user_b_id),
-            "last_message_at": conv.last_message_at.isoformat()
-            if getattr(conv, "last_message_at", None)
-            else None,
+            "last_message_at": (
+                conv.last_message_at.isoformat()
+                if getattr(conv, "last_message_at", None)
+                else None
+            ),
             "created_at": conv.created_at.isoformat() if conv.created_at else None,
             "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
         }
@@ -103,7 +105,6 @@ class ChatService:
         data.pop("reply_to_message_id", None)
         data.pop("reply_to_message", None)
         return data
-
 
     async def get_or_create_conversation(
         self, *, db: AsyncSession, user1_id: str, user2_id: str
@@ -145,7 +146,9 @@ class ChatService:
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
             reply_row = (
-                await db.execute(select(Message).where(Message.id == msg.reply_to_message_id))
+                await db.execute(
+                    select(Message).where(Message.id == msg.reply_to_message_id)
+                )
             ).scalar_one_or_none()
             if reply_row is not None:
                 reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
@@ -155,7 +158,9 @@ class ChatService:
                 )
 
         if redis is not None:
-            msg_payload = self._serialize_message(msg, sender=sender, recipient=recipient)
+            msg_payload = self._serialize_message(
+                msg, sender=sender, recipient=recipient
+            )
             msg_payload["reply_to_message"] = reply_obj
             await redis.publish(
                 f"chat:conversation:{conversation.id}",
@@ -260,7 +265,9 @@ class ChatService:
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
             reply_row = (
-                await db.execute(select(Message).where(Message.id == msg.reply_to_message_id))
+                await db.execute(
+                    select(Message).where(Message.id == msg.reply_to_message_id)
+                )
             ).scalar_one_or_none()
             if reply_row is not None:
                 reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
@@ -270,7 +277,9 @@ class ChatService:
                 )
 
         if redis is not None:
-            msg_payload = self._serialize_message(msg, sender=sender, recipient=recipient)
+            msg_payload = self._serialize_message(
+                msg, sender=sender, recipient=recipient
+            )
             msg_payload["reply_to_message"] = reply_obj
             payload = json.dumps({"type": "chat.message", "data": msg_payload})
             await redis.publish(f"chat:conversation:{conversation.id}", payload)
@@ -311,7 +320,8 @@ class ChatService:
         stmt = (
             select(Conversation)
             .where(
-                (Conversation.user_a_id == user_id) | (Conversation.user_b_id == user_id)
+                (Conversation.user_a_id == user_id)
+                | (Conversation.user_b_id == user_id)
             )
             .order_by(desc(Conversation.last_message_at))
             .offset(offset)
@@ -393,8 +403,10 @@ class ChatService:
             raise ForbiddenException("You cannot access this conversation")
 
         offset = (page - 1) * page_size
-        total_stmt = select(func.count()).select_from(Message).where(
-            Message.conversation_id == conv.id
+        total_stmt = (
+            select(func.count())
+            .select_from(Message)
+            .where(Message.conversation_id == conv.id)
         )
         total = int((await db.execute(total_stmt)).scalar() or 0)
 
@@ -429,7 +441,9 @@ class ChatService:
 
         users_by_id: dict[str, User] = {}
         if user_ids:
-            users_result = await db.execute(select(User).where(User.id.in_(list(user_ids))))
+            users_result = await db.execute(
+                select(User).where(User.id.in_(list(user_ids)))
+            )
             users_by_id = {str(u.id): u for u in users_result.scalars().all()}
 
         items: list[dict] = []
@@ -478,7 +492,9 @@ class ChatService:
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise NotFoundException("Conversation not found")
         data: dict = {
-            "conversation": self._serialize_conversation(conv, current_user_id=current_user_id)
+            "conversation": self._serialize_conversation(
+                conv, current_user_id=current_user_id
+            )
         }
         if include_messages:
             data["messages"] = await self.list_messages(
@@ -514,7 +530,9 @@ class ChatService:
             db=db, user1_id=str(current_user_id), user2_id=str(user_id)
         )
         data: dict = {
-            "conversation": self._serialize_conversation(conv, current_user_id=current_user_id)
+            "conversation": self._serialize_conversation(
+                conv, current_user_id=current_user_id
+            )
         }
         if include_messages:
             data["messages"] = await self.list_messages(
@@ -564,10 +582,14 @@ class ChatService:
         result = await db.execute(stmt)
         updated = int(result.rowcount or 0)
 
-        unread_stmt = select(func.count()).select_from(Message).where(
-            Message.conversation_id == conv.id,
-            Message.recipient_id == current_user_id,
-            Message.read_at.is_(None),
+        unread_stmt = (
+            select(func.count())
+            .select_from(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.recipient_id == current_user_id,
+                Message.read_at.is_(None),
+            )
         )
         unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
 
@@ -629,10 +651,14 @@ class ChatService:
         result = await db.execute(stmt)
         updated = int(result.rowcount or 0)
 
-        unread_stmt = select(func.count()).select_from(Message).where(
-            Message.conversation_id == conv.id,
-            Message.recipient_id == current_id,
-            Message.read_at.is_(None),
+        unread_stmt = (
+            select(func.count())
+            .select_from(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.recipient_id == current_id,
+                Message.read_at.is_(None),
+            )
         )
         unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
 
@@ -746,10 +772,14 @@ class ChatService:
         result = await db.execute(stmt)
         updated = int(result.rowcount or 0)
 
-        unread_stmt = select(func.count()).select_from(Message).where(
-            Message.conversation_id == conv.id,
-            Message.recipient_id == current_id,
-            Message.read_at.is_(None),
+        unread_stmt = (
+            select(func.count())
+            .select_from(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.recipient_id == current_id,
+                Message.read_at.is_(None),
+            )
         )
         unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
 

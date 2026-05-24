@@ -4,25 +4,23 @@ from app.api.v1 import (
     auth_router,
     cart_router,
     contact_info_crud,
-    order_router,
+    jobs,
     mobile_events,
-    uploads,
+    newsletter,
+    order_router,
     payment,
     payout_info_crud,
     product_router,
     shipments_info_crud,
     store_crud,
+    uploads,
     user_router,
     vendor_dashboard,
     verification_router,
     waitlist_router,
-    newsletter,
-    jobs
 )
-
-from app.matching_ground.api.rest import chat, interest, location, match
-
 from app.core.rate_limiter import rate_limiter
+from app.matching_ground.api.rest import chat, interest, location, match
 from app.utils.responses import (
     BadRequestResponse,
     ForbiddenResponse,
@@ -30,8 +28,6 @@ from app.utils.responses import (
     NotFoundResponse,
     UnauthorizedResponse,
 )
-
-
 
 user_api_router = APIRouter(
     prefix="/users",

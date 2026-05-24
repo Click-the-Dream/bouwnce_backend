@@ -1,10 +1,11 @@
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
 from app.models.cart import Cart
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -12,7 +13,6 @@ from app.models.products import product_domain
 from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.models.wallet import UserWallet
-from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
 from app.worker.tasks.email import send_email_using_worker
 
 
@@ -30,7 +30,6 @@ class EventNames:
     STORE_WALLET_RELEASE = "store.wallet.release"
     ORDER_COMPLETE = "order.complete"
     MOBILE_EVENT = "mobile.event"
-
 
 
 async def _publish_mobile_stream_event(
@@ -215,7 +214,9 @@ async def dispatch_event(
         return
 
     if event_name == EventNames.BUYER_WALLET_CREDIT:
-        user_wallet = await UserWallet.get_one(db=db, filter={"user_id": payload.user_id})
+        user_wallet = await UserWallet.get_one(
+            db=db, filter={"user_id": payload.user_id}
+        )
         if not user_wallet:
             user_wallet = await UserWallet.create({"user_id": payload.user_id}, db)
 
@@ -248,7 +249,9 @@ async def dispatch_event(
 
         suborder = order_item.suborder
         if suborder:
-            active_items = [item for item in suborder.order_items if item.status != "declined"]
+            active_items = [
+                item for item in suborder.order_items if item.status != "declined"
+            ]
             if active_items and all(item.status == "accepted" for item in active_items):
                 if suborder.status != "accepted":
                     suborder.status = "accepted"
@@ -259,12 +262,13 @@ async def dispatch_event(
                     active_suborders = [
                         so for so in order.suborders if so.status != "cancelled"
                     ]
-                    if active_suborders and all(
-                        so.status == "accepted" for so in active_suborders
+                    if (
+                        active_suborders
+                        and all(so.status == "accepted" for so in active_suborders)
+                        and order.status not in ["accepted", "delivered", "cancelled"]
                     ):
-                        if order.status not in ["accepted", "delivered", "cancelled"]:
-                            order.status = "accepted"
-                            await order.save(db)
+                        order.status = "accepted"
+                        await order.save(db)
 
         return
 
@@ -295,21 +299,27 @@ async def dispatch_event(
                     wallet.available_balance -= debit_amount
                     await wallet.save(db)
 
-            active_items = [item for item in suborder.order_items if item.status != "declined"]
+            active_items = [
+                item for item in suborder.order_items if item.status != "declined"
+            ]
             if len(active_items) == 0:
                 suborder.status = "cancelled"
                 await suborder.save(db)
 
             order = suborder.order
             if order:
-                active_suborders = [so for so in order.suborders if so.status != "cancelled"]
+                active_suborders = [
+                    so for so in order.suborders if so.status != "cancelled"
+                ]
                 if len(active_suborders) == 0:
                     order.status = "cancelled"
                     await order.save(db)
 
                 await dispatch_event(
                     EventNames.BUYER_WALLET_CREDIT,
-                    BuyerWalletCreditEvent(user_id=str(order.user_id), amount=refund_amount),
+                    BuyerWalletCreditEvent(
+                        user_id=str(order.user_id), amount=refund_amount
+                    ),
                     db=db,
                     redis=redis,
                 )
@@ -346,7 +356,9 @@ async def dispatch_event(
 
         order = suborder.order
         if order:
-            active_suborders = [so for so in order.suborders if so.status != "cancelled"]
+            active_suborders = [
+                so for so in order.suborders if so.status != "cancelled"
+            ]
             if len(active_suborders) == 0:
                 order.status = "cancelled"
                 await order.save(db)
@@ -354,7 +366,9 @@ async def dispatch_event(
             if total_refund > 0:
                 await dispatch_event(
                     EventNames.BUYER_WALLET_CREDIT,
-                    BuyerWalletCreditEvent(user_id=str(order.user_id), amount=total_refund),
+                    BuyerWalletCreditEvent(
+                        user_id=str(order.user_id), amount=total_refund
+                    ),
                     db=db,
                     redis=redis,
                 )

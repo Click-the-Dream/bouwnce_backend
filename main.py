@@ -62,19 +62,20 @@ async def fastapi_lifespan(app: FastAPI):
 def custom_generate_unique_id(route: APIRoute) -> str:
     return f"{route.tags[0]}-{route.name}"
 
-is_prod = True if settings.FASTAPI_ENV == 'production' else False
+
+is_prod = settings.FASTAPI_ENV == "production"
 
 if is_prod:
     app = FastAPI(
-    title=settings.PROJECT_NAME,
-    docs_url="/api/docs",
-    redoc_url=None,
-    openapi_url=f"{settings.API_STR}/openapi.json",
-    generate_unique_id_function=custom_generate_unique_id,
-    version="1.0.0",
-    description="APIs for the Bouwnce Backend",
-    lifespan=fastapi_lifespan,
-)
+        title=settings.PROJECT_NAME,
+        docs_url="/api/docs",
+        redoc_url=None,
+        openapi_url=f"{settings.API_STR}/openapi.json",
+        generate_unique_id_function=custom_generate_unique_id,
+        version="1.0.0",
+        description="APIs for the Bouwnce Backend",
+        lifespan=fastapi_lifespan,
+    )
 else:
     app = FastAPI(
         title=settings.PROJECT_NAME,
@@ -124,7 +125,13 @@ app.openapi = custom_openapi
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://www.bouwnce.com", "https://dev.bouwnce.com", "http://localhost:5173", "https://bouwnce.com", "http://localhost:3000"],
+    allow_origins=[
+        "https://www.bouwnce.com",
+        "https://dev.bouwnce.com",
+        "http://localhost:5173",
+        "https://bouwnce.com",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -153,10 +160,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-
 app.include_router(api_router, prefix=settings.API_STR)
 
 
 if __name__ == "__main__":
-
     uvicorn.run("main:app", host="0.0.0.0", port=settings.PORT)

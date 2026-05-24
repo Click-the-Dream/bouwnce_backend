@@ -1,7 +1,6 @@
 from decouple import config
 from pydantic import BaseModel, EmailStr
 
-
 # Redis keys / streams
 MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
 PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
@@ -34,9 +33,15 @@ class Config(BaseModel):
     CHAT_VIDEOS_PRESET: str = config("CHAT_VIDEOS_PRESET", default="chat_videos")
     CHAT_FILES_PRESET: str = config("CHAT_FILES_PRESET", default="chat_files")
 
-    CHAT_IMAGES_MAX_BYTES: int = config("CHAT_IMAGES_MAX_BYTES", default=10_485_760, cast=int)
-    CHAT_VIDEOS_MAX_BYTES: int = config("CHAT_VIDEOS_MAX_BYTES", default=26_214_400, cast=int)
-    CHAT_FILES_MAX_BYTES: int = config("CHAT_FILES_MAX_BYTES", default=10_485_760, cast=int)
+    CHAT_IMAGES_MAX_BYTES: int = config(
+        "CHAT_IMAGES_MAX_BYTES", default=10_485_760, cast=int
+    )
+    CHAT_VIDEOS_MAX_BYTES: int = config(
+        "CHAT_VIDEOS_MAX_BYTES", default=26_214_400, cast=int
+    )
+    CHAT_FILES_MAX_BYTES: int = config(
+        "CHAT_FILES_MAX_BYTES", default=10_485_760, cast=int
+    )
 
     CHAT_IMAGES_ALLOWED_FORMATS: str = config(
         "CHAT_IMAGES_ALLOWED_FORMATS", default="jpg,jpeg,png,webp"

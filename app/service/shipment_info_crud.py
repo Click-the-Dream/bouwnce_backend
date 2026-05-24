@@ -11,7 +11,6 @@ from app.utils.responses import response_builder
 
 
 class ShipmentInfoCRUDService:
-
     async def create(
         self, db: AsyncSession, data: dict[str, Any], store: Store
     ) -> dict[str, Any]:
@@ -24,7 +23,7 @@ class ShipmentInfoCRUDService:
         return response_builder(
             status_code=status.HTTP_201_CREATED,
             status="success",
-            message="Shipment info created successfully."
+            message="Shipment info created successfully.",
         )
 
     async def get(self, store: Store) -> dict[str, Any]:

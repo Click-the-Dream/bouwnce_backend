@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
-from sqlalchemy import Boolean, DateTime, Enum, String, or_, select, text, JSON
+from sqlalchemy import JSON, Boolean, DateTime, Enum, String, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,9 @@ from app.models import BaseModel
 from app.models.wallet import UserWallet
 
 if TYPE_CHECKING:
+    from app.matching_ground.model.interest import Interest
+    from app.matching_ground.model.user_geolocation import UserGeolocation
+    from app.matching_ground.model.user_interest import UserInterest
     from app.models import (
         Cart,
         Order,
@@ -20,9 +23,6 @@ if TYPE_CHECKING:
         Store,
         Verification,
     )
-    from app.matching_ground.model.user_interest import UserInterest
-    from app.matching_ground.model.interest import Interest
-    from app.matching_ground.model.user_geolocation import UserGeolocation
 
 
 class User(BaseModel):
@@ -35,6 +35,7 @@ class User(BaseModel):
     date_of_birth: Mapped[str | None] = mapped_column(String, nullable=True)
     institution: Mapped[str | None] = mapped_column(String, nullable=True)
     profile_pic: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    profile_banner: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     role: Mapped[str] = mapped_column(
         Enum("user", "vendor", "admin", name="user_role_enum"), default="user"
@@ -80,13 +81,13 @@ class User(BaseModel):
         back_populates="user", uselist=False, lazy="selectin"
     )
 
-    user_interest: Mapped[list["UserInterest"]] = relationship(back_populates="user")
-    interests: Mapped[list["Interest"]] = relationship(
+    user_interest: Mapped[list[UserInterest]] = relationship(back_populates="user")
+    interests: Mapped[list[Interest]] = relationship(
         secondary="user_interests",
         back_populates="users",
         viewonly=True,
     )
-    geolocation: Mapped["UserGeolocation"] = relationship(back_populates="user")
+    geolocation: Mapped[UserGeolocation] = relationship(back_populates="user")
 
     def to_dict(self):
         data_dict = super().to_dict()

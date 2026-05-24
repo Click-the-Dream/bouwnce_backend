@@ -23,7 +23,6 @@ async def warn_vendor_to_accept_order():
         redis = await get_redis_client()
 
         async with get_async_session() as db:
-
             stmt = (
                 select(SubOrder)
                 .options(selectinload(SubOrder.store))

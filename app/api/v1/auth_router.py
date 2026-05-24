@@ -6,7 +6,6 @@ from app.api.dependencies import (
     dbSessionDep,
     redisSessionDep,
 )
-
 from app.core.rate_limiter import rate_limiter
 from app.schemas.user import (
     CodeVerification,

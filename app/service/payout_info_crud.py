@@ -12,7 +12,6 @@ from app.utils.responses import response_builder
 
 
 class PayoutInfoCRUDService:
-
     async def create(
         self, db: AsyncSession, data: dict[str, Any], store: Store
     ) -> dict[str, Any]:

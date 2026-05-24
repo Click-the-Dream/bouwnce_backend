@@ -25,7 +25,7 @@ async def get_me(current_user: CurrentUser, db: dbSessionDep) -> UserResponse:
 
 @router.get("/{user_id}", summary="Get user by ID", response_model=UserResponse)
 async def get_user_by_id(
-    user_id: str, db: dbSessionDep, _: CurrentActiveUser
+    user_id: str, db: dbSessionDep,
 ) -> UserResponse:
 
     return await user_service.get_user_by_id(user_id, db)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+import sqlalchemy as sa
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,7 +118,8 @@ class BuddySearchService:
         interest_value = case(
             (
                 union_count > 0,
-                shared_interest_count.cast(func.float) / union_count.cast(func.float),
+                sa.cast(shared_interest_count, sa.Float)
+                / sa.cast(union_count, sa.Float),
             ),
             else_=0.0,
         )

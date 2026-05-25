@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 
@@ -309,23 +310,19 @@ class MobileEventsService:
         await websocket.accept()
 
         # Ensure Bouwnce inbox conversation exists with welcome message
-        try:
+        with contextlib.suppress(Exception):
             async with get_async_session() as db:
                 await bouwnce_dm_service.ensure_welcome_conversation(
                     db=db, redis=redis, user_id=str(user_id), commit=True
                 )
-        except Exception:
-            pass
 
         await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
         await self._publish_presence(redis=redis, user_id=str(user_id), online=True)
 
-        try:
+        with contextlib.suppress(Exception):
             await self._send_presence_snapshot(
                 websocket=websocket, redis=redis, user_id=str(user_id)
             )
-        except Exception:
-            pass
 
         pubsub_task = asyncio.create_task(
             self._forward_pubsub(websocket=websocket, pubsub=pubsub)
@@ -598,13 +595,11 @@ class MobileEventsService:
             presence_task.cancel()
             await pubsub.unsubscribe(f"chat:user:{user_id}")
             await pubsub.close()
-            try:
+            with contextlib.suppress(Exception):
                 await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
                 await self._publish_presence(
                     redis=redis, user_id=str(user_id), online=False
                 )
-            except Exception:
-                pass
 
 
 mobile_events_service = MobileEventsService()

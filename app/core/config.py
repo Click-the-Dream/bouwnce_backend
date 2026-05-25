@@ -97,6 +97,13 @@ class Config(BaseModel):
     )
     CELERY_ALWAYS_EAGER: bool = config("CELERY_ALWAYS_EAGER", default=False, cast=bool)
 
+    # Newsletter safety (avoid blasting real users in testing)
+    NEWSLETTER_USE_TEST_RECIPIENTS: bool = config(
+        "NEWSLETTER_USE_TEST_RECIPIENTS", default=False, cast=bool
+    )
+    # Comma-separated list. Supports: "email" or "email:Name"
+    NEWSLETTER_TEST_RECIPIENTS: str = config("NEWSLETTER_TEST_RECIPIENTS", default="")
+
     # QSTASH
     QSTASH_API_KEY: str = config("QSTASH_API_KEY", default="")
     QSTASH_URL: str = config("QSTASH_URL", default="")

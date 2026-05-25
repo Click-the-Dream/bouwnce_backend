@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import CurrentAdmin, dbSessionDep, redisSessionDep
@@ -10,7 +10,9 @@ router = APIRouter(prefix="/admin/bouwnce", tags=["Admin"])
 
 
 class AdminBouwnceMessagePayload(BaseModel):
-    user_ids: list[str] = Field(..., min_length=1, description="Target user ids (uuid)")
+    user_ids: list[str] = Field(
+        default_factory=list, description="Target user ids (uuid)"
+    )
     body: str = Field(..., min_length=1, max_length=4000)
 
 
@@ -25,7 +27,10 @@ async def send_bouwnce_message(
     db: dbSessionDep,
     redis: redisSessionDep,
     _: CurrentAdmin,
+    all_users: bool = Query(
+        False, description="If true, send to all active users (ignores user_ids)"
+    ),
 ) -> dict:
     return await admin_bouwnce_service.send_message(
-        db=db, redis=redis, user_ids=payload.user_ids, body=payload.body
+        db=db, redis=redis, user_ids=payload.user_ids, body=payload.body, all_users=all_users
     )

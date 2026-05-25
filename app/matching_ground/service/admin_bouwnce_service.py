@@ -19,22 +19,37 @@ class AdminBouwnceService:
         redis,
         user_ids: list[str],
         body: str,
+        all_users: bool = False,
         commit: bool = True,
     ) -> dict:
         system_user = await bouwnce_dm_service.get_system_user(db=db)
         if system_user is None:
             raise BadRequestException("Bouwnce system user not found or not configured")
 
-        # Validate users exist (strict).
-        for uid in user_ids:
-            exists = (
-                await db.execute(select(User.id).where(User.id == uid))
-            ).scalar_one_or_none()
-            if exists is None:
-                raise NotFoundException(f"User not found: {uid}")
+        if all_users:
+            user_id_rows = await db.execute(
+                select(User.id).where(
+                    User.is_active.is_(True),
+                    User.is_deleted.is_(False),
+                    User.id != system_user.id,
+                )
+            )
+            resolved_user_ids = [str(uid) for uid in user_id_rows.scalars().all()]
+        else:
+            if not user_ids:
+                raise BadRequestException("user_ids is required when all_users=false")
+
+            # Validate users exist (strict).
+            for uid in user_ids:
+                exists = (
+                    await db.execute(select(User.id).where(User.id == uid))
+                ).scalar_one_or_none()
+                if exists is None:
+                    raise NotFoundException(f"User not found: {uid}")
+            resolved_user_ids = [str(uid) for uid in user_ids if str(uid) != str(system_user.id)]
 
         sent: list[dict] = []
-        for uid in user_ids:
+        for uid in resolved_user_ids:
             await bouwnce_dm_service.ensure_welcome_conversation(
                 db=db, redis=redis, user_id=str(uid), commit=False
             )

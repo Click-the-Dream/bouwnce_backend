@@ -183,7 +183,9 @@ class NewsLetterService:
             raise NotFoundException("Newsletter not found") from None
 
         if settings.NEWSLETTER_USE_TEST_RECIPIENTS:
-            recipients = self._parse_test_recipients(settings.NEWSLETTER_TEST_RECIPIENTS)
+            recipients = self._parse_test_recipients(
+                settings.NEWSLETTER_TEST_RECIPIENTS
+            )
             if not recipients:
                 raise BadRequestException(
                     "NEWSLETTER_TEST_RECIPIENTS is empty but NEWSLETTER_USE_TEST_RECIPIENTS=true"

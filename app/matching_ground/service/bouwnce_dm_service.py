@@ -11,12 +11,34 @@ from app.models.user import User
 
 class BouwnceDMService:
     async def get_system_user(self, *, db: AsyncSession) -> User | None:
-        if not settings.BOUWNCE_SYSTEM_EMAIL:
-            return None
-        result = await db.execute(
-            select(User).where(User.email == settings.BOUWNCE_SYSTEM_EMAIL)
-        )
-        return result.scalar_one_or_none()
+        if settings.BOUWNCE_SYSTEM_EMAIL:
+            by_email = (
+                await db.execute(
+                    select(User).where(User.email == settings.BOUWNCE_SYSTEM_EMAIL)
+                )
+            ).scalar_one_or_none()
+            if by_email is not None:
+                return by_email
+
+        if settings.BOUWNCE_SYSTEM_USERNAME:
+            by_username = (
+                await db.execute(
+                    select(User).where(User.username == settings.BOUWNCE_SYSTEM_USERNAME)
+                )
+            ).scalar_one_or_none()
+            if by_username is not None:
+                return by_username
+
+        if settings.BOUWNCE_SYSTEM_FULL_NAME:
+            by_name = (
+                await db.execute(
+                    select(User).where(User.full_name == settings.BOUWNCE_SYSTEM_FULL_NAME)
+                )
+            ).scalar_one_or_none()
+            if by_name is not None:
+                return by_name
+
+        return None
 
     async def ensure_welcome_conversation(
         self,

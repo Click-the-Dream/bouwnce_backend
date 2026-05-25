@@ -286,11 +286,30 @@ class MatchLifecycleService:
             session, request.requester_id, request.target_user_id
         )
 
+        other_user = await User.get_by_id(str(request.target_user_id), session)
+        other_display = (
+            other_user.username
+            or other_user.full_name
+            or "your match"
+        )
+
         notif_data = {
             "user_id": request.requester_id,
-            "title": "Match accepted",
-            "body": "Your match request has been accepted. Your 3-day chat window is now open.",
+            "title": f"Match accepted · {other_display}",
+            "body": f"You matched with {other_display}. Your 3-day chat window is now open.",
             "event_type": "match_accepted",
+            "payload": {
+                "route": "chat.conversation",
+                "conversation_id": str(conversation.id),
+                "match_id": str(match.id),
+                "request_id": str(request.id),
+                "other_user": {
+                    "id": str(other_user.id),
+                    "username": other_user.username,
+                    "full_name": other_user.full_name,
+                    "profile_pic": other_user.profile_pic,
+                },
+            },
         }
         await Notification.create(
             data=notif_data,

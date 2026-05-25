@@ -5,7 +5,7 @@ import json
 import uuid
 
 from fastapi import WebSocket
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX, settings
 from app.core.security import verify_token
@@ -18,7 +18,9 @@ from app.matching_ground.schema.chat import (
     UploadMediaPayload,
 )
 from app.matching_ground.service.chat_service import chat_service
-from app.models.chat import Conversation
+from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
+from app.matching_ground.model.notification import Notification
+from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.utils.exception import BadRequestException, ForbiddenException, NotFoundException
 
@@ -77,6 +79,68 @@ class MobileEventsService:
         except Exception:
             data = {"raw": value}
         return {"status": "success", "data": data}
+
+    async def get_unread_summary(self, *, db, user_id: str, page_size: int = 20) -> dict:
+        unread_stmt = (
+            select(Message.conversation_id, func.count(Message.id).label("unread_count"))
+            .where(Message.recipient_id == user_id, Message.read_at.is_(None))
+            .group_by(Message.conversation_id)
+        )
+        unread_rows = list((await db.execute(unread_stmt)).all())
+        unread_by_conv = {str(cid): int(cnt) for cid, cnt in unread_rows}
+        conv_ids = list(unread_by_conv.keys())
+
+        conversations: list[Conversation] = []
+        last_by_conversation_id: dict[str, Message] = {}
+        if conv_ids:
+            conv_result = await db.execute(
+                select(Conversation)
+                .where(Conversation.id.in_(conv_ids))
+                .order_by(Conversation.last_message_at.desc())
+            )
+            conversations = list(conv_result.scalars().all())
+
+            last_stmt = (
+                select(Message)
+                .where(Message.conversation_id.in_(conv_ids))
+                .order_by(Message.conversation_id, Message.created_at.desc())
+                .distinct(Message.conversation_id)
+            )
+            last_result = await db.execute(last_stmt)
+            last_msgs = list(last_result.scalars().all())
+            last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
+
+        notif_count_stmt = select(func.count()).select_from(Notification).where(
+            Notification.user_id == user_id, Notification.read_at.is_(None), Notification.is_deleted.is_(False)
+        )
+        notifications_unread = int((await db.execute(notif_count_stmt)).scalar() or 0)
+
+        notif_list_stmt = (
+            select(Notification)
+            .where(Notification.user_id == user_id, Notification.read_at.is_(None), Notification.is_deleted.is_(False))
+            .order_by(Notification.created_at.desc())
+            .limit(page_size)
+        )
+        notif_rows = list((await db.execute(notif_list_stmt)).scalars().all())
+
+        conv_items: list[dict] = []
+        for conv in conversations:
+            conv_data = chat_service._serialize_conversation(conv, current_user_id=user_id)
+            last = last_by_conversation_id.get(str(conv.id))
+            conv_data["last_message"] = last.to_dict() if last is not None else False
+            conv_data["unread_count"] = unread_by_conv.get(str(conv.id), 0)
+            conv_items.append(conv_data)
+
+        return {
+            "notifications": {
+                "unread_count": notifications_unread,
+                "items": [n.to_dict() for n in notif_rows],
+            },
+            "chats": {
+                "unread_conversations": len(conv_items),
+                "items": conv_items,
+            },
+        }
 
     async def _publish_presence(self, *, redis, user_id: str, online: bool) -> None:
         async with get_async_session() as db:
@@ -207,6 +271,15 @@ class MobileEventsService:
         await pubsub.subscribe(f"chat:user:{user_id}")
 
         await websocket.accept()
+
+        # Ensure Bouwnce inbox conversation exists with welcome message
+        try:
+            async with get_async_session() as db:
+                await bouwnce_dm_service.ensure_welcome_conversation(
+                    db=db, redis=redis, user_id=str(user_id), commit=True
+                )
+        except Exception:
+            pass
 
         await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
         await self._publish_presence(redis=redis, user_id=str(user_id), online=True)
@@ -441,4 +514,3 @@ class MobileEventsService:
 
 
 mobile_events_service = MobileEventsService()
-

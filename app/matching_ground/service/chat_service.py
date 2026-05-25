@@ -8,6 +8,7 @@ from fastapi import status
 from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.utils.exception import ForbiddenException, NotFoundException
@@ -126,6 +127,12 @@ class ChatService:
         as_response: bool = False,
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
+        if (
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
+            and sender.email != settings.BOUWNCE_SYSTEM_EMAIL
+        ):
+            raise ForbiddenException("You cannot reply to Bouwnce inbox")
         conversation = await self.get_or_create_conversation(
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
@@ -239,6 +246,12 @@ class ChatService:
         as_response: bool = False,
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
+        if (
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
+            and sender.email != settings.BOUWNCE_SYSTEM_EMAIL
+        ):
+            raise ForbiddenException("You cannot reply to Bouwnce inbox")
         conversation = await self.get_or_create_conversation(
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )

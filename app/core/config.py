@@ -53,7 +53,14 @@ class Config(BaseModel):
         "CHAT_FILES_ALLOWED_FORMATS", default="pdf,doc,docx,xls,xlsx,ppt,pptx"
     )
 
-    # Optional self-ping job (used to keep some hosts from idling)
+    BOUWNCE_SYSTEM_EMAIL: str = config("BOUWNCE_SYSTEM_EMAIL", default="support@bouwnce.com")
+    BOUWNCE_SYSTEM_USERNAME: str = config("BOUWNCE_SYSTEM_USERNAME", default="bouwnce")
+    BOUWNCE_SYSTEM_FULL_NAME: str = config("BOUWNCE_SYSTEM_FULL_NAME", default="Bouwnce")
+    BOUWNCE_WELCOME_MESSAGE: str = config(
+        "BOUWNCE_WELCOME_MESSAGE",
+        default="Welcome to Bouwnce! This is the official Bouwnce inbox. We'll send you updates here. From Dev Zion 😎😤",
+    )
+
     SELF_PING_ENABLED: bool = config("SELF_PING_ENABLED", default=False, cast=bool)
     SELF_PING_URL: str | None = config("SELF_PING_URL", default=None)
     SELF_PING_ATTEMPTS: int = config("SELF_PING_ATTEMPTS", default=3, cast=int)

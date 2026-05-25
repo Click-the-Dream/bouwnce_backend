@@ -59,6 +59,12 @@ class BouwnceDMService:
         if str(system_user.id) == str(user_id):
             return
 
+        role = (
+            await db.execute(select(User.role).where(User.id == user_id))
+        ).scalar_one_or_none()
+        if role == "admin":
+            return
+
         conversation = await chat_service.get_or_create_conversation(
             db=db, user1_id=str(system_user.id), user2_id=str(user_id)
         )

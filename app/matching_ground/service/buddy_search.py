@@ -111,7 +111,9 @@ class BuddySearchService:
                         func.distinct(
                             case(
                                 (
-                                    UserInterest.interest_id.in_(list(query_interest_ids)),
+                                    UserInterest.interest_id.in_(
+                                        list(query_interest_ids)
+                                    ),
                                     UserInterest.interest_id,
                                 ),
                                 else_=None,
@@ -140,7 +142,9 @@ class BuddySearchService:
             interest_stats_sq.c.shared_interest_count, 0
         )
 
-        union_count = (cand_interest_count + query_interest_count) - shared_interest_count
+        union_count = (
+            cand_interest_count + query_interest_count
+        ) - shared_interest_count
         interest_value = case(
             (
                 union_count > 0,
@@ -163,15 +167,15 @@ class BuddySearchService:
                 self.user_model.full_name,
                 self.user_model.profile_pic,
                 self.user_model.bio,
-                (
-                    distance_expr
-                    if distance_expr is not None
-                    else sa.null()
-                ).label("distance_km"),
+                (distance_expr if distance_expr is not None else sa.null()).label(
+                    "distance_km"
+                ),
                 score_expr.label("score"),
             )
             .outerjoin(candidate_geo, candidate_geo.user_id == self.user_model.id)
-            .outerjoin(interest_stats_sq, interest_stats_sq.c.user_id == self.user_model.id)
+            .outerjoin(
+                interest_stats_sq, interest_stats_sq.c.user_id == self.user_model.id
+            )
             .where(
                 self.user_model.id != requester_id, self.user_model.is_active.is_(True)
             )

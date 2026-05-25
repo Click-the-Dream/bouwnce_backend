@@ -4,7 +4,6 @@ from app.api.dependencies import CurrentAdmin, dbSessionDep
 from app.schemas.newsletter import (
     NewsLetterCreate,
     NewsLetterResponse,
-    NewsLetterSendRequest,
     NewsLetterSendResponse,
     NewsLetterUpdate,
     PaginatedNewsLetterResponse,
@@ -68,20 +67,14 @@ async def initiate_broadcast(newsletter_id: str, db: dbSessionDep, _: CurrentAdm
 )
 async def send_newsletter(
     newsletter_id: str,
-    payload: NewsLetterSendRequest,
     background_tasks: BackgroundTasks,
     db: dbSessionDep,
     _: CurrentAdmin,
-    all_users: bool = Query(
-        True, description="If true, send to all active users (ignores emails)"
-    ),
 ):
     return await newsletter_service.send_newsletter(
         newsletter_id=newsletter_id,
         db=db,
         background_task=background_tasks,
-        all_users=all_users,
-        emails=[str(e) for e in payload.emails],
     )
 
 

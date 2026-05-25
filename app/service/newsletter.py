@@ -173,8 +173,6 @@ class NewsLetterService:
         newsletter_id: str,
         db: AsyncSession,
         background_task: BackgroundTasks,
-        all_users: bool = False,
-        emails: list[str] | None = None,
     ) -> dict[str, Any]:
         if not is_valid_uuid(newsletter_id):
             raise BadRequestException("Invalid newsletter Id")
@@ -184,31 +182,23 @@ class NewsLetterService:
         except ValueError:
             raise NotFoundException("Newsletter not found") from None
 
-        if all_users:
-            if settings.NEWSLETTER_USE_TEST_RECIPIENTS:
-                recipients = self._parse_test_recipients(
-                    settings.NEWSLETTER_TEST_RECIPIENTS
+        if settings.NEWSLETTER_USE_TEST_RECIPIENTS:
+            recipients = self._parse_test_recipients(settings.NEWSLETTER_TEST_RECIPIENTS)
+            if not recipients:
+                raise BadRequestException(
+                    "NEWSLETTER_TEST_RECIPIENTS is empty but NEWSLETTER_USE_TEST_RECIPIENTS=true"
                 )
-                if not recipients:
-                    raise BadRequestException(
-                        "NEWSLETTER_TEST_RECIPIENTS is empty but NEWSLETTER_USE_TEST_RECIPIENTS=true"
-                    )
-            else:
-                rows = await db.execute(
-                    select(User.email, User.full_name, User.username).where(
-                        User.is_active.is_(True), User.is_deleted.is_(False)
-                    )
-                )
-                recipients = [
-                    (email, (full_name or username or "there"))
-                    for email, full_name, username in rows.all()
-                    if email
-                ]
         else:
-            emails = [e.strip() for e in (emails or []) if e and e.strip()]
-            if not emails:
-                raise BadRequestException("emails is required when all_users=false")
-            recipients = [(email, "there") for email in sorted(set(emails))]
+            rows = await db.execute(
+                select(User.email, User.full_name, User.username).where(
+                    User.is_active.is_(True), User.is_deleted.is_(False)
+                )
+            )
+            recipients = [
+                (email, (full_name or username or "there"))
+                for email, full_name, username in rows.all()
+                if email
+            ]
 
         newsletter.status = NewsLetterStatusEnum.SENDING.value
         await newsletter.save(db)
@@ -239,7 +229,7 @@ class NewsLetterService:
         return response_builder(
             status_code=status.HTTP_200_OK,
             message="Newsletter queued successfully",
-            data={"sent": len(recipients), "all_users": all_users},
+            data={"sent": len(recipients)},
         )
 
     async def broadcast_newsletter(
@@ -249,8 +239,6 @@ class NewsLetterService:
             newsletter_id=newsletter_id,
             db=db,
             background_task=background_task,
-            all_users=True,
-            emails=None,
         )
 
     async def update_newsletter(

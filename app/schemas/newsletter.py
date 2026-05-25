@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 from app.utils.responses import BaseResponse
 
@@ -65,21 +65,8 @@ class PaginatedNewsLetterResponse(BaseResponse):
     ]
 
 
-class NewsLetterSendRequest(BaseModel):
-    emails: Annotated[
-        list[EmailStr],
-        Field(
-            default_factory=list,
-            description="Target emails (ignored if all_users=true)",
-        ),
-    ]
-
-
 class NewsLetterSendResponseSchema(BaseModel):
     sent: Annotated[int, Field(..., description="How many emails were queued/sent")]
-    all_users: Annotated[
-        bool, Field(..., description="Whether it was sent to all users")
-    ]
 
 
 class NewsLetterSendResponse(BaseResponse):

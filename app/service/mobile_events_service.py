@@ -309,6 +309,28 @@ class MobileEventsService:
 
         await websocket.accept()
 
+        # Tell client who the Bouwnce system user is (for disabling replies in UI).
+        with contextlib.suppress(Exception):
+            async with get_async_session() as db:
+                system_user = await bouwnce_dm_service.get_system_user(db=db)
+                if system_user is not None:
+                    await websocket.send_json(
+                        {
+                            "type": "bouwnce.system",
+                            "data": {
+                                "user": {
+                                    "id": str(system_user.id),
+                                    "email": system_user.email,
+                                    "username": system_user.username,
+                                    "full_name": system_user.full_name,
+                                    "profile_pic": chat_service._serialize_profile_pic(
+                                        system_user
+                                    ),
+                                }
+                            },
+                        }
+                    )
+
         # Ensure Bouwnce inbox conversation exists with welcome message
         with contextlib.suppress(Exception):
             async with get_async_session() as db:

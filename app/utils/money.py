@@ -9,4 +9,3 @@ def naira_to_kobo(amount_naira: float) -> int:
             Decimal("1"), rounding=ROUND_HALF_UP
         )
     )
-

@@ -22,6 +22,8 @@ from app.utils.exception import (
     ForbiddenException,
     NotFoundException,
 )
+
+
 class MatchLifecycleService:
     @staticmethod
     def _parse_radius_km(message: str) -> float | None:
@@ -287,11 +289,7 @@ class MatchLifecycleService:
         )
 
         other_user = await User.get_by_id(str(request.target_user_id), session)
-        other_display = (
-            other_user.username
-            or other_user.full_name
-            or "your match"
-        )
+        other_display = other_user.username or other_user.full_name or "your match"
 
         notif_data = {
             "user_id": request.requester_id,

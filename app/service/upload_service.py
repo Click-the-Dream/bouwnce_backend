@@ -11,7 +11,9 @@ from app.utils.upload_utils import safe_slug_from_filename, split_csv
 
 class UploadService:
     @staticmethod
-    def sign_chat_upload(*, preset: str, folder: str, file_name: str | None = None) -> dict:
+    def sign_chat_upload(
+        *, preset: str, folder: str, file_name: str | None = None
+    ) -> dict:
         timestamp = int(time.time())
         slug = safe_slug_from_filename(file_name or "")
         public_id = f"{uuid4()}_{slug}" if slug else str(uuid4())

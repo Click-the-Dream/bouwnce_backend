@@ -7,22 +7,30 @@ import uuid
 from fastapi import WebSocket
 from sqlalchemy import func, select
 
-from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX, settings
+from app.core.config import (
+    MOBILE_EVENTS_STREAM_KEY,
+    PAYMENT_PROGRESS_KEY_PREFIX,
+    settings,
+)
 from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
+from app.matching_ground.model.notification import Notification
 from app.matching_ground.schema.chat import (
     MarkConversationReadPayload,
     SendMessagePayload,
     TypingPayload,
     UploadMediaPayload,
 )
-from app.matching_ground.service.chat_service import chat_service
 from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
-from app.matching_ground.model.notification import Notification
+from app.matching_ground.service.chat_service import chat_service
 from app.models.chat import Conversation, Message
 from app.models.user import User
-from app.utils.exception import BadRequestException, ForbiddenException, NotFoundException
+from app.utils.exception import (
+    BadRequestException,
+    ForbiddenException,
+    NotFoundException,
+)
 
 PRESENCE_KEY_PREFIX = "presence:user:"
 PRESENCE_TTL_SECONDS = 75
@@ -80,9 +88,13 @@ class MobileEventsService:
             data = {"raw": value}
         return {"status": "success", "data": data}
 
-    async def get_unread_summary(self, *, db, user_id: str, page_size: int = 20) -> dict:
+    async def get_unread_summary(
+        self, *, db, user_id: str, page_size: int = 20
+    ) -> dict:
         unread_stmt = (
-            select(Message.conversation_id, func.count(Message.id).label("unread_count"))
+            select(
+                Message.conversation_id, func.count(Message.id).label("unread_count")
+            )
             .where(Message.recipient_id == user_id, Message.read_at.is_(None))
             .group_by(Message.conversation_id)
         )
@@ -110,14 +122,24 @@ class MobileEventsService:
             last_msgs = list(last_result.scalars().all())
             last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
 
-        notif_count_stmt = select(func.count()).select_from(Notification).where(
-            Notification.user_id == user_id, Notification.read_at.is_(None), Notification.is_deleted.is_(False)
+        notif_count_stmt = (
+            select(func.count())
+            .select_from(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.read_at.is_(None),
+                Notification.is_deleted.is_(False),
+            )
         )
         notifications_unread = int((await db.execute(notif_count_stmt)).scalar() or 0)
 
         notif_list_stmt = (
             select(Notification)
-            .where(Notification.user_id == user_id, Notification.read_at.is_(None), Notification.is_deleted.is_(False))
+            .where(
+                Notification.user_id == user_id,
+                Notification.read_at.is_(None),
+                Notification.is_deleted.is_(False),
+            )
             .order_by(Notification.created_at.desc())
             .limit(page_size)
         )
@@ -125,7 +147,9 @@ class MobileEventsService:
 
         conv_items: list[dict] = []
         for conv in conversations:
-            conv_data = chat_service._serialize_conversation(conv, current_user_id=user_id)
+            conv_data = chat_service._serialize_conversation(
+                conv, current_user_id=user_id
+            )
             last = last_by_conversation_id.get(str(conv.id))
             conv_data["last_message"] = last.to_dict() if last is not None else False
             conv_data["unread_count"] = unread_by_conv.get(str(conv.id), 0)
@@ -176,7 +200,9 @@ class MobileEventsService:
         except Exception:
             return
 
-    async def _send_presence_snapshot(self, *, websocket: WebSocket, redis, user_id: str) -> None:
+    async def _send_presence_snapshot(
+        self, *, websocket: WebSocket, redis, user_id: str
+    ) -> None:
         async with get_async_session() as db:
             partner_ids = await chat_service.get_conversation_partner_ids(
                 db=db, user_id=str(user_id)
@@ -184,7 +210,9 @@ class MobileEventsService:
             partner_id_list = sorted({str(pid) for pid in partner_ids})
             users_by_id: dict[str, User] = {}
             if partner_id_list:
-                users_result = await db.execute(select(User).where(User.id.in_(partner_id_list)))
+                users_result = await db.execute(
+                    select(User).where(User.id.in_(partner_id_list))
+                )
                 users_by_id = {str(u.id): u for u in users_result.scalars().all()}
 
         keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_id_list]
@@ -205,7 +233,9 @@ class MobileEventsService:
                     "online": bool(val),
                 }
             )
-        await websocket.send_json({"type": "user.online.snapshot", "data": {"items": items}})
+        await websocket.send_json(
+            {"type": "user.online.snapshot", "data": {"items": items}}
+        )
 
     async def _forward_pubsub(self, *, websocket: WebSocket, pubsub) -> None:
         try:
@@ -224,7 +254,9 @@ class MobileEventsService:
         except Exception:
             return
 
-    async def _forward_stream(self, *, websocket: WebSocket, redis, user_id: str) -> None:
+    async def _forward_stream(
+        self, *, websocket: WebSocket, redis, user_id: str
+    ) -> None:
         last_id = "$"
         try:
             while True:
@@ -245,7 +277,11 @@ class MobileEventsService:
                         if str(payload_obj.get("user_id") or "") != str(user_id):
                             continue
                         await websocket.send_json(
-                            {"type": "event", "event_name": event_name, "payload": payload_obj}
+                            {
+                                "type": "event",
+                                "event_name": event_name,
+                                "payload": payload_obj,
+                            }
                         )
         except Exception:
             return
@@ -285,13 +321,21 @@ class MobileEventsService:
         await self._publish_presence(redis=redis, user_id=str(user_id), online=True)
 
         try:
-            await self._send_presence_snapshot(websocket=websocket, redis=redis, user_id=str(user_id))
+            await self._send_presence_snapshot(
+                websocket=websocket, redis=redis, user_id=str(user_id)
+            )
         except Exception:
             pass
 
-        pubsub_task = asyncio.create_task(self._forward_pubsub(websocket=websocket, pubsub=pubsub))
-        stream_task = asyncio.create_task(self._forward_stream(websocket=websocket, redis=redis, user_id=str(user_id)))
-        presence_task = asyncio.create_task(self._presence_heartbeat(redis=redis, user_id=str(user_id)))
+        pubsub_task = asyncio.create_task(
+            self._forward_pubsub(websocket=websocket, pubsub=pubsub)
+        )
+        stream_task = asyncio.create_task(
+            self._forward_stream(websocket=websocket, redis=redis, user_id=str(user_id))
+        )
+        presence_task = asyncio.create_task(
+            self._presence_heartbeat(redis=redis, user_id=str(user_id))
+        )
 
         try:
             while True:
@@ -339,14 +383,26 @@ class MobileEventsService:
                                 commit=False,
                                 as_response=False,
                             )
-                        except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        except (
+                            NotFoundException,
+                            ForbiddenException,
+                            BadRequestException,
+                        ) as e:
                             await websocket.send_json(
-                                {"type": "error", "error": "chat.send.failed", "message": str(e)}
+                                {
+                                    "type": "error",
+                                    "error": "chat.send.failed",
+                                    "message": str(e),
+                                }
                             )
                             continue
 
                     await websocket.send_json(
-                        {"type": "chat.sent", "client_id": payload.client_id, "data": result}
+                        {
+                            "type": "chat.sent",
+                            "client_id": payload.client_id,
+                            "data": result,
+                        }
                     )
                     continue
 
@@ -364,20 +420,28 @@ class MobileEventsService:
                         continue
 
                     if str(payload.recipient_id) == str(user_id):
-                        await websocket.send_json({"type": "error", "error": "self_send_not_allowed"})
+                        await websocket.send_json(
+                            {"type": "error", "error": "self_send_not_allowed"}
+                        )
                         continue
 
                     media_type = (payload.media_type or "").strip().lower()
                     if media_type not in {"image", "video", "file"}:
-                        await websocket.send_json({"type": "error", "error": "invalid_media_type"})
+                        await websocket.send_json(
+                            {"type": "error", "error": "invalid_media_type"}
+                        )
                         continue
 
                     urls = [u for u in (payload.media_urls or []) if u]
                     if not urls:
-                        await websocket.send_json({"type": "error", "error": "missing_media_urls"})
+                        await websocket.send_json(
+                            {"type": "error", "error": "missing_media_urls"}
+                        )
                         continue
                     if any(not self._is_cloudinary_secure_url(u) for u in urls):
-                        await websocket.send_json({"type": "error", "error": "invalid_media_urls"})
+                        await websocket.send_json(
+                            {"type": "error", "error": "invalid_media_urls"}
+                        )
                         continue
 
                     async with get_async_session() as db:
@@ -400,9 +464,17 @@ class MobileEventsService:
                                 commit=False,
                                 as_response=False,
                             )
-                        except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        except (
+                            NotFoundException,
+                            ForbiddenException,
+                            BadRequestException,
+                        ) as e:
                             await websocket.send_json(
-                                {"type": "error", "error": "chat.upload_media.failed", "message": str(e)}
+                                {
+                                    "type": "error",
+                                    "error": "chat.upload_media.failed",
+                                    "message": str(e),
+                                }
                             )
                             continue
 
@@ -433,9 +505,17 @@ class MobileEventsService:
                                 commit=False,
                                 as_response=False,
                             )
-                        except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        except (
+                            NotFoundException,
+                            ForbiddenException,
+                            BadRequestException,
+                        ) as e:
                             await websocket.send_json(
-                                {"type": "error", "error": "chat.read.failed", "message": str(e)}
+                                {
+                                    "type": "error",
+                                    "error": "chat.read.failed",
+                                    "message": str(e),
+                                }
                             )
                             continue
 
@@ -458,16 +538,26 @@ class MobileEventsService:
                     async with get_async_session() as db:
                         try:
                             conv = await Conversation.get_between(
-                                db, uuid.UUID(str(user_id)), uuid.UUID(str(payload.user_id))
+                                db,
+                                uuid.UUID(str(user_id)),
+                                uuid.UUID(str(payload.user_id)),
                             )
                             if conv is None:
                                 raise NotFoundException("Conversation not found")
 
                             sender = await User.get_by_id(str(user_id), db)
                             targets = {str(conv.user_a_id), str(conv.user_b_id)}
-                        except (NotFoundException, ForbiddenException, BadRequestException) as e:
+                        except (
+                            NotFoundException,
+                            ForbiddenException,
+                            BadRequestException,
+                        ) as e:
                             await websocket.send_json(
-                                {"type": "error", "error": "chat.typing.failed", "message": str(e)}
+                                {
+                                    "type": "error",
+                                    "error": "chat.typing.failed",
+                                    "message": str(e),
+                                }
                             )
                             continue
 
@@ -480,7 +570,9 @@ class MobileEventsService:
                                     "id": str(sender.id),
                                     "username": sender.username,
                                     "full_name": sender.full_name,
-                                    "profile_pic": chat_service._serialize_profile_pic(sender),
+                                    "profile_pic": chat_service._serialize_profile_pic(
+                                        sender
+                                    ),
                                 },
                                 "is_typing": bool(payload.is_typing),
                             },
@@ -508,7 +600,9 @@ class MobileEventsService:
             await pubsub.close()
             try:
                 await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
-                await self._publish_presence(redis=redis, user_id=str(user_id), online=False)
+                await self._publish_presence(
+                    redis=redis, user_id=str(user_id), online=False
+                )
             except Exception:
                 pass
 

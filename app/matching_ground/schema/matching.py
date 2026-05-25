@@ -12,4 +12,3 @@ class MatchInputs:
     user_location: Coordinates
     target_location: Coordinates
     max_distance_km: float
-

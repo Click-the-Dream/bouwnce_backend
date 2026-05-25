@@ -268,7 +268,11 @@ class ChatService:
             body=(body or "").strip(),
             media_type=media_type,
             media_urls=(urls or None),
-            media_name=(file_name.strip() if isinstance(file_name, str) and file_name.strip() else None),
+            media_name=(
+                file_name.strip()
+                if isinstance(file_name, str) and file_name.strip()
+                else None
+            ),
             reply_to_message_id=reply_to_message_id,
         )
         db.add(msg)

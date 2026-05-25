@@ -20,4 +20,3 @@ class BuddySearchResult:
     status: str
     matches: list[BuddyMatch]
     reason: str | None = None
-

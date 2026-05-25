@@ -13,7 +13,9 @@ class BouwnceDMService:
     async def get_system_user(self, *, db: AsyncSession) -> User | None:
         if not settings.BOUWNCE_SYSTEM_EMAIL:
             return None
-        result = await db.execute(select(User).where(User.email == settings.BOUWNCE_SYSTEM_EMAIL))
+        result = await db.execute(
+            select(User).where(User.email == settings.BOUWNCE_SYSTEM_EMAIL)
+        )
         return result.scalar_one_or_none()
 
     async def ensure_welcome_conversation(

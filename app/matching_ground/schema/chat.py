@@ -59,7 +59,9 @@ class UploadMediaPayload(BaseModel):
     ]
     file_name: Annotated[
         str | None,
-        Field(None, max_length=255, description="Optional file name (for file uploads)"),
+        Field(
+            None, max_length=255, description="Optional file name (for file uploads)"
+        ),
     ]
     media_type: Annotated[
         str,

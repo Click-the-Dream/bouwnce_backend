@@ -3,8 +3,7 @@ from datetime import datetime
 from typing import Self
 
 from sqlalchemy import DateTime, ForeignKey, String, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 

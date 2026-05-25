@@ -12,7 +12,6 @@ from alembic import op
 
 from app.core.config import settings
 
-
 revision: str = "a12b9c4d7e81"
 down_revision: str | Sequence[str] | None = "e3a1d9b4c2f7"
 branch_labels: str | Sequence[str] | None = None
@@ -66,5 +65,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute(
-        sa.text("DELETE FROM users WHERE email = :email").bindparams(email=BOUWNCE_EMAIL)
+        sa.text("DELETE FROM users WHERE email = :email").bindparams(
+            email=BOUWNCE_EMAIL
+        )
     )

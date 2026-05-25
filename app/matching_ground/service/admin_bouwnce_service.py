@@ -67,4 +67,3 @@ class AdminBouwnceService:
 
 
 admin_bouwnce_service = AdminBouwnceService()
-

@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.matching_ground.core.interest_normalization import normalize_interest_name
 from app.matching_ground.core.location import Coordinates
-from app.matching_ground.schema.buddy_search import BuddyMatch, BuddySearchResult
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.user_interest import UserInterest
+from app.matching_ground.schema.buddy_search import BuddyMatch, BuddySearchResult
 from app.models.user import User
 
 
@@ -29,7 +29,9 @@ class BuddySearchService:
         interest_hints: set[str] | None = None,
         limit: int = 10,
     ) -> BuddySearchResult:
-        requester_geo = await self.geolocation_model.get_by_user_id(session, requester_id)
+        requester_geo = await self.geolocation_model.get_by_user_id(
+            session, requester_id
+        )
         center = (
             Coordinates(lat=requester_geo.lat, lon=requester_geo.lon)
             if requester_geo is not None
@@ -41,7 +43,9 @@ class BuddySearchService:
         )
         requester_interest_ids = set(requester_interest_rows.scalars().all())
 
-        hints_norm = {normalize_interest_name(h) for h in (interest_hints or set()) if h}
+        hints_norm = {
+            normalize_interest_name(h) for h in (interest_hints or set()) if h
+        }
         hints_norm.discard("")
 
         hint_interest_ids: set[uuid.UUID] = set()
@@ -58,11 +62,16 @@ class BuddySearchService:
         active_match_rows = await session.execute(
             select(Match.user_id, Match.target_user_id).where(
                 Match.status == "active",
-                ((Match.user_id == requester_id) | (Match.target_user_id == requester_id)),
+                (
+                    (Match.user_id == requester_id)
+                    | (Match.target_user_id == requester_id)
+                ),
             )
         )
         for user_id, target_user_id in active_match_rows.all():
-            excluded_user_ids.add(target_user_id if user_id == requester_id else user_id)
+            excluded_user_ids.add(
+                target_user_id if user_id == requester_id else user_id
+            )
 
         outgoing_request_rows = await session.execute(
             select(MatchRequest.target_user_id).where(
@@ -83,10 +92,9 @@ class BuddySearchService:
             lon2 = func.radians(candidate_geo.lon)
             dlat = lat2 - lat1
             dlon = lon2 - lon1
-            a = (
-                func.pow(func.sin(dlat / 2.0), 2)
-                + func.cos(lat1) * func.cos(lat2) * func.pow(func.sin(dlon / 2.0), 2)
-            )
+            a = func.pow(func.sin(dlat / 2.0), 2) + func.cos(lat1) * func.cos(
+                lat2
+            ) * func.pow(func.sin(dlon / 2.0), 2)
             c = 2.0 * func.asin(func.sqrt(a))
             distance_expr = 6371.0 * c
 
@@ -103,7 +111,9 @@ class BuddySearchService:
             )
         )
 
-        union_count = (cand_interest_count + query_interest_count) - shared_interest_count
+        union_count = (
+            cand_interest_count + query_interest_count
+        ) - shared_interest_count
         interest_value = case(
             (
                 union_count > 0,
@@ -114,7 +124,9 @@ class BuddySearchService:
 
         score_expr = interest_value
         if distance_expr is not None:
-            location_value = func.greatest(0.0, 1.0 - (distance_expr / float(radius_km)))
+            location_value = func.greatest(
+                0.0, 1.0 - (distance_expr / float(radius_km))
+            )
             score_expr = (interest_value + location_value) / 2.0
 
         base_query = (
@@ -123,12 +135,16 @@ class BuddySearchService:
                 self.user_model.full_name,
                 self.user_model.profile_pic,
                 self.user_model.bio,
-                (distance_expr if distance_expr is not None else None).label("distance_km"),
+                (distance_expr if distance_expr is not None else None).label(
+                    "distance_km"
+                ),
                 score_expr.label("score"),
             )
             .outerjoin(candidate_geo, candidate_geo.user_id == self.user_model.id)
             .outerjoin(UserInterest, UserInterest.user_id == self.user_model.id)
-            .where(self.user_model.id != requester_id, self.user_model.is_active.is_(True))
+            .where(
+                self.user_model.id != requester_id, self.user_model.is_active.is_(True)
+            )
             .group_by(
                 self.user_model.id,
                 self.user_model.full_name,
@@ -190,4 +206,6 @@ class BuddySearchService:
                 )
             )
 
-        return BuddySearchResult(status="ok", matches=matches[:limit], reason=used_reason)
+        return BuddySearchResult(
+            status="ok", matches=matches[:limit], reason=used_reason
+        )

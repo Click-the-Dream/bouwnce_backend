@@ -2,7 +2,6 @@ import asyncio
 import json
 from datetime import UTC, datetime
 
-from app.utils.money import naira_to_kobo
 from app.core.security import genrate_verification_code
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
@@ -13,6 +12,7 @@ from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.schemas.events import PaidOrderEvent
 from app.utils.helper import generate_suborder_track_id
+from app.utils.money import naira_to_kobo
 from app.worker.celery_app import celery_app
 from app.worker.event_system import (
     EmailNotificationEvent,
@@ -25,6 +25,7 @@ from app.worker.event_system import (
     UserCartClearEvent,
     dispatch_event,
 )
+
 
 async def _process_paid_order(event: PaidOrderEvent) -> None:
     reference = event.reference

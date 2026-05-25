@@ -19,4 +19,3 @@ def safe_slug_from_filename(file_name: str) -> str:
     name = re.sub(r"[^a-zA-Z0-9_-]+", "_", name)
     name = re.sub(r"_+", "_", name).strip("_")
     return name[:80]
-

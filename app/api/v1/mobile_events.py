@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, WebSocket, status
 
-from app.api.dependencies import CurrentActiveUser, redisSessionDep
-from app.api.dependencies import dbSessionDep
+from app.api.dependencies import CurrentActiveUser, dbSessionDep, redisSessionDep
 from app.service.mobile_events_service import mobile_events_service
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -46,7 +45,9 @@ async def get_payment_progress(
     reference: str = Query(..., min_length=3),
 ) -> dict:
     _ = current_user
-    return await mobile_events_service.get_payment_progress(redis=redis, reference=reference)
+    return await mobile_events_service.get_payment_progress(
+        redis=redis, reference=reference
+    )
 
 
 @router.get(

@@ -370,6 +370,7 @@ class ChatService:
         rows = list(result.scalars().all())
 
         last_by_conversation_id: dict[str, Message] = {}
+        unread_by_conversation_id: dict[str, int] = {}
         if rows:
             conv_ids = [c.id for c in rows]
             last_stmt = (
@@ -383,6 +384,23 @@ class ChatService:
             last_msgs = list(last_result.scalars().all())
             last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
 
+            unread_stmt = (
+                select(
+                    Message.conversation_id,
+                    func.count().label("unread_count"),
+                )
+                .where(
+                    Message.conversation_id.in_(conv_ids),
+                    Message.recipient_id == user_id,
+                    Message.read_at.is_(None),
+                )
+                .group_by(Message.conversation_id)
+            )
+            unread_result = await db.execute(unread_stmt)
+            unread_by_conversation_id = {
+                str(conv_id): int(count or 0) for conv_id, count in unread_result.all()
+            }
+
         data = {
             "items": [],
             "page": page,
@@ -394,6 +412,7 @@ class ChatService:
             conv_data = self._serialize_conversation(conv, current_user_id=user_id)
             last = last_by_conversation_id.get(str(conv.id))
             conv_data["last_message"] = last.to_dict() if last is not None else False
+            conv_data["unread_count"] = unread_by_conversation_id.get(str(conv.id), 0)
             data["items"].append(conv_data)
 
         if as_response:

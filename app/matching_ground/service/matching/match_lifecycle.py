@@ -300,6 +300,7 @@ class MatchLifecycleService:
                 "conversation_id": str(conversation.id),
                 "match_id": str(match.id),
                 "request_id": str(request.id),
+                "unread_messages_count": 0,
                 "other_user": {
                     "id": str(other_user.id),
                     "username": other_user.username,

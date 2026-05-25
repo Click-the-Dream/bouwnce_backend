@@ -236,6 +236,16 @@ class BuddySearchService:
                 is_prompt = bool(hint_interest_ids and interest_id in hint_interest_ids)
                 shared_by_user.setdefault(str(uid), []).append((is_prompt, name))
 
+        all_by_user: dict[str, list[str]] = {}
+        if user_ids:
+            all_rows = await session.execute(
+                select(UserInterest.user_id, Interest.name)
+                .join(Interest, Interest.id == UserInterest.interest_id)
+                .where(UserInterest.user_id.in_(user_ids))
+            )
+            for uid, name in all_rows.all():
+                all_by_user.setdefault(str(uid), []).append(name)
+
         matches: list[BuddyMatch] = []
         for r in rows:
             dist = r.distance_km
@@ -255,7 +265,9 @@ class BuddySearchService:
                             key=lambda x: (not x[0], x[1].lower()),
                         )
                     ],
-                    shared_traits=[],
+                    candidate_interests=sorted(
+                        set(all_by_user.get(str(r.user_id), [])), key=str.lower
+                    ),
                 )
             )
 

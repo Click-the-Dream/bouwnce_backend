@@ -144,11 +144,10 @@ class MatchLifecycleService:
                     "profile_pic": item.profile_pic,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
-                    "shared_traits": item.shared_traits,
                     "score_explanation": (
                         f"distance={item.distance_km}km, "
                         f"shared_interests={len(item.shared_interests)}, "
-                        f"shared_traits={len(item.shared_traits)}"
+                        "shared_traits=0"
                     ),
                 }
                 for item in filtered_matches

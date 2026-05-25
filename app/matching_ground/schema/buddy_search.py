@@ -12,7 +12,7 @@ class BuddyMatch:
     distance_km: float
     score: float
     shared_interests: list[str]
-    shared_traits: list[str]
+    candidate_interests: list[str]
 
 
 @dataclass(frozen=True)

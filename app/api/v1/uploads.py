@@ -20,14 +20,15 @@ class UploadType(Enum):
 
 
 class ChatSignRequest(BaseModel):
-    upload_type: UploadType = Field(
-        ..., description="image|video|file", alias="uploadType"
-    )
+    upload_type: UploadType = Field(..., description="image|video|file")
     count: int = Field(
         1, ge=1, le=50, description="How many signed uploads to generate"
     )
-
-    model_config = {"populate_by_name": True}
+    file_name: str | None = Field(
+        None,
+        max_length=255,
+        description="Optional file name to incorporate into Cloudinary public_id",
+    )
 
 
 def _preset_for(upload_type: UploadType) -> str:
@@ -60,7 +61,9 @@ async def sign_chat_upload(
     preset = _preset_for(payload.upload_type)
 
     if payload.count == 1:
-        fields = upload_service.sign_chat_upload(preset=preset, folder=folder)
+        fields = upload_service.sign_chat_upload(
+            preset=preset, folder=folder, file_name=payload.file_name
+        )
         data = {
             "upload_type": payload.upload_type,
             "fields": fields,

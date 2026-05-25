@@ -233,6 +233,7 @@ class ChatService:
         body: str | None = None,
         media_urls: list[str],
         media_type: str,
+        file_name: str | None = None,
         reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
@@ -254,6 +255,7 @@ class ChatService:
             body=(body or "").strip(),
             media_type=media_type,
             media_urls=(urls or None),
+            media_name=(file_name.strip() if isinstance(file_name, str) and file_name.strip() else None),
             reply_to_message_id=reply_to_message_id,
         )
         db.add(msg)
@@ -597,7 +599,6 @@ class ChatService:
             "conversation_id": str(conv.id),
             "reader_id": str(current_user_id),
             "read": unread_remaining == 0,
-            "read_at": read_at.isoformat() if updated > 0 else False,
             "updated": updated,
         }
 

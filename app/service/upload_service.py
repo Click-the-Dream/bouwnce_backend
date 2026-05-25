@@ -6,17 +6,15 @@ from uuid import uuid4
 from cloudinary.utils import api_sign_request
 
 from app.core.config import settings
-
-
-def _split_csv(value: str) -> list[str]:
-    return [v.strip().lower() for v in (value or "").split(",") if v.strip()]
+from app.utils.upload_utils import safe_slug_from_filename, split_csv
 
 
 class UploadService:
     @staticmethod
-    def sign_chat_upload(*, preset: str, folder: str) -> dict:
+    def sign_chat_upload(*, preset: str, folder: str, file_name: str | None = None) -> dict:
         timestamp = int(time.time())
-        public_id = str(uuid4())
+        slug = safe_slug_from_filename(file_name or "")
+        public_id = f"{uuid4()}_{slug}" if slug else str(uuid4())
 
         params_to_sign = {
             "timestamp": timestamp,
@@ -49,7 +47,7 @@ class UploadService:
     def chat_image_constraints() -> dict:
         return {
             "max_bytes": settings.CHAT_IMAGES_MAX_BYTES,
-            "allowed_formats": _split_csv(settings.CHAT_IMAGES_ALLOWED_FORMATS),
+            "allowed_formats": split_csv(settings.CHAT_IMAGES_ALLOWED_FORMATS),
             "resource_type": "image",
         }
 
@@ -57,7 +55,7 @@ class UploadService:
     def chat_video_constraints() -> dict:
         return {
             "max_bytes": settings.CHAT_VIDEOS_MAX_BYTES,
-            "allowed_formats": _split_csv(settings.CHAT_VIDEOS_ALLOWED_FORMATS),
+            "allowed_formats": split_csv(settings.CHAT_VIDEOS_ALLOWED_FORMATS),
             "resource_type": "video",
         }
 
@@ -65,7 +63,7 @@ class UploadService:
     def chat_file_constraints() -> dict:
         return {
             "max_bytes": settings.CHAT_FILES_MAX_BYTES,
-            "allowed_formats": _split_csv(settings.CHAT_FILES_ALLOWED_FORMATS),
+            "allowed_formats": split_csv(settings.CHAT_FILES_ALLOWED_FORMATS),
             "resource_type": "raw",
         }
 

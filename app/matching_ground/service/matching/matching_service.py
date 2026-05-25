@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from app.matching_ground.core.location import Coordinates, haversine_km
 from app.matching_ground.core.matching.aggregator import WeightedScore, aggregate
 from app.matching_ground.core.matching.matching_feature import UserMatchingFeatures
@@ -9,20 +7,12 @@ from app.matching_ground.core.matching.score import (
     interest_overlap_score,
     location_score,
 )
+from app.matching_ground.schema.matching import MatchInputs
 
 
-@dataclass(frozen=True)
-class MatchInputs:
-    shared_interests: int
-    total_interests: int
-    user_location: Coordinates
-    target_location: Coordinates
-    max_distance_km: float
-
-
-@dataclass
 class MatchingService:
-    weights: dict[str, float]
+    def __init__(self, *, weights: dict[str, float]) -> None:
+        self.weights = weights
 
     def build_inputs(
         self,

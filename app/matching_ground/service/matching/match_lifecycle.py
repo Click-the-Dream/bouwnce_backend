@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import BackgroundTasks
@@ -23,18 +22,15 @@ from app.utils.exception import (
     ForbiddenException,
     NotFoundException,
 )
-
-
-@dataclass
 class MatchLifecycleService:
     @staticmethod
-    def _parse_radius_km(message: str) -> float:
+    def _parse_radius_km(message: str) -> float | None:
 
         text = (message or "").strip()
         if not text:
-            return 10.0
+            return None
 
-        radius_km = 10.0
+        radius_km: float | None = None
         radius_match = re.search(
             r"(?i)(?:within|radius|around|near|in)\s*(\d+(?:\.\d+)?)\s*km", text
         )
@@ -42,7 +38,7 @@ class MatchLifecycleService:
             try:
                 radius_km = float(radius_match.group(1))
             except ValueError:
-                radius_km = 10.0
+                radius_km = None
 
         return radius_km
 
@@ -117,7 +113,7 @@ class MatchLifecycleService:
         session: AsyncSession,
         requester_id: uuid.UUID,
         interest_hints: set[str] | None = None,
-        radius_km: float = 10.0,
+        radius_km: float | None = 10.0,
     ) -> dict:
         buddy_search_service = BuddySearchService()
         result = await buddy_search_service.search(

@@ -222,19 +222,19 @@ class BuddySearchService:
             rows = list((await session.execute(base_query.limit(limit))).all())
 
         user_ids = [r.user_id for r in rows]
-        shared_by_user: dict[str, list[str]] = {}
-        shared_interest_ids_for_labels = hint_interest_ids or query_interest_ids
-        if user_ids and shared_interest_ids_for_labels:
+        shared_by_user: dict[str, list[tuple[bool, str]]] = {}
+        if user_ids and query_interest_ids:
             shared_rows = await session.execute(
-                select(UserInterest.user_id, Interest.name)
+                select(UserInterest.user_id, UserInterest.interest_id, Interest.name)
                 .join(Interest, Interest.id == UserInterest.interest_id)
                 .where(
                     UserInterest.user_id.in_(user_ids),
-                    UserInterest.interest_id.in_(list(shared_interest_ids_for_labels)),
+                    UserInterest.interest_id.in_(list(query_interest_ids)),
                 )
             )
-            for uid, name in shared_rows.all():
-                shared_by_user.setdefault(str(uid), []).append(name)
+            for uid, interest_id, name in shared_rows.all():
+                is_prompt = bool(hint_interest_ids and interest_id in hint_interest_ids)
+                shared_by_user.setdefault(str(uid), []).append((is_prompt, name))
 
         matches: list[BuddyMatch] = []
         for r in rows:
@@ -248,7 +248,13 @@ class BuddySearchService:
                     profile_pic=r.profile_pic,
                     bio=r.bio,
                     score=round(float(r.score or 0.0), 4),
-                    shared_interests=sorted(shared_by_user.get(str(r.user_id), [])),
+                    shared_interests=[
+                        name
+                        for _, name in sorted(
+                            shared_by_user.get(str(r.user_id), []),
+                            key=lambda x: (not x[0], x[1].lower()),
+                        )
+                    ],
                     shared_traits=[],
                 )
             )

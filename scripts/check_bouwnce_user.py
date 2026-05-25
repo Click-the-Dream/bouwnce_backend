@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from pathlib import Path
 import uuid
+from pathlib import Path
 
 from sqlalchemy import func, select
 
@@ -19,7 +19,9 @@ from app.models.user import User
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Check Bouwnce system user + inbox conversation")
+    parser = argparse.ArgumentParser(
+        description="Check Bouwnce system user + inbox conversation"
+    )
     parser.add_argument(
         "--email",
         default=settings.BOUWNCE_SYSTEM_EMAIL,
@@ -69,7 +71,9 @@ async def main() -> None:
             except Exception:
                 # Treat as email for convenience
                 u = (
-                    await db.execute(select(User).where(User.email == str(args.user_id)))
+                    await db.execute(
+                        select(User).where(User.email == str(args.user_id))
+                    )
                 ).scalar_one_or_none()
                 if u is None:
                     print("USER: NOT_FOUND")
@@ -85,8 +89,10 @@ async def main() -> None:
             print("CONVERSATION: NOT_FOUND")
             return
 
-        count_stmt = select(func.count()).select_from(Message).where(
-            Message.conversation_id == conv.id
+        count_stmt = (
+            select(func.count())
+            .select_from(Message)
+            .where(Message.conversation_id == conv.id)
         )
         msg_count = int((await db.execute(count_stmt)).scalar() or 0)
         print("CONVERSATION: FOUND")

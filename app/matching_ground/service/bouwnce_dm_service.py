@@ -23,7 +23,9 @@ class BouwnceDMService:
         if settings.BOUWNCE_SYSTEM_USERNAME:
             by_username = (
                 await db.execute(
-                    select(User).where(User.username == settings.BOUWNCE_SYSTEM_USERNAME)
+                    select(User).where(
+                        User.username == settings.BOUWNCE_SYSTEM_USERNAME
+                    )
                 )
             ).scalar_one_or_none()
             if by_username is not None:
@@ -32,7 +34,9 @@ class BouwnceDMService:
         if settings.BOUWNCE_SYSTEM_FULL_NAME:
             by_name = (
                 await db.execute(
-                    select(User).where(User.full_name == settings.BOUWNCE_SYSTEM_FULL_NAME)
+                    select(User).where(
+                        User.full_name == settings.BOUWNCE_SYSTEM_FULL_NAME
+                    )
                 )
             ).scalar_one_or_none()
             if by_name is not None:

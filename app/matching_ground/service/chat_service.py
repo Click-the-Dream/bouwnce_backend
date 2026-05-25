@@ -128,18 +128,18 @@ class ChatService:
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
         recipient_is_bouwnce = (
-            (settings.BOUWNCE_SYSTEM_EMAIL and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL)
-            or (
-                settings.BOUWNCE_SYSTEM_USERNAME
-                and recipient.username == settings.BOUWNCE_SYSTEM_USERNAME
-            )
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and recipient.username == settings.BOUWNCE_SYSTEM_USERNAME
         )
         sender_is_bouwnce = (
-            (settings.BOUWNCE_SYSTEM_EMAIL and sender.email == settings.BOUWNCE_SYSTEM_EMAIL)
-            or (
-                settings.BOUWNCE_SYSTEM_USERNAME
-                and sender.username == settings.BOUWNCE_SYSTEM_USERNAME
-            )
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and sender.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and sender.username == settings.BOUWNCE_SYSTEM_USERNAME
         )
         if recipient_is_bouwnce and not sender_is_bouwnce:
             raise ForbiddenException("You cannot reply to Bouwnce inbox")
@@ -257,18 +257,18 @@ class ChatService:
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
         recipient_is_bouwnce = (
-            (settings.BOUWNCE_SYSTEM_EMAIL and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL)
-            or (
-                settings.BOUWNCE_SYSTEM_USERNAME
-                and recipient.username == settings.BOUWNCE_SYSTEM_USERNAME
-            )
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and recipient.username == settings.BOUWNCE_SYSTEM_USERNAME
         )
         sender_is_bouwnce = (
-            (settings.BOUWNCE_SYSTEM_EMAIL and sender.email == settings.BOUWNCE_SYSTEM_EMAIL)
-            or (
-                settings.BOUWNCE_SYSTEM_USERNAME
-                and sender.username == settings.BOUWNCE_SYSTEM_USERNAME
-            )
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and sender.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and sender.username == settings.BOUWNCE_SYSTEM_USERNAME
         )
         if recipient_is_bouwnce and not sender_is_bouwnce:
             raise ForbiddenException("You cannot reply to Bouwnce inbox")

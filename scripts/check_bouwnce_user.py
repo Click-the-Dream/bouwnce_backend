@@ -9,22 +9,27 @@ from pathlib import Path
 from sqlalchemy import func, select
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
 
-from app.core.config import settings
-from app.db.postgres_db_conn import get_async_session
-from app.models.chat import Conversation, Message
-from app.models.user import User
+
+def _ensure_backend_on_path() -> None:
+    if str(BACKEND_DIR) not in sys.path:
+        sys.path.insert(0, str(BACKEND_DIR))
 
 
 async def main() -> None:
+    _ensure_backend_on_path()
+
+    from app.core.config import settings
+    from app.db.postgres_db_conn import get_async_session
+    from app.models.chat import Conversation, Message
+    from app.models.user import User
+
     parser = argparse.ArgumentParser(
         description="Check Bouwnce system user + inbox conversation"
     )
     parser.add_argument(
         "--email",
-        default=settings.BOUWNCE_SYSTEM_EMAIL,
+        default=None,
         help="Bouwnce system email (default: settings.BOUWNCE_SYSTEM_EMAIL)",
     )
     parser.add_argument(
@@ -38,6 +43,8 @@ async def main() -> None:
         help="Optional user email to check Bouwnce conversation/message count with",
     )
     args = parser.parse_args()
+    if not args.email:
+        args.email = settings.BOUWNCE_SYSTEM_EMAIL
 
     async with get_async_session() as db:
         bouwnce = (

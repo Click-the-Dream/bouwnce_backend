@@ -60,6 +60,7 @@ async def list_newsletters(
 async def initiate_broadcast(newsletter_id: str, db: dbSessionDep, _: CurrentAdmin):
     return await newsletter_service.initiate_newsletter_broadcast(newsletter_id, db)
 
+
 @router.post(
     "/{newsletter_id}/send",
     response_model=NewsLetterSendResponse,

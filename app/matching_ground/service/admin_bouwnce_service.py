@@ -46,7 +46,9 @@ class AdminBouwnceService:
                 ).scalar_one_or_none()
                 if exists is None:
                     raise NotFoundException(f"User not found: {uid}")
-            resolved_user_ids = [str(uid) for uid in user_ids if str(uid) != str(system_user.id)]
+            resolved_user_ids = [
+                str(uid) for uid in user_ids if str(uid) != str(system_user.id)
+            ]
 
         sent: list[dict] = []
         for uid in resolved_user_ids:

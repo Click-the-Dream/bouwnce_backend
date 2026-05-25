@@ -32,5 +32,9 @@ async def send_bouwnce_message(
     ),
 ) -> dict:
     return await admin_bouwnce_service.send_message(
-        db=db, redis=redis, user_ids=payload.user_ids, body=payload.body, all_users=all_users
+        db=db,
+        redis=redis,
+        user_ids=payload.user_ids,
+        body=payload.body,
+        all_users=all_users,
     )

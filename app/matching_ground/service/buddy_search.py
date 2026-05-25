@@ -99,22 +99,48 @@ class BuddySearchService:
             c = 2.0 * func.asin(func.sqrt(a))
             distance_expr = 6371.0 * c
 
-        cand_interest_count = func.count(func.distinct(UserInterest.interest_id))
-        shared_interest_count = func.count(
-            func.distinct(
-                case(
-                    (
-                        UserInterest.interest_id.in_(list(query_interest_ids)),
-                        UserInterest.interest_id,
+        interest_stats_sq = None
+        if query_interest_ids:
+            interest_stats_sq = (
+                select(
+                    UserInterest.user_id.label("user_id"),
+                    func.count(func.distinct(UserInterest.interest_id)).label(
+                        "cand_interest_count"
                     ),
-                    else_=None,
+                    func.count(
+                        func.distinct(
+                            case(
+                                (
+                                    UserInterest.interest_id.in_(list(query_interest_ids)),
+                                    UserInterest.interest_id,
+                                ),
+                                else_=None,
+                            )
+                        )
+                    ).label("shared_interest_count"),
                 )
+                .group_by(UserInterest.user_id)
+                .subquery("interest_stats")
             )
+        else:
+            interest_stats_sq = (
+                select(
+                    UserInterest.user_id.label("user_id"),
+                    func.count(func.distinct(UserInterest.interest_id)).label(
+                        "cand_interest_count"
+                    ),
+                    sa.literal(0).label("shared_interest_count"),
+                )
+                .group_by(UserInterest.user_id)
+                .subquery("interest_stats")
+            )
+
+        cand_interest_count = func.coalesce(interest_stats_sq.c.cand_interest_count, 0)
+        shared_interest_count = func.coalesce(
+            interest_stats_sq.c.shared_interest_count, 0
         )
 
-        union_count = (
-            cand_interest_count + query_interest_count
-        ) - shared_interest_count
+        union_count = (cand_interest_count + query_interest_count) - shared_interest_count
         interest_value = case(
             (
                 union_count > 0,
@@ -137,23 +163,17 @@ class BuddySearchService:
                 self.user_model.full_name,
                 self.user_model.profile_pic,
                 self.user_model.bio,
-                (distance_expr if distance_expr is not None else None).label(
-                    "distance_km"
-                ),
+                (
+                    distance_expr
+                    if distance_expr is not None
+                    else sa.null()
+                ).label("distance_km"),
                 score_expr.label("score"),
             )
             .outerjoin(candidate_geo, candidate_geo.user_id == self.user_model.id)
-            .outerjoin(UserInterest, UserInterest.user_id == self.user_model.id)
+            .outerjoin(interest_stats_sq, interest_stats_sq.c.user_id == self.user_model.id)
             .where(
                 self.user_model.id != requester_id, self.user_model.is_active.is_(True)
-            )
-            .group_by(
-                self.user_model.id,
-                self.user_model.full_name,
-                self.user_model.profile_pic,
-                self.user_model.bio,
-                candidate_geo.lat,
-                candidate_geo.lon,
             )
             .order_by(score_expr.desc(), self.user_model.created_at.desc())
         )
@@ -169,7 +189,7 @@ class BuddySearchService:
 
         strict_query = base_query
         if hint_interest_ids:
-            strict_query = strict_query.having(shared_interest_count > 0)
+            strict_query = strict_query.where(shared_interest_count > 0)
 
         used_reason = None
         rows = list((await session.execute(strict_query.limit(limit))).all())

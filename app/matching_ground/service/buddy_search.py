@@ -58,6 +58,7 @@ class BuddySearchService:
 
         query_interest_ids = requester_interest_ids | hint_interest_ids
         query_interest_count = len(query_interest_ids)
+        hint_interest_count = len(hint_interest_ids)
 
         excluded_user_ids: set[uuid.UUID] = set()
         active_match_rows = await session.execute(
@@ -99,48 +100,54 @@ class BuddySearchService:
             c = 2.0 * func.asin(func.sqrt(a))
             distance_expr = 6371.0 * c
 
-        interest_stats_sq = None
-        if query_interest_ids:
-            interest_stats_sq = (
-                select(
-                    UserInterest.user_id.label("user_id"),
-                    func.count(func.distinct(UserInterest.interest_id)).label(
-                        "cand_interest_count"
-                    ),
-                    func.count(
-                        func.distinct(
-                            case(
-                                (
-                                    UserInterest.interest_id.in_(
-                                        list(query_interest_ids)
-                                    ),
-                                    UserInterest.interest_id,
-                                ),
-                                else_=None,
-                            )
-                        )
-                    ).label("shared_interest_count"),
+        shared_query_expr = (
+            func.count(
+                func.distinct(
+                    case(
+                        (
+                            UserInterest.interest_id.in_(list(query_interest_ids)),
+                            UserInterest.interest_id,
+                        ),
+                        else_=None,
+                    )
                 )
-                .group_by(UserInterest.user_id)
-                .subquery("interest_stats")
-            )
-        else:
-            interest_stats_sq = (
-                select(
-                    UserInterest.user_id.label("user_id"),
-                    func.count(func.distinct(UserInterest.interest_id)).label(
-                        "cand_interest_count"
-                    ),
-                    sa.literal(0).label("shared_interest_count"),
+            ).label("shared_interest_count")
+            if query_interest_ids
+            else sa.literal(0).label("shared_interest_count")
+        )
+        shared_hint_expr = (
+            func.count(
+                func.distinct(
+                    case(
+                        (
+                            UserInterest.interest_id.in_(list(hint_interest_ids)),
+                            UserInterest.interest_id,
+                        ),
+                        else_=None,
+                    )
                 )
-                .group_by(UserInterest.user_id)
-                .subquery("interest_stats")
+            ).label("shared_hint_count")
+            if hint_interest_ids
+            else sa.literal(0).label("shared_hint_count")
+        )
+        interest_stats_sq = (
+            select(
+                UserInterest.user_id.label("user_id"),
+                func.count(func.distinct(UserInterest.interest_id)).label(
+                    "cand_interest_count"
+                ),
+                shared_query_expr,
+                shared_hint_expr,
             )
+            .group_by(UserInterest.user_id)
+            .subquery("interest_stats")
+        )
 
         cand_interest_count = func.coalesce(interest_stats_sq.c.cand_interest_count, 0)
         shared_interest_count = func.coalesce(
             interest_stats_sq.c.shared_interest_count, 0
         )
+        shared_hint_count = func.coalesce(interest_stats_sq.c.shared_hint_count, 0)
 
         union_count = (
             cand_interest_count + query_interest_count
@@ -154,12 +161,21 @@ class BuddySearchService:
             else_=0.0,
         )
 
-        score_expr = interest_value
+        prompt_value = case(
+            (
+                hint_interest_count > 0,
+                sa.cast(shared_hint_count, sa.Float)
+                / sa.cast(hint_interest_count, sa.Float),
+            ),
+            else_=0.0,
+        )
+
+        score_expr = prompt_value if hint_interest_ids else interest_value
         if distance_expr is not None:
             location_value = func.greatest(
                 0.0, 1.0 - (distance_expr / float(radius_km))
             )
-            score_expr = (interest_value + location_value) / 2.0
+            score_expr = (score_expr + location_value) / 2.0
 
         base_query = (
             select(
@@ -179,7 +195,11 @@ class BuddySearchService:
             .where(
                 self.user_model.id != requester_id, self.user_model.is_active.is_(True)
             )
-            .order_by(score_expr.desc(), self.user_model.created_at.desc())
+            .order_by(
+                score_expr.desc(),
+                interest_value.desc(),
+                self.user_model.created_at.desc(),
+            )
         )
         if excluded_user_ids:
             base_query = base_query.where(self.user_model.id.not_in(excluded_user_ids))
@@ -193,7 +213,7 @@ class BuddySearchService:
 
         strict_query = base_query
         if hint_interest_ids:
-            strict_query = strict_query.where(shared_interest_count > 0)
+            strict_query = strict_query.where(shared_hint_count > 0)
 
         used_reason = None
         rows = list((await session.execute(strict_query.limit(limit))).all())
@@ -203,13 +223,14 @@ class BuddySearchService:
 
         user_ids = [r.user_id for r in rows]
         shared_by_user: dict[str, list[str]] = {}
-        if user_ids and query_interest_ids:
+        shared_interest_ids_for_labels = hint_interest_ids or query_interest_ids
+        if user_ids and shared_interest_ids_for_labels:
             shared_rows = await session.execute(
                 select(UserInterest.user_id, Interest.name)
                 .join(Interest, Interest.id == UserInterest.interest_id)
                 .where(
                     UserInterest.user_id.in_(user_ids),
-                    UserInterest.interest_id.in_(list(query_interest_ids)),
+                    UserInterest.interest_id.in_(list(shared_interest_ids_for_labels)),
                 )
             )
             for uid, name in shared_rows.all():

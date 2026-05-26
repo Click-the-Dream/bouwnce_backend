@@ -30,13 +30,10 @@ def _bouwnce_identity() -> tuple[str, str, str]:
 
 def upgrade() -> None:
     bouwnce_url = (
-        "http://res.cloudinary.com/dzjre8izs/image/upload/"
-        "v1779746089/chat/65d34fc0-c3b2-4f58-a677-f92ce108b08e/"
-        "c1705a6a-127c-483b-9370-41927143a25f.ico"
+        "https://res.cloudinary.com/dzjre8izs/image/upload/"
+        "v1779748908/favicon-4_h7opmw.png"
     )
-    bouwnce_public_id = (
-        "chat/65d34fc0-c3b2-4f58-a677-f92ce108b08e/c1705a6a-127c-483b-9370-41927143a25f"
-    )
+    bouwnce_public_id = "favicon-4_h7opmw"
     profile_pic = {"url": bouwnce_url, "public_id": bouwnce_public_id}
 
     email, username, full_name = _bouwnce_identity()

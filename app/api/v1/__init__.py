@@ -8,6 +8,7 @@ from app.api.v1 import (
     jobs,
     mobile_events,
     newsletter,
+    notifications,
     order_router,
     payment,
     payout_info_crud,
@@ -88,3 +89,4 @@ api_router.include_router(mobile_events.router)
 api_router.include_router(uploads.router)
 api_router.include_router(chat.router)
 api_router.include_router(admin_bouwnce.router)
+api_router.include_router(notifications.router)

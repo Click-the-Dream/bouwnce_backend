@@ -39,4 +39,3 @@ async def mark_notification_read(
     return await notification_service.mark_read(
         db=db, user_id=str(current_user.id), notification_id=notification_id
     )
-

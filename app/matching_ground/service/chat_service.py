@@ -9,6 +9,7 @@ from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.matching_ground.model.notification import Notification
 from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.utils.exception import ForbiddenException, NotFoundException
@@ -160,6 +161,22 @@ class ChatService:
         await db.flush()
         await db.refresh(msg)
 
+        await Notification.create(
+            data={
+                "user_id": recipient.id,
+                "title": sender.full_name or sender.username or "New message",
+                "body": body[:120],
+                "event_type": "chat_message",
+                "payload": {
+                    "route": "chat.conversation",
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(msg.id),
+                    "sender": self._serialize_user(sender),
+                },
+            },
+            db=db,
+        )
+
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
             reply_row = (
@@ -300,6 +317,25 @@ class ChatService:
         conversation.last_message_at = datetime.now(UTC)
         await db.flush()
         await db.refresh(msg)
+
+        await Notification.create(
+            data={
+                "user_id": recipient.id,
+                "title": sender.full_name or sender.username or "New message",
+                "body": (msg.body or "")[:120],
+                "event_type": "chat_message",
+                "payload": {
+                    "route": "chat.conversation",
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(msg.id),
+                    "sender": self._serialize_user(sender),
+                    "media_type": media_type,
+                    "media_urls": urls,
+                    "media_name": msg.media_name,
+                },
+            },
+            db=db,
+        )
 
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:

@@ -229,6 +229,27 @@ class MatchLifecycleService:
         )
 
         target_user = await User.get_by_id(str(target_user_id), session)
+        requester_display = requester.username or requester.full_name or "someone"
+
+        await Notification.create(
+            data={
+                "user_id": target_user_id,
+                "title": f"New match request · {requester_display}",
+                "body": f"{requester_display} sent you a match request.",
+                "event_type": "match_request",
+                "payload": {
+                    "route": "match.request",
+                    "request_id": str(request.id),
+                    "from_user": {
+                        "id": str(requester.id),
+                        "username": requester.username,
+                        "full_name": requester.full_name,
+                        "profile_pic": requester.profile_pic,
+                    },
+                },
+            },
+            db=session,
+        )
 
         email_context = {
             "requester_name": requester.full_name,
@@ -276,6 +297,29 @@ class MatchLifecycleService:
 
         if not accepted:
             await request.set_status(session, "rejected")
+            responder_user = await User.get_by_id(str(request.target_user_id), session)
+            responder_display = (
+                responder_user.username or responder_user.full_name or "your match"
+            )
+            await Notification.create(
+                data={
+                    "user_id": request.requester_id,
+                    "title": f"Match request declined · {responder_display}",
+                    "body": f"{responder_display} declined your match request.",
+                    "event_type": "match_rejected",
+                    "payload": {
+                        "route": "match.requests",
+                        "request_id": str(request.id),
+                        "other_user": {
+                            "id": str(responder_user.id),
+                            "username": responder_user.username,
+                            "full_name": responder_user.full_name,
+                            "profile_pic": responder_user.profile_pic,
+                        },
+                    },
+                },
+                db=session,
+            )
             return {"status": "rejected", "request_id": str(request.id)}
 
         await request.set_status(session, "accepted")

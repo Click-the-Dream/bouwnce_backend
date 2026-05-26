@@ -6,6 +6,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
+from app.matching_ground.model.notification import Notification
 from app.models.cart import Cart
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -161,6 +162,29 @@ async def dispatch_event(
                     status=payload.event_name,
                     order_id=payload.payload.get("order_id"),
                 )
+            # Persist only important payment events to DB notifications.
+            user_id = payload.payload.get("user_id")
+            if user_id and payload.event_name in {"payment.failed", "payment.success"}:
+                title = (
+                    "Payment failed"
+                    if payload.event_name == "payment.failed"
+                    else "Payment successful"
+                )
+                body = (
+                    "Your payment could not be verified. Please try again."
+                    if payload.event_name == "payment.failed"
+                    else "Your payment was successful and your order is confirmed."
+                )
+                await Notification.create(
+                    data={
+                        "user_id": user_id,
+                        "title": title,
+                        "body": body,
+                        "event_type": payload.event_name,
+                        "payload": payload.payload,
+                    },
+                    db=db,
+                )
         await _publish_mobile_stream_event(
             redis, event_name=payload.event_name, payload=payload.payload
         )
@@ -204,6 +228,20 @@ async def dispatch_event(
             "body": payload.body,
             "data": payload.data,
         }
+        # Persist push notifications to DB so they can be fetched later.
+        # Avoid duplicating chat/match notifications that already write to DB.
+        data_type = str((payload.data or {}).get("type") or "")
+        if not data_type.startswith("chat.") and not data_type.startswith("match."):
+            await Notification.create(
+                data={
+                    "user_id": payload.user_id,
+                    "title": payload.title,
+                    "body": payload.body,
+                    "event_type": "push_notification",
+                    "payload": payload.data,
+                },
+                db=db,
+            )
         await redis.rpush(
             "notifications:push:queue",
             json.dumps(payload_dict),

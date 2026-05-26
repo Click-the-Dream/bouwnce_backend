@@ -150,6 +150,16 @@ async def dispatch_event(
     if event_name == EventNames.MOBILE_EVENT:
         if redis is None:
             raise ValueError("redis client is required for mobile event")
+
+        def _default_title_body(event: str) -> tuple[str, str]:
+            if event.startswith("payment."):
+                return "Payment update", event
+            if event.startswith("order."):
+                return "Order update", event
+            if event.startswith("product."):
+                return "Product update", event
+            return "Event update", event
+
         # If this is a payment progress event, cache latest progress for quick reads.
         if payload.event_name.startswith("payment."):
             reference = str(payload.payload.get("reference") or "")
@@ -162,25 +172,20 @@ async def dispatch_event(
                     status=payload.event_name,
                     order_id=payload.payload.get("order_id"),
                 )
-            # Persist only important payment events to DB notifications.
-            user_id = payload.payload.get("user_id")
-            if user_id and payload.event_name in {"payment.failed", "payment.success"}:
-                title = (
-                    "Payment failed"
-                    if payload.event_name == "payment.failed"
-                    else "Payment successful"
-                )
-                body = (
-                    "Your payment could not be verified. Please try again."
-                    if payload.event_name == "payment.failed"
-                    else "Your payment was successful and your order is confirmed."
-                )
+
+        # Persist mobile events to DB notifications so they can be fetched later.
+        # Skip events already persisted elsewhere to avoid duplication.
+        user_id = payload.payload.get("user_id")
+        if user_id:
+            evt = str(payload.event_name or "")
+            if not evt.startswith("chat.") and not evt.startswith("match"):
+                title, body = _default_title_body(evt)
                 await Notification.create(
                     data={
                         "user_id": user_id,
                         "title": title,
-                        "body": body,
-                        "event_type": payload.event_name,
+                        "body": body[:1000],
+                        "event_type": evt,
                         "payload": payload.payload,
                     },
                     db=db,

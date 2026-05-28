@@ -67,7 +67,7 @@ async def create_match_request(
     return {k: v for k, v in result.items() if k != "recipient_email"}
 
 
-@router.get("/requests", summary="List incoming match requests for the current user"5555555)
+@router.get("/requests", summary="List incoming match requests for the current user")
 async def list_match_requests(
     db: dbSessionDep,
     current_user: CurrentUser,
@@ -79,7 +79,10 @@ async def list_match_requests(
     service = MatchLifecycleService()
     return await service.list_requests_for_user(db, current_user.id, page, page_size)
 
-@router.get("/requests/me", summary="List outgoing match requests from the current user")
+
+@router.get(
+    "/requests/me", summary="List outgoing match requests from the current user"
+)
 async def list_sent_match_requests(
     db: dbSessionDep,
     current_user: CurrentUser,

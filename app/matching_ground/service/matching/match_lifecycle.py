@@ -181,11 +181,7 @@ class MatchLifecycleService:
         }
 
     async def list_user_sent_requests(
-        self,
-        session: AsyncSession,
-        user_id: uuid.UUID,
-        page: int, 
-        page_size: int
+        self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int
     ) -> dict:
         rows = await MatchRequest.list_sent_by_user(session, user_id, page, page_size)
         return {
@@ -209,7 +205,7 @@ class MatchLifecycleService:
             "page_size": page_size,
             "total": len(rows),
         }
-        
+
     async def list_matches_for_user(
         self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int
     ) -> dict:

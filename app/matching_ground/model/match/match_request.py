@@ -113,7 +113,7 @@ class MatchRequest(BaseModel):
             .order_by(cls.created_at.desc())
         )
         return list(result.scalars().all())
-    
+
     @classmethod
     async def list_sent_by_user(
         cls, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int

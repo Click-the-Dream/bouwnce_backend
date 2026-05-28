@@ -159,9 +159,11 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
+
 @app.get("/api/health", tags=["Health"])
 async def health_check():
     return {"status": "healthy"}
+
 
 app.include_router(api_router, prefix=settings.API_STR)
 

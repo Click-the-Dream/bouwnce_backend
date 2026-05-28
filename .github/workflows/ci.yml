@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [staging]
+
+  workflow_call:
+
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Lint with ruff
+        run: uv run ruff check --output-format=github .
+
+      - name: Format with ruff
+        run: uv run ruff format --check .
+
+
+  # SECURITY
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    steps:
+       - uses: actions/checkout@v4
+
+       - name: Run Trivy vulnerability  scanner
+         uses: aquasecurity/trivy-action@v0.36.0
+         with:
+            scan-type: fs
+            scan-ref: .
+            severity: HIGH,CRITICAL
+            exit-code: 1
+            format: table
+
+       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+         with:
+            enable-cache: true
+            github-token: ${{ secrets.GITHUB_TOKEN }}
+
+       - name: Install dependencies
+         run: uv sync --dev
+
+       - name: Check for vulnerable dependencies
+         run: uv run pip-audit --ignore-vuln PYSEC-2025-183
+
+       - name: Run Bandit security scan
+         run: uv run bandit -r app --ll -ii
+
+       - name: scan for hardcoded secrets
+         uses: trufflesecurity/trufflehog@main
+         with:
+          path: ./
+          extra_args: --only-verified
+
+  # TESTS
+  tests:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: [lint, security]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: test_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5433/test_db
+          FASTAPI_ENV: development
+          JWT_SECRET_KEY: ci-test-jwt-secret-not-for-production
+        run: uv run alembic upgrade head
+
+      - name: Start API and run tests
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5433/test_db
+          FASTAPI_ENV: development
+          JWT_SECRET_KEY: ci-test-jwt-secret-not-for-production
+        run: |
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+
+          echo "Waiting for API..."
+          for i in $( seq 1 30 ); do
+            curl -f http://localhost:8000/api/health && break
+            sleep 1
+          done
+
+          uv run pytest --tb=short -q
+
+          

@@ -6,6 +6,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import MOBILE_EVENTS_STREAM_KEY, PAYMENT_PROGRESS_KEY_PREFIX
+from app.matching_ground.model.notification import Notification
 from app.models.cart import Cart
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -149,6 +150,16 @@ async def dispatch_event(
     if event_name == EventNames.MOBILE_EVENT:
         if redis is None:
             raise ValueError("redis client is required for mobile event")
+
+        def _default_title_body(event: str) -> tuple[str, str]:
+            if event.startswith("payment."):
+                return "Payment update", event
+            if event.startswith("order."):
+                return "Order update", event
+            if event.startswith("product."):
+                return "Product update", event
+            return "Event update", event
+
         # If this is a payment progress event, cache latest progress for quick reads.
         if payload.event_name.startswith("payment."):
             reference = str(payload.payload.get("reference") or "")
@@ -160,6 +171,24 @@ async def dispatch_event(
                     progress=progress,
                     status=payload.event_name,
                     order_id=payload.payload.get("order_id"),
+                )
+
+        # Persist mobile events to DB notifications so they can be fetched later.
+        # Skip events already persisted elsewhere to avoid duplication.
+        user_id = payload.payload.get("user_id")
+        if user_id:
+            evt = str(payload.event_name or "")
+            if not evt.startswith("chat.") and not evt.startswith("match"):
+                title, body = _default_title_body(evt)
+                await Notification.create(
+                    data={
+                        "user_id": user_id,
+                        "title": title,
+                        "body": body[:1000],
+                        "event_type": evt,
+                        "payload": payload.payload,
+                    },
+                    db=db,
                 )
         await _publish_mobile_stream_event(
             redis, event_name=payload.event_name, payload=payload.payload
@@ -204,6 +233,20 @@ async def dispatch_event(
             "body": payload.body,
             "data": payload.data,
         }
+        # Persist push notifications to DB so they can be fetched later.
+        # Avoid duplicating chat/match notifications that already write to DB.
+        data_type = str((payload.data or {}).get("type") or "")
+        if not data_type.startswith("chat.") and not data_type.startswith("match."):
+            await Notification.create(
+                data={
+                    "user_id": payload.user_id,
+                    "title": payload.title,
+                    "body": payload.body,
+                    "event_type": "push_notification",
+                    "payload": payload.data,
+                },
+                db=db,
+            )
         await redis.rpush(
             "notifications:push:queue",
             json.dumps(payload_dict),

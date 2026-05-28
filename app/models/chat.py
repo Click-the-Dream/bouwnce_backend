@@ -95,6 +95,7 @@ class Message(BaseModel):
         String, nullable=True
     )  # image|video|file
     media_urls: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    media_name: Mapped[str | None] = mapped_column(String, nullable=True)
     reply_to_message_id: Mapped[UUID_Type | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("messages.id", ondelete="SET NULL"),

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Self
 
 from sqlalchemy import DateTime, ForeignKey, String, select
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,7 @@ class Notification(BaseModel):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(String(1000), nullable=False)
     event_type: Mapped[str | None] = mapped_column(String(80))
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     @classmethod

@@ -8,6 +8,8 @@ from fastapi import status
 from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.matching_ground.model.notification import Notification
 from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.utils.exception import ForbiddenException, NotFoundException
@@ -126,6 +128,22 @@ class ChatService:
         as_response: bool = False,
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
+        recipient_is_bouwnce = (
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and recipient.username == settings.BOUWNCE_SYSTEM_USERNAME
+        )
+        sender_is_bouwnce = (
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and sender.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and sender.username == settings.BOUWNCE_SYSTEM_USERNAME
+        )
+        if recipient_is_bouwnce and not sender_is_bouwnce:
+            raise ForbiddenException("You cannot reply to Bouwnce inbox")
         conversation = await self.get_or_create_conversation(
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
@@ -142,6 +160,22 @@ class ChatService:
         conversation.last_message_at = datetime.now(UTC)
         await db.flush()
         await db.refresh(msg)
+
+        await Notification.create(
+            data={
+                "user_id": recipient.id,
+                "title": sender.full_name or sender.username or "New message",
+                "body": body[:120],
+                "event_type": "chat_message",
+                "payload": {
+                    "route": "chat.conversation",
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(msg.id),
+                    "sender": self._serialize_user(sender),
+                },
+            },
+            db=db,
+        )
 
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
@@ -233,11 +267,28 @@ class ChatService:
         body: str | None = None,
         media_urls: list[str],
         media_type: str,
+        file_name: str | None = None,
         reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
+        recipient_is_bouwnce = (
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and recipient.username == settings.BOUWNCE_SYSTEM_USERNAME
+        )
+        sender_is_bouwnce = (
+            settings.BOUWNCE_SYSTEM_EMAIL
+            and sender.email == settings.BOUWNCE_SYSTEM_EMAIL
+        ) or (
+            settings.BOUWNCE_SYSTEM_USERNAME
+            and sender.username == settings.BOUWNCE_SYSTEM_USERNAME
+        )
+        if recipient_is_bouwnce and not sender_is_bouwnce:
+            raise ForbiddenException("You cannot reply to Bouwnce inbox")
         conversation = await self.get_or_create_conversation(
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
@@ -254,6 +305,11 @@ class ChatService:
             body=(body or "").strip(),
             media_type=media_type,
             media_urls=(urls or None),
+            media_name=(
+                file_name.strip()
+                if isinstance(file_name, str) and file_name.strip()
+                else None
+            ),
             reply_to_message_id=reply_to_message_id,
         )
         db.add(msg)
@@ -261,6 +317,25 @@ class ChatService:
         conversation.last_message_at = datetime.now(UTC)
         await db.flush()
         await db.refresh(msg)
+
+        await Notification.create(
+            data={
+                "user_id": recipient.id,
+                "title": sender.full_name or sender.username or "New message",
+                "body": (msg.body or "")[:120],
+                "event_type": "chat_message",
+                "payload": {
+                    "route": "chat.conversation",
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(msg.id),
+                    "sender": self._serialize_user(sender),
+                    "media_type": media_type,
+                    "media_urls": urls,
+                    "media_name": msg.media_name,
+                },
+            },
+            db=db,
+        )
 
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
@@ -331,6 +406,7 @@ class ChatService:
         rows = list(result.scalars().all())
 
         last_by_conversation_id: dict[str, Message] = {}
+        unread_by_conversation_id: dict[str, int] = {}
         if rows:
             conv_ids = [c.id for c in rows]
             last_stmt = (
@@ -344,6 +420,23 @@ class ChatService:
             last_msgs = list(last_result.scalars().all())
             last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
 
+            unread_stmt = (
+                select(
+                    Message.conversation_id,
+                    func.count().label("unread_count"),
+                )
+                .where(
+                    Message.conversation_id.in_(conv_ids),
+                    Message.recipient_id == user_id,
+                    Message.read_at.is_(None),
+                )
+                .group_by(Message.conversation_id)
+            )
+            unread_result = await db.execute(unread_stmt)
+            unread_by_conversation_id = {
+                str(conv_id): int(count or 0) for conv_id, count in unread_result.all()
+            }
+
         data = {
             "items": [],
             "page": page,
@@ -355,6 +448,7 @@ class ChatService:
             conv_data = self._serialize_conversation(conv, current_user_id=user_id)
             last = last_by_conversation_id.get(str(conv.id))
             conv_data["last_message"] = last.to_dict() if last is not None else False
+            conv_data["unread_count"] = unread_by_conversation_id.get(str(conv.id), 0)
             data["items"].append(conv_data)
 
         if as_response:
@@ -597,7 +691,6 @@ class ChatService:
             "conversation_id": str(conv.id),
             "reader_id": str(current_user_id),
             "read": unread_remaining == 0,
-            "read_at": read_at.isoformat() if updated > 0 else False,
             "updated": updated,
         }
 

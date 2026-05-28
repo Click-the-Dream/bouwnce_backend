@@ -1,4 +1,3 @@
-from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -27,6 +26,7 @@ from app.utils.exception import (
     NotFoundException,
 )
 from app.utils.helper import generate_order_track_id
+from app.utils.money import naira_to_kobo
 from app.utils.responses import response_builder
 from app.worker.event_system import (
     EventNames,
@@ -37,14 +37,6 @@ from app.worker.event_system import (
     dispatch_event,
 )
 from app.worker.tasks.order_processor import process_paid_order
-
-
-def _naira_to_kobo(amount_naira: float) -> int:
-    return int(
-        (Decimal(str(amount_naira)) * Decimal("100")).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
-    )
 
 
 class OrderService:
@@ -156,7 +148,7 @@ class OrderService:
                     data={
                         "payment_url": authorization_url,
                         "reference_token": order.reference_token,
-                        "amount_kobo": _naira_to_kobo(order.total_amount),
+                        "amount_kobo": naira_to_kobo(order.total_amount),
                         "available_products": reserved_products,
                     },
                 )
@@ -248,7 +240,7 @@ class OrderService:
 
                 payment_data = {
                     "email": user.email,
-                    "amount": _naira_to_kobo(total_price),
+                    "amount": naira_to_kobo(total_price),
                 }
             except BadRequestException:
                 raise
@@ -320,7 +312,7 @@ class OrderService:
                 data={
                     "payment_url": authorization_url,
                     "reference_token": referenceToken,
-                    "amount_kobo": _naira_to_kobo(total_price),
+                    "amount_kobo": naira_to_kobo(total_price),
                     "available_products": reserved_product,
                     "unavailable_products": unavailable_products,
                 },
@@ -378,7 +370,7 @@ class OrderService:
                 message="Order has been processed",
             )
 
-        expected_amount_kobo = _naira_to_kobo(order.total_amount)
+        expected_amount_kobo = naira_to_kobo(order.total_amount)
         if expected_amount_kobo != int(amount_kobo):
             raise ConflictException(message="amount mismatch")
 

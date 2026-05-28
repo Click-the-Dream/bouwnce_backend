@@ -63,3 +63,14 @@ class PaginatedNewsLetterResponse(BaseResponse):
         PaginatedNewsLetterResponseSchema,
         Field(..., description="Paginated newsletter response data"),
     ]
+
+
+class NewsLetterSendResponseSchema(BaseModel):
+    sent: Annotated[int, Field(..., description="How many emails were queued/sent")]
+
+
+class NewsLetterSendResponse(BaseResponse):
+    data: Annotated[
+        NewsLetterSendResponseSchema,
+        Field(..., description="Newsletter send response data"),
+    ]

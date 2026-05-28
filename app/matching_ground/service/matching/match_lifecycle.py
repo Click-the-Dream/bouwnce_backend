@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import BackgroundTasks
@@ -25,16 +24,15 @@ from app.utils.exception import (
 )
 
 
-@dataclass
 class MatchLifecycleService:
     @staticmethod
-    def _parse_radius_km(message: str) -> float:
+    def _parse_radius_km(message: str) -> float | None:
 
         text = (message or "").strip()
         if not text:
-            return 10.0
+            return None
 
-        radius_km = 10.0
+        radius_km: float | None = None
         radius_match = re.search(
             r"(?i)(?:within|radius|around|near|in)\s*(\d+(?:\.\d+)?)\s*km", text
         )
@@ -42,7 +40,7 @@ class MatchLifecycleService:
             try:
                 radius_km = float(radius_match.group(1))
             except ValueError:
-                radius_km = 10.0
+                radius_km = None
 
         return radius_km
 
@@ -117,7 +115,7 @@ class MatchLifecycleService:
         session: AsyncSession,
         requester_id: uuid.UUID,
         interest_hints: set[str] | None = None,
-        radius_km: float = 10.0,
+        radius_km: float | None = 10.0,
     ) -> dict:
         buddy_search_service = BuddySearchService()
         result = await buddy_search_service.search(
@@ -146,11 +144,10 @@ class MatchLifecycleService:
                     "profile_pic": item.profile_pic,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
-                    "shared_traits": item.shared_traits,
                     "score_explanation": (
                         f"distance={item.distance_km}km, "
                         f"shared_interests={len(item.shared_interests)}, "
-                        f"shared_traits={len(item.shared_traits)}"
+                        "shared_traits=0"
                     ),
                 }
                 for item in filtered_matches
@@ -232,6 +229,27 @@ class MatchLifecycleService:
         )
 
         target_user = await User.get_by_id(str(target_user_id), session)
+        requester_display = requester.username or requester.full_name or "someone"
+
+        await Notification.create(
+            data={
+                "user_id": target_user_id,
+                "title": f"New match request · {requester_display}",
+                "body": f"{requester_display} sent you a match request.",
+                "event_type": "match_request",
+                "payload": {
+                    "route": "match.request",
+                    "request_id": str(request.id),
+                    "from_user": {
+                        "id": str(requester.id),
+                        "username": requester.username,
+                        "full_name": requester.full_name,
+                        "profile_pic": requester.profile_pic,
+                    },
+                },
+            },
+            db=session,
+        )
 
         email_context = {
             "requester_name": requester.full_name,
@@ -279,6 +297,29 @@ class MatchLifecycleService:
 
         if not accepted:
             await request.set_status(session, "rejected")
+            responder_user = await User.get_by_id(str(request.target_user_id), session)
+            responder_display = (
+                responder_user.username or responder_user.full_name or "your match"
+            )
+            await Notification.create(
+                data={
+                    "user_id": request.requester_id,
+                    "title": f"Match request declined · {responder_display}",
+                    "body": f"{responder_display} declined your match request.",
+                    "event_type": "match_rejected",
+                    "payload": {
+                        "route": "match.requests",
+                        "request_id": str(request.id),
+                        "other_user": {
+                            "id": str(responder_user.id),
+                            "username": responder_user.username,
+                            "full_name": responder_user.full_name,
+                            "profile_pic": responder_user.profile_pic,
+                        },
+                    },
+                },
+                db=session,
+            )
             return {"status": "rejected", "request_id": str(request.id)}
 
         await request.set_status(session, "accepted")
@@ -290,11 +331,27 @@ class MatchLifecycleService:
             session, request.requester_id, request.target_user_id
         )
 
+        other_user = await User.get_by_id(str(request.target_user_id), session)
+        other_display = other_user.username or other_user.full_name or "your match"
+
         notif_data = {
             "user_id": request.requester_id,
-            "title": "Match accepted",
-            "body": "Your match request has been accepted. Your 3-day chat window is now open.",
+            "title": f"Match accepted · {other_display}",
+            "body": f"You matched with {other_display}. Your 3-day chat window is now open.",
             "event_type": "match_accepted",
+            "payload": {
+                "route": "chat.conversation",
+                "conversation_id": str(conversation.id),
+                "match_id": str(match.id),
+                "request_id": str(request.id),
+                "unread_messages_count": 0,
+                "other_user": {
+                    "id": str(other_user.id),
+                    "username": other_user.username,
+                    "full_name": other_user.full_name,
+                    "profile_pic": other_user.profile_pic,
+                },
+            },
         }
         await Notification.create(
             data=notif_data,

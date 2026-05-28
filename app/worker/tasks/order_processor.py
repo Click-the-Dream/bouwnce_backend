@@ -1,7 +1,6 @@
 import asyncio
 import json
 from datetime import UTC, datetime
-from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.security import genrate_verification_code
 from app.db.postgres_db_conn import get_async_session
@@ -13,6 +12,7 @@ from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.schemas.events import PaidOrderEvent
 from app.utils.helper import generate_suborder_track_id
+from app.utils.money import naira_to_kobo
 from app.worker.celery_app import celery_app
 from app.worker.event_system import (
     EmailNotificationEvent,
@@ -25,14 +25,6 @@ from app.worker.event_system import (
     UserCartClearEvent,
     dispatch_event,
 )
-
-
-def _naira_to_kobo(amount_naira: float) -> int:
-    return int(
-        (Decimal(str(amount_naira)) * Decimal("100")).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
-    )
 
 
 async def _process_paid_order(event: PaidOrderEvent) -> None:
@@ -71,7 +63,7 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
                 redis=redis,
             )
 
-            if _naira_to_kobo(order.total_amount) != amount:
+            if naira_to_kobo(order.total_amount) != amount:
                 await order.update(db, {"status": "failed"})
                 await Payment.update_by_id(
                     str(order.payment_id), {"status": "failed"}, db

@@ -39,7 +39,7 @@ async def search_candidates(
     page_size: int = Query(10, ge=1, le=100),
 ) -> dict:
     service = MatchLifecycleService()
-    return await service.search_candidates_from_message(
+    return await service.search_canfdidates_from_message(
         session=db,
         requester_id=current_user.id,
         message=message,
@@ -67,7 +67,7 @@ async def create_match_request(
     return {k: v for k, v in result.items() if k != "recipient_email"}
 
 
-@router.get("/requests")
+@router.get("/requests", summary="List incoming match requests for the current user"5555555)
 async def list_match_requests(
     db: dbSessionDep,
     current_user: CurrentUser,
@@ -78,6 +78,18 @@ async def list_match_requests(
 ) -> dict:
     service = MatchLifecycleService()
     return await service.list_requests_for_user(db, current_user.id, page, page_size)
+
+@router.get("/requests/me", summary="List outgoing match requests from the current user")
+async def list_sent_match_requests(
+    db: dbSessionDep,
+    current_user: CurrentUser,
+    page: Annotated[int, Query(gt=0, description="Page number")] = 1,
+    page_size: Annotated[
+        int, Query(gt=0, le=100, description="Number of items per page")
+    ] = 10,
+) -> dict:
+    service = MatchLifecycleService()
+    return await service.list_user_sent_requests(db, current_user.id, page, page_size)
 
 
 @router.get("/")

@@ -180,6 +180,36 @@ class MatchLifecycleService:
             "total": len(rows),
         }
 
+    async def list_user_sent_requests(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        page: int, 
+        page_size: int
+    ) -> dict:
+        rows = await MatchRequest.list_sent_by_user(session, user_id, page, page_size)
+        return {
+            "items": [
+                {
+                    "request_id": str(row.id),
+                    "requester": row.requester.to_dict() if row.requester else None,
+                    "target_user": (
+                        row.target_user.to_dict() if row.target_user else None
+                    ),
+                    "status": row.status,
+                    "note": row.note,
+                    "created_at": row.created_at.isoformat(),
+                    "responded_at": (
+                        row.responded_at.isoformat() if row.responded_at else None
+                    ),
+                }
+                for row in rows
+            ],
+            "page": page,
+            "page_size": page_size,
+            "total": len(rows),
+        }
+        
     async def list_matches_for_user(
         self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int
     ) -> dict:

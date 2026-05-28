@@ -113,3 +113,17 @@ class MatchRequest(BaseModel):
             .order_by(cls.created_at.desc())
         )
         return list(result.scalars().all())
+    
+    @classmethod
+    async def list_sent_by_user(
+        cls, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int
+    ) -> list[Self]:
+        result = await session.execute(
+            select(cls)
+            .where(cls.requester_id == user_id)
+            .options(selectinload(cls.requester), selectinload(cls.target_user))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .order_by(cls.created_at.desc())
+        )
+        return list(result.scalars().all())

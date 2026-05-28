@@ -45,7 +45,7 @@ jobs:
                     uv sync
 
                     set -a
-                    source /var/www/backend/.venv/bin/activate
+                    source /var/www/backend/.env
                     set +a
 
                     uv run alembic upgrade head

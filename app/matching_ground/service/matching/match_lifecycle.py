@@ -229,7 +229,8 @@ class MatchLifecycleService:
             "page_size": page_size,
             "total": len(rows),
         }
-
+    
+    )
     async def create_request(
         self,
         session: AsyncSession,

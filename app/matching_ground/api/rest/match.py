@@ -107,6 +107,7 @@ async def list_matches(
     service = MatchLifecycleService()
     return await service.list_matches_for_user(db, current_user.id, page, page_size)
 
+
 @router.get("/{user_id}", summary="List matches for a specific user")
 async def list_matches_for_user_by_id(
     user_id: uuid.UUID,
@@ -117,7 +118,10 @@ async def list_matches_for_user_by_id(
         int, Query(gt=0, le=100, description="Number of items per page")
     ] = 10,
 ):
-    return await MatchLifecycleService().list_matches_for_user(db, user_id, page=page, page_size=page_size)
+    return await MatchLifecycleService().list_matches_for_user(
+        db, user_id, page=page, page_size=page_size
+    )
+
 
 @router.post("/requests/{request_id}/respond")
 async def respond_match_request(

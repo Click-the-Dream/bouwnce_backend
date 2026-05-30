@@ -40,6 +40,7 @@ dev = [
   "black>=25.1.0",
   "mongoengine>=0.29.1",
   "mongoengine-migrate>=0.0.3",
+  "pip-audit>=2.10.0",
   "pre-commit>=4.3.0",
   "ruff>=0.13.0",
 ]

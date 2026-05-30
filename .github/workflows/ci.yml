@@ -104,6 +104,7 @@ jobs:
           FASTAPI_ENV: development
           JWT_SECRET_KEY: ci-test-jwt-secret-not-for-production
           MONGODB_DATABASE_URL: mongodb://localhost:27017/test_db
+          MONGODB_DB_NAME: test_db
         run: uv run alembic upgrade head
 
       - name: Start API and run tests
@@ -112,6 +113,7 @@ jobs:
           FASTAPI_ENV: development
           JWT_SECRET_KEY: ci-test-jwt-secret-not-for-production
           MONGODB_DATABASE_URL: mongodb://localhost:27017/test_db
+          MONGODB_DB_NAME: test_db
         run: |
           uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 

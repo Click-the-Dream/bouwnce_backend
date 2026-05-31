@@ -32,7 +32,7 @@ async def register_user(
     user_data: UserCreate, background_taks: BackgroundTasks, db: dbSessionDep
 ):
     user_data_dict = user_data.model_dump()
-    user_data_dict["role"] = user_data.role.value
+    user_data_dict["role"] = "user"  # Ensure role is set to "user" for all registrations
 
     return await auth_service.create_user(
         user_data_dict, db=db, background_tasks=background_taks

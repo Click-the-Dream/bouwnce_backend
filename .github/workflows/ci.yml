@@ -106,6 +106,7 @@ jobs:
           MONGODB_DATABASE_URL: mongodb://localhost:27017/test_db
           MONGODB_DB_NAME: test_db
           BASE_URL: http://localhost:8000
+          REDIS_URL: redis://localhost:6379/0
 
         run: uv run alembic upgrade head
 

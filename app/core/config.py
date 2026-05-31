@@ -1,8 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Redis keys / streams 
-MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream" 
+# Redis keys / streams
+MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
 PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -59,9 +60,7 @@ class Settings(BaseSettings):
     BOUWNCE_SYSTEM_EMAIL: str = "support@bouwnce.com"
     BOUWNCE_SYSTEM_USERNAME: str = "bouwnce"
     BOUWNCE_SYSTEM_FULL_NAME: str = "Bouwnce"
-    BOUWNCE_WELCOME_MESSAGE: str = (
-        "Welcome to Bouwnce! This is the official inbox."
-    )
+    BOUWNCE_WELCOME_MESSAGE: str = "Welcome to Bouwnce! This is the official inbox."
 
     # =========================
     # Self ping
@@ -81,10 +80,10 @@ class Settings(BaseSettings):
     CLOUDINARY_KEY: str = ""
     CLOUDINARY_SECRET: str = ""
     CLOUDINARY_NAME: str = ""
-    
+
     RESEND_API_KEY: str = ""
     RESEND_EMAIL: str = ""
-    
+
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
     SMTP_PORT: int = 465
@@ -96,7 +95,6 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_EXPIRE_MINUTES: int = 30
     PROJECT_EMAIL: str = ""
     MAIL_TRAP_CODE: str = ""
-
 
     TRUST_X_FORWARDED_FOR: bool = True
 
@@ -120,5 +118,6 @@ class Settings(BaseSettings):
     QSTASH_TOKEN: str = ""
     QSTASH_CURRENT_SIGNING_KEY: str = ""
     QSTASH_NEXT_SIGNING_KEY: str = ""
-    
+
+
 settings = Settings()

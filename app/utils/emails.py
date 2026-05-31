@@ -51,7 +51,7 @@ def _get_smtp_conf() -> ConnectionConfig:
 
 
 # Setting up email service depending on the environment
-if settings.NAME == "staging":
+if settings.FASTAPI_ENV == "staging":
     resend.api_key = settings.RESEND_API_KEY
 
 
@@ -127,11 +127,11 @@ async def send_email(
     *, email_to: str, subject: str = "", html_content: str = ""
 ) -> bool:
 
-    if settings.NAME == "staging":
+    if settings.FASTAPI_ENV == "staging":
         return await send_email_using_resend(
             email_to=email_to, subject=subject, html_content=html_content
         )
-    elif settings.NAME == "dev":
+    elif settings.FASTAPI_ENV == "dev":
         return await send_email_using_smtp(
             email_to=email_to, subject=subject, html_content=html_content
         )

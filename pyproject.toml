@@ -15,12 +15,12 @@ dependencies = [
   "psycopg2-binary>=2.9.10",
   "pydantic-settings>=2.10.1",
   "pyjwt>=2.10.1",
-  "pymongo>=4.15.0",
+  "pymongo==4.11.3",
   "python-decouple>=3.8",
   "redis>=6.4.0",
   "sqlalchemy>=2.0.43",
   "fastapi-mail>=1.5.0",
-  "beanie[odm]>=2.0.0",
+  "beanie[odm]==1.30.0",
   "motor>=3.7.1",
   "cloudinary>=1.44.1",
   "python-multipart>=0.0.20",
@@ -33,6 +33,7 @@ dependencies = [
   "black>=26.3.1",
   "pre-commit>=4.5.1",
   "bandit>=1.9.4",
+  "qstash>=3.4.0",
 ]
 
 

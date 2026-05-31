@@ -4,6 +4,9 @@ from pymongo import errors
 
 from app.core.config import settings
 
+if not settings.MONGODB_DATABASE_URL:
+    raise ValueError("MONGODB_DATABASE_URL is not set in the environment variables")
+
 client = AsyncIOMotorClient(settings.MONGODB_DATABASE_URL)
 db = client.get_database(settings.MONGODB_DB_NAME)
 

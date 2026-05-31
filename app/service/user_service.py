@@ -185,7 +185,6 @@ class UserService:
         profile_banner: UploadFile | None = None,
     ) -> dict[str, Any]:
 
-
         data = {}
         path = []
         banner_path = []

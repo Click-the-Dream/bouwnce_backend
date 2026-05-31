@@ -185,8 +185,6 @@ class UserService:
         profile_banner: UploadFile | None = None,
     ) -> dict[str, Any]:
 
-        if not profile_pic:
-            raise BadRequestException("Profile pic not provided")
 
         data = {}
         path = []

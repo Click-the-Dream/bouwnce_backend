@@ -120,7 +120,7 @@ jobs:
           BASE_URL: http://localhost:8000
           REDIS_URL: redis://localhost:6379/0
         run: |
-          uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 
+          uv run uvicorn main:app --host 0.0.0.0 --port 8000 
 
           echo "Waiting for API..."
           for i in $( seq 1 30 ); do

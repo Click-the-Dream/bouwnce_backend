@@ -113,6 +113,7 @@ jobs:
       - name: Start API and run tests
         env:
           PROJECT_NAME: test_backend
+          API_STR: "/api"
           SQLALCHEMY_DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5433/test_db
           FASTAPI_ENV: development
           JWT_SECRET_KEY: ci-test-jwt-secret-not-for-production

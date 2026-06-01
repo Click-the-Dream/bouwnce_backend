@@ -1,7 +1,7 @@
 """convert store_logo and store_banner in store to json
 
 Revision ID: dbd0f66e6475
-Revises: dfcf2513ffe4
+Revises: 6b0c2f9a7d1a
 Create Date: 2025-10-29 14:23:48.013456
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "dbd0f66e6475"
-down_revision: Union[str, Sequence[str], None] = "dfcf2513ffe4"
+down_revision: Union[str, Sequence[str], None] = "6b0c2f9a7d1a"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

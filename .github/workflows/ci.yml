@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -6,7 +6,9 @@ on:
   pull_request:
     branches: [staging]
 
-  workflow_call:
+concurrency:
+  group: backend-${{ github.base_ref || github.ref_name }}
+  cancel-in-progress: true
 
 
 jobs:
@@ -111,15 +113,49 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Run tests
-        run: |
-          set +e
-          uv run pytest --tb=short -q
-          status=$?
-          set -e
-          if [ "$status" -eq 5 ]; then
-            echo "No tests were collected; skipping pytest failure."
-            exit 0
-          fi
-          exit "$status"
+        run: uv run pytest --tb=short -q
 
-          
+  deploy-staging:
+    name: Deploy to Staging
+    needs: tests
+    runs-on: ubuntu-latest
+    environment: staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    steps:
+      - name: Deploy to Staging
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST}}
+          username: ${{ secrets.EC2_USER}}
+          key: ${{ secrets.EC2_SSH_KEY}}
+          script: |
+              set -euo pipefail
+
+              cd /var/www/backend
+              export PATH="$HOME/.local/bin:$PATH"
+
+              git fetch origin staging
+              git checkout staging
+              git pull origin staging
+
+              uv sync
+
+              set -a
+              source /var/www/backend/.env
+              set +a
+
+              uv run alembic current
+              uv run alembic upgrade head
+
+              pm2 start ecosystem.config.js --only staging, celery-worker-staging, flower-staging || \
+              pm2 reload ecosystem.config.js --only staging, celery-worker-staging, flower-staging
+
+              pm2 save
+
+              echo  "⏳ Waiting for API to be ready..."
+              for i in $(seq 1 15); do
+                  curl -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
+                  sleep 2
+              done
+              echo "❌ API failed to start within expected time."
+              exit 1

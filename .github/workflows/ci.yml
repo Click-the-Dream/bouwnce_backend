@@ -155,10 +155,12 @@ jobs:
               uv run alembic upgrade head
 
               if command -v pm2 >/dev/null 2>&1; then
+                  export UV_BIN="$(command -v uv)"
                   pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging || \
                   pm2 reload ecosystem.config.js --only staging,celery-worker-staging,flower-staging
                   pm2 save
               elif command -v npx >/dev/null 2>&1; then
+                  export UV_BIN="$(command -v uv)"
                   npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging || \
                   npx --yes pm2 reload ecosystem.config.js --only staging,celery-worker-staging,flower-staging
                   npx --yes pm2 save
@@ -168,9 +170,13 @@ jobs:
               fi
 
               echo  "⏳ Waiting for API to be ready..."
-              for i in $(seq 1 15); do
+              for i in $(seq 1 60); do
                   curl -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
-                  sleep 2
+                  sleep 3
               done
+              if command -v pm2 >/dev/null 2>&1; then
+                  pm2 status || true
+                  pm2 logs staging --lines 50 || true
+              fi
               echo "❌ API failed to start within expected time."
               exit 1

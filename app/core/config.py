@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Redis keys / streams
@@ -23,6 +24,9 @@ class Settings(BaseSettings):
     FASTAPI_ENV: str = "development"
 
     SQLALCHEMY_DATABASE_URL: str = ""
+    SQLALCHEMY_DATABASE_DEV_URL: str = ""
+    SQLALCHEMY_DATABASE_STAG_URL: str = ""
+    SQLALCHEMY_DATABASE_PROD_URL: str = ""
     SQLALCHEMY_POOL_SIZE: int = 10
     SQLALCHEMY_MAX_OVERFLOW: int = 20
     SQLALCHEMY_FUTURE: bool = True
@@ -118,6 +122,21 @@ class Settings(BaseSettings):
     QSTASH_TOKEN: str = ""
     QSTASH_CURRENT_SIGNING_KEY: str = ""
     QSTASH_NEXT_SIGNING_KEY: str = ""
+
+    @model_validator(mode="after")
+    def _resolve_database_url(self) -> "Settings":
+        if self.SQLALCHEMY_DATABASE_URL.strip():
+            return self
+
+        env_name = (self.FASTAPI_ENV or "").strip().lower()
+        if env_name == "production":
+            self.SQLALCHEMY_DATABASE_URL = self.SQLALCHEMY_DATABASE_PROD_URL
+        elif env_name == "staging":
+            self.SQLALCHEMY_DATABASE_URL = self.SQLALCHEMY_DATABASE_STAG_URL
+        else:
+            self.SQLALCHEMY_DATABASE_URL = self.SQLALCHEMY_DATABASE_DEV_URL
+
+        return self
 
 
 settings = Settings()

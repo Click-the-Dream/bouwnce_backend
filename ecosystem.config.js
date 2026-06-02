@@ -5,9 +5,7 @@ module.exports = {
     {
       name: "staging",
       cwd: baseDir,
-      script: "/bin/bash",
-      args: '-lc \'${UV_BIN:-uv} run uvicorn main:app --host 0.0.0.0 --port 8000\'',
-      interpreter: "none",
+      script: "bin/start-api.sh",
       autorestart: true,
       watch: false,
       max_restarts: 10,
@@ -18,9 +16,7 @@ module.exports = {
     {
       name: "celery-worker-staging",
       cwd: baseDir,
-      script: "/bin/bash",
-      args: '-lc \'${UV_BIN:-uv} run celery -A app.worker.celery_app.celery_app worker --loglevel=info\'',
-      interpreter: "none",
+      script: "bin/start-celery-worker.sh",
       autorestart: true,
       watch: false,
       max_restarts: 10,
@@ -31,9 +27,7 @@ module.exports = {
     {
       name: "flower-staging",
       cwd: baseDir,
-      script: "/bin/bash",
-      args: '-lc \'${UV_BIN:-uv} run celery -A app.worker.celery_app.celery_app flower --port=5555\'',
-      interpreter: "none",
+      script: "bin/start-flower.sh",
       autorestart: true,
       watch: false,
       max_restarts: 10,

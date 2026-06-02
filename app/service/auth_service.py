@@ -57,7 +57,7 @@ class AuthService:
         except Exception as e:
             raise InternalServerErrorException(
                 message="Error occured when creating user"
-            ) from None
+            ) from e
 
         email_data = generate_login_verification_email(new_user.username, otp)
         background_tasks.add_task(

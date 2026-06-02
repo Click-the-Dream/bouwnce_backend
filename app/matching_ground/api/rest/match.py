@@ -31,8 +31,8 @@ async def suggest_candidates(
 async def search_candidates(
     db: dbSessionDep,
     current_user: CurrentUser,
-    message: str = Query(
-        ...,
+    message: str | None = Query(
+        None,
         description="Natural language search, e.g. 'I want someone into AI within 5km'",
     ),
     page: int = Query(1, ge=1),

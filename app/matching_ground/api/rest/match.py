@@ -39,7 +39,7 @@ async def search_candidates(
     page_size: int = Query(10, ge=1, le=100),
 ) -> dict:
     service = MatchLifecycleService()
-    return await service.search_canfdidates_from_message(
+    return await service.search_candidates_from_message(
         session=db,
         requester_id=current_user.id,
         message=message,

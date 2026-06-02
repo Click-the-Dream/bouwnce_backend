@@ -24,6 +24,7 @@ jobs:
         needs: ci
         runs-on: ubuntu-latest
         environment: staging
+        if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
         # if: github.event.pull_request.merged == true && github.ref == 'staging'
         steps:
             - name: Deploy to Staging
@@ -48,6 +49,7 @@ jobs:
                     source /var/www/backend/.env
                     set +a
 
+                    uv run alembic current
                     uv run alembic upgrade head
 
                     pm2 start ecosystem.config.js --only staging, celery-worker-staging, flower-staging || \

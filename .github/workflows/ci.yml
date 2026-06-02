@@ -101,16 +101,16 @@ jobs:
       - name: Run migrations
         env:
           SQLALCHEMY_DATABASE_URL: postgresql+asyncpg://postgres:password@localhost:5433/test_db
+          SQLALCHEMY_DATABASE_DEV_URL: postgresql+asyncpg://postgres:password@localhost:5433/test_db
           FASTAPI_ENV: development
           JWT_SECRET_KEY: ci-test-jwt-secret-not-for-production
           MONGODB_DATABASE_URL: mongodb://localhost:27017/test_db
           MONGODB_DB_NAME: test_db
           BASE_URL: http://localhost:8000
           REDIS_URL: redis://localhost:6379/0
-
         run: uv run alembic upgrade head
 
-
-          uv run pytest --tb=short -q
+      - name: Run tests
+        run: uv run pytest --tb=short -q
 
           

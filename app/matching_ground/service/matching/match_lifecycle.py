@@ -13,6 +13,7 @@ from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.notification import Notification
 from app.matching_ground.model.user_block import UserBlock
+from app.matching_ground.model.user_interest import UserInterest
 from app.matching_ground.service.buddy_search import BuddySearchService
 from app.models.chat import Conversation
 from app.models.user import User
@@ -75,25 +76,102 @@ class MatchLifecycleService:
 
         return set(hits)
 
+    @staticmethod
+    def _normalize_search_text(message: str) -> str:
+        return normalize_interest_name(message or "")
+
+    async def _extract_user_hints(
+        self,
+        session: AsyncSession,
+        message: str,
+        *,
+        max_users: int = 5,
+    ) -> set[uuid.UUID]:
+        text = self._normalize_search_text(message)
+        if not text:
+            return set()
+
+        rows = await session.execute(
+            select(User.id, User.username, User.full_name).where(
+                User.is_active.is_(True), User.is_deleted.is_(False)
+            )
+        )
+        hits: set[uuid.UUID] = set()
+        for user_id, username, full_name in rows.all():
+            candidates = [
+                normalize_interest_name(username or ""),
+                normalize_interest_name(full_name or ""),
+            ]
+            if any(candidate and candidate in text for candidate in candidates):
+                hits.add(user_id)
+                if len(hits) >= max_users:
+                    break
+        return hits
+
+    async def _build_suggested_queries(
+        self, session: AsyncSession, requester_id: uuid.UUID, *, limit: int = 5
+    ) -> list[str]:
+        rows = await session.execute(
+            select(Interest.name)
+            .join(UserInterest, UserInterest.interest_id == Interest.id)
+            .where(UserInterest.user_id == requester_id)
+            .order_by(Interest.name.asc())
+        )
+        interests = [name for (name,) in rows.all() if name]
+        suggestions: list[str] = []
+        for name in interests[:limit]:
+            suggestions.append(f"people who like {name}")
+        if not suggestions:
+            suggestions = [
+                "people near me",
+                "people who like reading",
+                "people who like podcast",
+                "people who like volunteering",
+            ][:limit]
+        return suggestions
+
     async def search_candidates_from_message(
         self,
         *,
         session: AsyncSession,
         requester_id: uuid.UUID,
-        message: str,
+        message: str | None,
         page: int = 1,
         page_size: int = 10,
     ) -> dict:
-        radius_km = self._parse_radius_km(message)
-        interest_hints = await self._extract_interest_hints(session, message)
+        message_text = (message or "").strip()
+        radius_km = self._parse_radius_km(message_text)
+        interest_hints = await self._extract_interest_hints(session, message_text)
+        target_user_ids = await self._extract_user_hints(session, message_text)
         result = await self.suggest_candidates(
             session=session,
             requester_id=requester_id,
             interest_hints=interest_hints,
+            target_user_ids=target_user_ids,
             radius_km=radius_km,
         )
 
         items = result.get("items", []) or []
+        if not message_text:
+            suggested_queries = await self._build_suggested_queries(
+                session, requester_id
+            )
+        else:
+            suggested_queries = []
+
+        if not items:
+            fallback_result = await self.suggest_candidates(
+                session=session,
+                requester_id=requester_id,
+                interest_hints=set(),
+                target_user_ids=None,
+                radius_km=radius_km,
+            )
+            fallback_items = fallback_result.get("items", []) or []
+            if fallback_items:
+                result = fallback_result
+                items = fallback_items
+
         start = (page - 1) * page_size
         end = start + page_size
         return {
@@ -104,10 +182,12 @@ class MatchLifecycleService:
             "total": len(items),
             "items": items[start:end],
             "query": {
-                "message": message,
+                "message": message_text,
                 "radius_km": radius_km,
                 "interest_hints": sorted(interest_hints),
+                "target_user_ids": sorted(str(uid) for uid in target_user_ids),
             },
+            "suggested_queries": suggested_queries,
         }
 
     async def suggest_candidates(
@@ -115,6 +195,7 @@ class MatchLifecycleService:
         session: AsyncSession,
         requester_id: uuid.UUID,
         interest_hints: set[str] | None = None,
+        target_user_ids: set[uuid.UUID] | None = None,
         radius_km: float | None = 10.0,
     ) -> dict:
         buddy_search_service = BuddySearchService()
@@ -123,6 +204,7 @@ class MatchLifecycleService:
             requester_id=requester_id,
             radius_km=radius_km,
             interest_hints=interest_hints,
+            target_user_ids=target_user_ids,
         )
         filtered_matches = []
         for item in result.matches:

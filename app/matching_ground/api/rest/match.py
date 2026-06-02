@@ -31,15 +31,15 @@ async def suggest_candidates(
 async def search_candidates(
     db: dbSessionDep,
     current_user: CurrentUser,
-    message: str = Query(
-        ...,
+    message: str | None = Query(
+        None,
         description="Natural language search, e.g. 'I want someone into AI within 5km'",
     ),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
 ) -> dict:
     service = MatchLifecycleService()
-    return await service.search_canfdidates_from_message(
+    return await service.search_candidates_from_message(
         session=db,
         requester_id=current_user.id,
         message=message,

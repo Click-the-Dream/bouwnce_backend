@@ -48,7 +48,7 @@ class AuthService:
         user_data["is_store_owner"] = False
         try:
             new_user = await User.create(user_data, db)
-            
+
             await UserWallet.create({"user_id": new_user.id}, db=db)
             otp = await new_user.generate_otp(db)
             # Ensure OTP is persisted before returning it to the client (avoids race with /verify-code)
@@ -57,7 +57,7 @@ class AuthService:
         except Exception:
             raise InternalServerErrorException(
                 message="Error occured when creating user"
-            ) from None
+            ) from e
 
         email_data = generate_login_verification_email(new_user.username, otp)
         background_tasks.add_task(

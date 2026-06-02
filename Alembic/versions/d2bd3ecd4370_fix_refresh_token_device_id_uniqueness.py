@@ -46,9 +46,17 @@ def _constraint_exists(table_name: str, constraint_name: str) -> bool:
     )
 
 
+def _table_exists(table_name: str) -> bool:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    return inspector.has_table(table_name)
+
+
 def upgrade() -> None:
     """Upgrade schema."""
     # Some environments may not have the legacy constraint name; be resilient.
+    if not _table_exists("refresh_tokens"):
+        return
     if _constraint_exists("refresh_tokens", "refresh_tokens_device_id_key"):
         op.drop_constraint(
             "refresh_tokens_device_id_key", "refresh_tokens", type_="unique"
@@ -63,6 +71,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    if not _table_exists("refresh_tokens"):
+        return
     if _constraint_exists("refresh_tokens", "uix_refresh_tokens_user_id_device_id"):
         op.drop_constraint(
             "uix_refresh_tokens_user_id_device_id", "refresh_tokens", type_="unique"

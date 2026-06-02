@@ -7,6 +7,7 @@ import uuid
 
 from fastapi import WebSocket
 from sqlalchemy import func, select
+from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import (
     MOBILE_EVENTS_STREAM_KEY,
@@ -358,7 +359,10 @@ class MobileEventsService:
 
         try:
             while True:
-                raw = await websocket.receive_text()
+                try:
+                    raw = await websocket.receive_text()
+                except WebSocketDisconnect:
+                    break
                 try:
                     incoming = json.loads(raw)
                 except Exception:

@@ -28,6 +28,7 @@ class BuddySearchService:
         requester_id: uuid.UUID,
         radius_km: float | None = 10.0,
         interest_hints: set[str] | None = None,
+        target_user_ids: set[uuid.UUID] | None = None,
         limit: int = 10,
     ) -> BuddySearchResult:
         requester_geo = await self.geolocation_model.get_by_user_id(
@@ -82,6 +83,10 @@ class BuddySearchService:
             )
         )
         excluded_user_ids.update(outgoing_request_rows.scalars().all())
+
+        targeted_user_ids = {
+            uuid.UUID(str(uid)) for uid in (target_user_ids or set()) if uid
+        }
 
         candidate_geo = self.geolocation_model
         distance_expr = None
@@ -196,11 +201,23 @@ class BuddySearchService:
                 self.user_model.id != requester_id, self.user_model.is_active.is_(True)
             )
             .order_by(
+                (
+                    sa.case(
+                        (self.user_model.id.in_(list(targeted_user_ids)), 1),
+                        else_=0,
+                    ).desc()
+                    if targeted_user_ids
+                    else self.user_model.created_at.desc()
+                ),
                 score_expr.desc(),
                 interest_value.desc(),
                 self.user_model.created_at.desc(),
             )
         )
+        if targeted_user_ids:
+            base_query = base_query.where(
+                self.user_model.id.in_(list(targeted_user_ids))
+            )
         if excluded_user_ids:
             base_query = base_query.where(self.user_model.id.not_in(excluded_user_ids))
 

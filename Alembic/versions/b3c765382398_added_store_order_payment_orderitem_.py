@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "b3c765382398"
@@ -39,11 +38,6 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("payment_id", sa.UUID(), nullable=False),
         sa.Column("total_amount", sa.Integer(), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum("pending", "failed", "cancelled", "paid", name="order_status_enum"),
-            nullable=True,
-        ),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -60,18 +54,6 @@ def upgrade() -> None:
         sa.Column("currency", sa.String(), nullable=False),
         sa.Column("provider", sa.String(), server_default="paystack", nullable=False),
         sa.Column("provider_payment_id", sa.String(), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum(
-                "successful",
-                "cancelled",
-                "pending",
-                "declined",
-                "refunded",
-                name="payment_status_enum",
-            ),
-            nullable=True,
-        ),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -99,18 +81,6 @@ def upgrade() -> None:
         sa.Column("store_id", sa.UUID(), nullable=False),
         sa.Column("total_amount", sa.Integer(), nullable=False),
         sa.Column("shipping_fee", sa.Integer(), nullable=False),
-        sa.Column(
-            "status",
-            sa.Enum(
-                "pending",
-                "processing",
-                "shipped",
-                "delivered",
-                "cancelled",
-                name="suborder_status_enum",
-            ),
-            nullable=False,
-        ),
         sa.Column("otp", sa.String(), nullable=True),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -126,9 +96,7 @@ def upgrade() -> None:
         sa.Column("product_id", sa.String(), nullable=False),
         sa.Column("suborder_id", sa.UUID(), nullable=False),
         sa.Column("quantity", sa.Integer(), nullable=False),
-        sa.Column(
-            "product_snapshot", postgresql.JSONB(astext_type=sa.Text()), nullable=False
-        ),
+        sa.Column("product_snapshot", sa.JSON(), nullable=False),
         sa.Column("unit_price", sa.Integer(), nullable=False),
         sa.Column("line_price", sa.Integer(), nullable=False),
         sa.Column("id", sa.UUID(), nullable=False),

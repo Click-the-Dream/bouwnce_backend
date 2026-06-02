@@ -6,6 +6,7 @@ import json
 import uuid
 
 from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect
 from sqlalchemy import func, select
 
 from app.core.config import (
@@ -358,7 +359,10 @@ class MobileEventsService:
 
         try:
             while True:
-                raw = await websocket.receive_text()
+                try:
+                    raw = await websocket.receive_text()
+                except WebSocketDisconnect:
+                    break
                 try:
                     incoming = json.loads(raw)
                 except Exception:

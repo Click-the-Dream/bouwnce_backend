@@ -6,8 +6,8 @@ import json
 import uuid
 
 from fastapi import WebSocket
-from starlette.websockets import WebSocketDisconnect
 from sqlalchemy import func, select
+from starlette.websockets import WebSocketDisconnect
 
 from app.core.config import (
     MOBILE_EVENTS_STREAM_KEY,

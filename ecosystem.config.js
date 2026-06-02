@@ -5,8 +5,8 @@ module.exports = {
     {
       name: "staging",
       cwd: baseDir,
-      script: "uv",
-      args: "run uvicorn main:app --host 0.0.0.0 --port 8000",
+      script: "/bin/bash",
+      args: '-lc "uv run uvicorn main:app --host 0.0.0.0 --port 8000"',
       interpreter: "none",
       autorestart: true,
       watch: false,
@@ -18,8 +18,8 @@ module.exports = {
     {
       name: "celery-worker-staging",
       cwd: baseDir,
-      script: "uv",
-      args: "run celery -A app.worker.celery_app.celery_app worker --loglevel=info",
+      script: "/bin/bash",
+      args: '-lc "uv run celery -A app.worker.celery_app.celery_app worker --loglevel=info"',
       interpreter: "none",
       autorestart: true,
       watch: false,
@@ -31,8 +31,8 @@ module.exports = {
     {
       name: "flower-staging",
       cwd: baseDir,
-      script: "uv",
-      args: "run celery -A app.worker.celery_app.celery_app flower --port=5555",
+      script: "/bin/bash",
+      args: '-lc "uv run celery -A app.worker.celery_app.celery_app flower --port=5555"',
       interpreter: "none",
       autorestart: true,
       watch: false,

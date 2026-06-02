@@ -1,7 +1,7 @@
 """Repair user_wallets and refunds tables
 
 Revision ID: 6b0c2f9a7d1a
-Revises: 515f208cdc76
+Revises: 45affa483b69
 Create Date: 2026-04-22
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "6b0c2f9a7d1a"
-down_revision: str | Sequence[str] | None = "515f208cdc76"
+down_revision: str | Sequence[str] | None = "45affa483b69"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -135,7 +135,10 @@ jobs:
               export PATH="$HOME/.local/bin:$PATH"
 
               if ! command -v uv >/dev/null 2>&1; then
-                  python3 -m pip install --user --upgrade uv
+                  python3 -m venv /tmp/uv-bootstrap
+                  /tmp/uv-bootstrap/bin/pip install --upgrade pip
+                  /tmp/uv-bootstrap/bin/pip install --upgrade uv
+                  export PATH="/tmp/uv-bootstrap/bin:$PATH"
               fi
 
               git fetch origin staging

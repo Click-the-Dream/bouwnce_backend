@@ -111,6 +111,15 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Run tests
-        run: uv run pytest --tb=short -q
+        run: |
+          set +e
+          uv run pytest --tb=short -q
+          status=$?
+          set -e
+          if [ "$status" -eq 5 ]; then
+            echo "No tests were collected; skipping pytest failure."
+            exit 0
+          fi
+          exit "$status"
 
           

@@ -152,12 +152,12 @@ jobs:
               .venv/bin/alembic upgrade head
 
               if command -v pm2 >/dev/null 2>&1; then
-                  pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env || \
-                  pm2 reload ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
+                  pm2 delete staging celery-worker-staging flower-staging || true
+                  pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
                   pm2 save
               elif command -v npx >/dev/null 2>&1; then
-                  npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env || \
-                  npx --yes pm2 reload ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
+                  npx --yes pm2 delete staging celery-worker-staging flower-staging || true
+                  npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
                   npx --yes pm2 save
               else
                   echo "❌ pm2 and npx are not available on the server."
@@ -165,9 +165,9 @@ jobs:
               fi
 
               echo  "⏳ Waiting for API to be ready..."
-              for i in $(seq 1 20); do
-                  curl -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
-                  sleep 2
+              for i in $(seq 1 10); do
+                  curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
+                  sleep 1
               done
               if command -v pm2 >/dev/null 2>&1; then
                   pm2 status || true

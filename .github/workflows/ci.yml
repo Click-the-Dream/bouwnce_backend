@@ -154,10 +154,18 @@ jobs:
               uv run alembic current
               uv run alembic upgrade head
 
-              pm2 start ecosystem.config.js --only staging, celery-worker-staging, flower-staging || \
-              pm2 reload ecosystem.config.js --only staging, celery-worker-staging, flower-staging
-
-              pm2 save
+              if command -v pm2 >/dev/null 2>&1; then
+                  pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging || \
+                  pm2 reload ecosystem.config.js --only staging,celery-worker-staging,flower-staging
+                  pm2 save
+              elif command -v npx >/dev/null 2>&1; then
+                  npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging || \
+                  npx --yes pm2 reload ecosystem.config.js --only staging,celery-worker-staging,flower-staging
+                  npx --yes pm2 save
+              else
+                  echo "❌ pm2 and npx are not available on the server."
+                  exit 1
+              fi
 
               echo  "⏳ Waiting for API to be ready..."
               for i in $(seq 1 15); do

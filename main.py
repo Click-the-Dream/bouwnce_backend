@@ -128,6 +128,7 @@ app.add_middleware(
     allow_origins=[
         "https://www.bouwnce.com",
         "https://dev.bouwnce.com",
+        "https://staging.bouwnce.com",
         "http://localhost:5173",
         "https://bouwnce.com",
         "http://localhost:3000",

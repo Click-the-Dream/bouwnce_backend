@@ -54,7 +54,7 @@ class AuthService:
             # Ensure OTP is persisted before returning it to the client (avoids race with /verify-code)
             await db.commit()
 
-        except Exception as e:
+        except Exception:
             raise InternalServerErrorException(
                 message="Error occured when creating user"
             ) from None

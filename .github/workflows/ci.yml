@@ -134,6 +134,10 @@ jobs:
               cd /var/www/backend
               export PATH="$HOME/.local/bin:$PATH"
 
+              if ! command -v uv >/dev/null 2>&1; then
+                  python3 -m pip install --user --upgrade uv
+              fi
+
               git fetch origin staging
               git checkout staging
               git pull origin staging

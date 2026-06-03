@@ -518,22 +518,39 @@ class MobileEventsService:
                             {
                                 "type": "error",
                                 "error": "invalid_payload",
-                                "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', message_id:'<uuid>'}",
+                                "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', message_id:'<uuid>', mark_all?:true|false}",
                             }
                         )
                         continue
 
                     async with get_async_session() as db:
                         try:
-                            result = await chat_service.mark_conversation_read_with_user_up_to_message(
-                                db=db,
-                                redis=redis,
-                                current_user_id=str(user_id),
-                                recipient_id=str(payload.recipient_id),
-                                message_id=str(payload.message_id),
-                                commit=False,
-                                as_response=False,
-                            )
+                            if payload.mark_all:
+                                conv = await Conversation.get_between(
+                                    db,
+                                    uuid.UUID(str(user_id)),
+                                    uuid.UUID(str(payload.recipient_id)),
+                                )
+                                if conv is None:
+                                    raise NotFoundException("Conversation not found")
+                                result = await chat_service.mark_conversation_read(
+                                    db=db,
+                                    redis=redis,
+                                    current_user_id=str(user_id),
+                                    conversation_id=str(conv.id),
+                                    commit=False,
+                                    as_response=False,
+                                )
+                            else:
+                                result = await chat_service.mark_conversation_read_with_user_up_to_message(
+                                    db=db,
+                                    redis=redis,
+                                    current_user_id=str(user_id),
+                                    recipient_id=str(payload.recipient_id),
+                                    message_id=str(payload.message_id),
+                                    commit=False,
+                                    as_response=False,
+                                )
                         except (
                             NotFoundException,
                             ForbiddenException,

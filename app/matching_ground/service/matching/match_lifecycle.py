@@ -152,6 +152,16 @@ class MatchLifecycleService:
         )
 
         items = result.get("items", []) or []
+        if message_text:
+            direct_user_ids = {str(uid) for uid in target_user_ids}
+            filtered_items = []
+            for item in items:
+                score = float(item.get("score") or 0.0)
+                is_direct_user_hit = item.get("user_id") in direct_user_ids
+                if score > 0.0 or is_direct_user_hit:
+                    filtered_items.append(item)
+            items = filtered_items
+
         if not message_text:
             suggested_queries = await self._build_suggested_queries(
                 session, requester_id
@@ -159,18 +169,11 @@ class MatchLifecycleService:
         else:
             suggested_queries = []
 
-        if not items:
-            fallback_result = await self.suggest_candidates(
-                session=session,
-                requester_id=requester_id,
-                interest_hints=set(),
-                target_user_ids=None,
-                radius_km=radius_km,
-            )
-            fallback_items = fallback_result.get("items", []) or []
-            if fallback_items:
-                result = fallback_result
-                items = fallback_items
+        if message_text and not items:
+            result = {
+                **result,
+                "reason": result.get("reason") or "no_relevant_matches",
+            }
 
         start = (page - 1) * page_size
         end = start + page_size

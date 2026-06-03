@@ -26,6 +26,13 @@ class MarkConversationReadPayload(BaseModel):
     message_id: Annotated[
         uuid.UUID, Field(..., description="Last read message id (uuid)")
     ]
+    mark_all: Annotated[
+        bool,
+        Field(
+            False,
+            description="If true, mark all unread messages in the conversation as read",
+        ),
+    ]
 
 
 class TypingPayload(BaseModel):

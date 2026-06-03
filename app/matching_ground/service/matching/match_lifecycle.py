@@ -215,6 +215,10 @@ class MatchLifecycleService:
             ):
                 continue
             filtered_matches.append(item)
+        filtered_matches.sort(
+            key=lambda item: (float(item.score or 0.0), item.distance_km),
+            reverse=True,
+        )
         return {
             "status": result.status,
             "reason": result.reason,
@@ -226,7 +230,9 @@ class MatchLifecycleService:
                     "profile_pic": item.profile_pic,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
+                    "candidate_interests": item.candidate_interests,
                     "score_explanation": (
+                        f"score={item.score}, "
                         f"distance={item.distance_km}km, "
                         f"shared_interests={len(item.shared_interests)}, "
                         "shared_traits=0"

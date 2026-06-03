@@ -424,7 +424,7 @@ class MobileEventsService:
                         {
                             "type": "chat.sent",
                             "client_id": payload.client_id,
-                            "data": result,
+                            "data": {**result},
                         }
                     )
                     continue
@@ -501,7 +501,13 @@ class MobileEventsService:
                             )
                             continue
 
-                    await websocket.send_json({"type": "chat.sent", "data": result})
+                    await websocket.send_json(
+                        {
+                            "type": "chat.sent",
+                            "client_id": payload.client_id,
+                            "data": {**result},
+                        }
+                    )
                     continue
 
                 if msg_type == "chat.read":

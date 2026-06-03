@@ -50,6 +50,10 @@ class UploadMediaPayload(BaseModel):
         uuid.UUID,
         Field(..., description="Recipient user id (uuid)"),
     ]
+    client_id: Annotated[
+        str | None,
+        Field(None, max_length=64, description="Client message id"),
+    ]
     media_urls: Annotated[
         list[str],
         Field(

@@ -1,3 +1,4 @@
+import contextlib
 import json
 from collections.abc import Awaitable, Callable
 from typing import Annotated
@@ -141,11 +142,9 @@ class RateLimiter:
 
             user_id = None
             if credentials and credentials.credentials:
-                try:
+                with contextlib.suppress(Exception):
                     payload = verify_token(credentials.credentials)
-                    user_id: str = payload.get("sub")
-                except Exception:
-                    pass
+                    user_id = payload.get("sub")
 
             if user_id:
                 user_key = f"rl:user:{user_id}:{user_seconds}:{request.url.path.replace('/', '_')}"

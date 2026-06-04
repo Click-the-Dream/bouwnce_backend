@@ -1,2 +1,6 @@
+from pathlib import Path
+
+
 def test_smoke() -> None:
-    assert True
+    if not Path("app").exists():
+        raise AssertionError("app directory is missing")

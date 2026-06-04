@@ -26,6 +26,13 @@ class MarkConversationReadPayload(BaseModel):
     message_id: Annotated[
         uuid.UUID, Field(..., description="Last read message id (uuid)")
     ]
+    mark_all: Annotated[
+        bool,
+        Field(
+            False,
+            description="If true, mark all unread messages in the conversation as read",
+        ),
+    ]
 
 
 class TypingPayload(BaseModel):
@@ -49,6 +56,10 @@ class UploadMediaPayload(BaseModel):
     recipient_id: Annotated[
         uuid.UUID,
         Field(..., description="Recipient user id (uuid)"),
+    ]
+    client_id: Annotated[
+        str | None,
+        Field(None, max_length=64, description="Client message id"),
     ]
     media_urls: Annotated[
         list[str],

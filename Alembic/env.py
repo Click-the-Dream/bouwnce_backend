@@ -2,12 +2,11 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from decouple import config as env_config
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-import app.models
+import app.models  # noqa: F401
 from app.core.config import settings
 from app.db.postgres_db_conn import Base
 

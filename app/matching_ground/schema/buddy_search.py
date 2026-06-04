@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class BuddyMatch:
     user_id: str
+    username: str | None
     full_name: str | None
     profile_pic: dict | str | None
     bio: str | None

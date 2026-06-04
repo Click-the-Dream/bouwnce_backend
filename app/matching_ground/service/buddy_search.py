@@ -185,6 +185,7 @@ class BuddySearchService:
         base_query = (
             select(
                 self.user_model.id.label("user_id"),
+                self.user_model.username,
                 self.user_model.full_name,
                 self.user_model.profile_pic,
                 self.user_model.bio,
@@ -270,6 +271,7 @@ class BuddySearchService:
             matches.append(
                 BuddyMatch(
                     user_id=str(r.user_id),
+                    username=r.username,
                     full_name=r.full_name,
                     distance_km=distance_val,
                     profile_pic=r.profile_pic,

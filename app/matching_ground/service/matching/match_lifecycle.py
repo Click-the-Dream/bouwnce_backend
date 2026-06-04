@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import UTC, datetime
+from difflib import SequenceMatcher
 
 from fastapi import BackgroundTasks
 from sqlalchemy import select
@@ -15,6 +16,7 @@ from app.matching_ground.model.notification import Notification
 from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.user_interest import UserInterest
 from app.matching_ground.service.buddy_search import BuddySearchService
+from app.core.config import settings
 from app.models.chat import Conversation
 from app.models.user import User
 from app.utils.emails import generate_email_content, send_email
@@ -26,6 +28,118 @@ from app.utils.exception import (
 
 
 class MatchLifecycleService:
+    @staticmethod
+    def _tokenize_search_text(value: str) -> list[str]:
+        return [token for token in re.split(r"[^a-z0-9]+", value.lower()) if token]
+
+    @staticmethod
+    def _singularize_token(token: str) -> str:
+        if len(token) <= 3:
+            return token
+        if token.endswith("ies") and len(token) > 4:
+            return f"{token[:-3]}y"
+        if token.endswith("es") and len(token) > 4:
+            return token[:-2]
+        if token.endswith("s") and not token.endswith("ss"):
+            return token[:-1]
+        return token
+
+    @classmethod
+    def _normalize_generic_text(cls, value: str) -> str:
+        return " ".join(
+            token for token in re.split(r"[^a-z0-9]+", (value or "").lower()) if token
+        )
+
+    @classmethod
+    def _score_text_match(cls, left: str, right: str) -> float:
+        left_norm = cls._normalize_generic_text(left)
+        right_norm = cls._normalize_generic_text(right)
+        if not left_norm or not right_norm:
+            return 0.0
+        if left_norm == right_norm:
+            return 1.0
+        prompt_compact = re.sub(r"[^a-z0-9]+", " ", left_norm).strip()
+        target_compact = re.sub(r"[^a-z0-9]+", " ", right_norm).strip()
+
+        regex_patterns = [
+            rf"(?<![a-z0-9]){re.escape(right_norm)}(?![a-z0-9])",
+            rf"(?<![a-z0-9]){re.escape(cls._singularize_token(right_norm))}(?![a-z0-9])",
+        ]
+        for pattern in regex_patterns:
+            if pattern and re.search(pattern, left_norm):
+                return settings.SEARCH_MATCH_REGEX_SCORE
+        if right_norm in left_norm or target_compact in prompt_compact:
+            return settings.SEARCH_MATCH_NORMALIZED_SCORE
+
+        prompt_tokens = cls._tokenize_search_text(left_norm)
+        interest_tokens = cls._tokenize_search_text(right_norm)
+        if not prompt_tokens or not interest_tokens:
+            return SequenceMatcher(None, left_norm, right_norm).ratio()
+
+        best_score = 0.0
+        for prompt_token in prompt_tokens:
+            prompt_variants = {
+                prompt_token,
+                cls._singularize_token(prompt_token),
+            }
+            for interest_token in interest_tokens:
+                interest_variants = {
+                    interest_token,
+                    cls._singularize_token(interest_token),
+                }
+                for prompt_variant in prompt_variants:
+                    for interest_variant in interest_variants:
+                        if not prompt_variant or not interest_variant:
+                            continue
+                        if prompt_variant == interest_variant:
+                            best_score = max(
+                                best_score, settings.SEARCH_MATCH_PREFIX_SCORE
+                            )
+                            continue
+                        if prompt_variant in interest_variant or interest_variant in prompt_variant:
+                            best_score = max(
+                                best_score, settings.SEARCH_MATCH_TOKEN_CONTAINS_SCORE
+                            )
+                            continue
+                        best_score = max(
+                            best_score,
+                            SequenceMatcher(
+                                None, prompt_variant, interest_variant
+                            ).ratio(),
+                        )
+
+        if best_score >= settings.SEARCH_MATCH_FUZZY_SCORE:
+            return best_score
+
+        return SequenceMatcher(None, left_norm, right_norm).ratio()
+
+    @classmethod
+    def _score_interest_match(cls, message_text: str, interest_name: str) -> float:
+        return cls._score_text_match(message_text, normalize_interest_name(interest_name))
+
+    @staticmethod
+    def _build_score_explanation(
+        *,
+        score: float,
+        distance_km: float,
+        matched_interest: str | None,
+        matched_user: str | None,
+        shared_interests_count: int,
+    ) -> str:
+        basis_parts: list[str] = []
+        if matched_interest:
+            basis_parts.append(f"interest:{matched_interest}")
+        if matched_user:
+            basis_parts.append(f"user:{matched_user}")
+        basis = ",".join(basis_parts) if basis_parts else "unknown"
+        return (
+            f"score={score}, "
+            f"distance={distance_km}km, "
+            f"shared_interests={shared_interests_count}, "
+            f"based_on={basis}, "
+            "shared_traits=0"
+        )
+
     @staticmethod
     def _parse_radius_km(message: str) -> float | None:
 
@@ -48,7 +162,7 @@ class MatchLifecycleService:
     @staticmethod
     async def _extract_interest_hints(
         session: AsyncSession, message: str, *, max_hints: int = 5
-    ) -> set[str]:
+    ) -> list[str]:
         """
         Extract interests from a natural language message by matching against
         known interests in the database (no AI models).
@@ -57,24 +171,31 @@ class MatchLifecycleService:
         """
         text = (message or "").strip()
         if not text:
-            return set()
+            return []
 
-        normalized_message = normalize_interest_name(text)
         # Fetch only names (keep it cheap)
         rows = await session.execute(select(Interest.name))
         known_names = [r[0] for r in rows.all() if r and r[0]]
 
-        hits: list[str] = []
+        scored_hits: list[tuple[float, str]] = []
         for name in known_names:
-            n = normalize_interest_name(name)
-            if not n:
-                continue
-            if n in normalized_message:
-                hits.append(n)
-                if len(hits) >= max_hints:
-                    break
+            score = MatchLifecycleService._score_interest_match(text, name)
+            if score >= settings.SEARCH_MATCH_FUZZY_SCORE:
+                scored_hits.append((score, normalize_interest_name(name)))
 
-        return set(hits)
+        scored_hits.sort(key=lambda item: (-item[0], item[1].lower()))
+
+        hits: list[str] = []
+        seen: set[str] = set()
+        for _, name in scored_hits:
+            if name in seen:
+                continue
+            seen.add(name)
+            hits.append(name)
+            if len(hits) >= max_hints:
+                break
+
+        return hits
 
     @staticmethod
     def _normalize_search_text(message: str) -> str:
@@ -98,11 +219,11 @@ class MatchLifecycleService:
         )
         hits: set[uuid.UUID] = set()
         for user_id, username, full_name in rows.all():
-            candidates = [
-                normalize_interest_name(username or ""),
-                normalize_interest_name(full_name or ""),
-            ]
-            if any(candidate and candidate in text for candidate in candidates):
+            candidate_score = max(
+                self._score_text_match(text, username or ""),
+                self._score_text_match(text, full_name or ""),
+            )
+            if candidate_score >= settings.SEARCH_MATCH_USER_SCORE:
                 hits.add(user_id)
                 if len(hits) >= max_users:
                     break
@@ -146,7 +267,7 @@ class MatchLifecycleService:
         result = await self.suggest_candidates(
             session=session,
             requester_id=requester_id,
-            interest_hints=interest_hints,
+            interest_hints=set(interest_hints),
             target_user_ids=target_user_ids,
             radius_km=radius_km,
         )
@@ -187,7 +308,7 @@ class MatchLifecycleService:
             "query": {
                 "message": message_text,
                 "radius_km": radius_km,
-                "interest_hints": sorted(interest_hints),
+                "interest_hints": interest_hints,
                 "target_user_ids": sorted(str(uid) for uid in target_user_ids),
             },
             "suggested_queries": suggested_queries,
@@ -210,6 +331,8 @@ class MatchLifecycleService:
             target_user_ids=target_user_ids,
         )
         filtered_matches = []
+        interest_hint_list = list(interest_hints or [])
+        direct_user_ids = {str(uid) for uid in target_user_ids or set()}
         for item in result.matches:
             if str(item.user_id) == str(requester_id):
                 continue
@@ -228,17 +351,54 @@ class MatchLifecycleService:
             "items": [
                 {
                     "user_id": item.user_id,
+                    "username": item.username,
                     "full_name": item.full_name,
                     "distance_km": item.distance_km,
                     "profile_pic": item.profile_pic,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
                     "candidate_interests": item.candidate_interests,
-                    "score_explanation": (
-                        f"score={item.score}, "
-                        f"distance={item.distance_km}km, "
-                        f"shared_interests={len(item.shared_interests)}, "
-                        "shared_traits=0"
+                    "matched_interest": (
+                        next(
+                            (
+                                interest
+                                for interest in interest_hint_list
+                                if interest in item.shared_interests
+                            ),
+                            None,
+                        )
+                        if interest_hint_list
+                        else None
+                    ),
+                    "matched_user": (
+                        {
+                            "user_id": item.user_id,
+                            "username": item.username,
+                            "full_name": item.full_name,
+                        }
+                        if item.user_id in direct_user_ids
+                        else None
+                    ),
+                    "matched_interests": [
+                        interest
+                        for interest in interest_hint_list
+                        if interest in item.shared_interests
+                    ],
+                    "score_explanation": self._build_score_explanation(
+                        score=float(item.score or 0.0),
+                        distance_km=float(item.distance_km),
+                        matched_interest=next(
+                            (
+                                interest
+                                for interest in interest_hint_list
+                                if interest in item.shared_interests
+                            ),
+                            None,
+                        ),
+                        matched_user=(
+                            item.username if item.user_id in direct_user_ids else None
+                        ),
+                        shared_interests_count=len(item.shared_interests),
                     ),
                 }
                 for item in filtered_matches

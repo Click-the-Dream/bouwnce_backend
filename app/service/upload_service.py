@@ -12,17 +12,22 @@ from app.utils.upload_utils import safe_slug_from_filename, split_csv
 class UploadService:
     @staticmethod
     def sign_chat_upload(
-        *, preset: str, folder: str, file_name: str | None = None
+        *,
+        preset: str,
+        folder: str,
+        file_name: str | None = None,
     ) -> dict:
         timestamp = int(time.time())
         slug = safe_slug_from_filename(file_name or "")
-        public_id = f"{uuid4()}_{slug}" if slug else str(uuid4())
+        overwrite = bool(slug)
+        public_id = slug if overwrite else str(uuid4())
 
         params_to_sign = {
             "timestamp": timestamp,
             "folder": folder,
             "public_id": public_id,
             "upload_preset": preset,
+            "overwrite": overwrite,
         }
         signature = api_sign_request(params_to_sign, settings.CLOUDINARY_SECRET)
         return {
@@ -33,6 +38,7 @@ class UploadService:
             "upload_preset": preset,
             "folder": folder,
             "public_id": public_id,
+            "overwrite": overwrite,
         }
 
     @classmethod

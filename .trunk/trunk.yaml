@@ -20,6 +20,12 @@ lint:
     - linters: [ALL]
       paths:
         - Alembic/versions/**
+    - linters: [bandit]
+      paths:
+        - app/email_templates/compile.py
+    - linters: [markdownlint]
+      paths:
+        - README.md
   enabled:
     - bandit@1.9.2
     - black@25.12.0

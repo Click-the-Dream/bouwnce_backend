@@ -362,7 +362,7 @@ class MobileEventsService:
             while True:
                 try:
                     raw = await websocket.receive_text()
-                except WebSocketDisconnect:
+                except (WebSocketDisconnect, RuntimeError):
                     break
                 incoming = None
                 with contextlib.suppress(Exception):

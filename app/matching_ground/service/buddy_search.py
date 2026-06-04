@@ -239,6 +239,9 @@ class BuddySearchService:
                 self.user_model.created_at.desc(),
             )
         )
+        base_query = base_query.where(func.coalesce(cand_interest_count, 0) > 0)
+        if query_interest_ids and not targeted_user_ids:
+            base_query = base_query.where(shared_interest_count > 0)
         if targeted_user_ids:
             base_query = base_query.where(
                 self.user_model.id.in_(list(targeted_user_ids))

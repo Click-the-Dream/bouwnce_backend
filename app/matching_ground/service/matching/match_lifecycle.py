@@ -284,7 +284,14 @@ class MatchLifecycleService:
             for item in items:
                 score = float(item.get("score") or 0.0)
                 is_direct_user_hit = item.get("user_id") in direct_user_ids
-                if score > 0.0 or is_direct_user_hit:
+                matched_interest = item.get("matched_interest")
+                matched_interests = item.get("matched_interests") or []
+                if (
+                    is_direct_user_hit
+                    or matched_interest
+                    or matched_interests
+                    or score >= settings.SEARCH_MATCH_FUZZY_SCORE
+                ):
                     filtered_items.append(item)
             items = filtered_items
 

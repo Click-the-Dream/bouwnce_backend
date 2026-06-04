@@ -10,70 +10,54 @@ concurrency:
   group: backend-${{ github.base_ref || github.ref_name }}
   cancel-in-progress: true
 
-
 jobs:
-  lint:
-    name: Lint
+  trunk-fmt:
+    name: Trunk Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          enable-cache: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Trunk launcher
+        run: |
+          curl -fsSL https://trunk.io/releases/trunk -o trunk
+          chmod +x trunk
 
-      - name: Install dependencies
-        run: uv sync --dev
+      - name: Run Trunk format check
+        run: ./trunk fmt --ci --no-progress --all
 
-      - name: Lint with ruff
-        run: uv run ruff check --output-format=github .
-
-      - name: Format with ruff
-        run: uv run ruff format --check .
-
-
-  # SECURITY
-  security:
-    name: Security Checks
+  trunk:
+    name: Trunk Check
     runs-on: ubuntu-latest
     steps:
-       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-       - name: Run Trivy vulnerability  scanner
-         uses: aquasecurity/trivy-action@v0.36.0
-         with:
-            scan-type: fs
-            scan-ref: .
-            severity: HIGH,CRITICAL
-            exit-code: 1
-            format: table
+      - name: Install Trunk launcher
+        run: |
+          curl -fsSL https://trunk.io/releases/trunk -o trunk
+          chmod +x trunk
 
-       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-         with:
-            enable-cache: true
-            github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run Trunk check
+        run: ./trunk check --ci --no-progress --all --exclude bandit,checkov,osv-scanner,trufflehog
 
-       - name: Install dependencies
-         run: uv sync --dev
+  trunk-security:
+    name: Trunk Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-       - name: Check for vulnerable dependencies
-         run: uv run pip-audit --ignore-vuln PYSEC-2025-183
+      - name: Install Trunk launcher
+        run: |
+          curl -fsSL https://trunk.io/releases/trunk -o trunk
+          chmod +x trunk
 
-       - name: Run Bandit security scan
-         run: uv run bandit -r app -ll -ii
-
-       - name: scan for hardcoded secrets
-         uses: trufflesecurity/trufflehog@main
-         with:
-          path: ./
-          extra_args: --only-verified
+      - name: Run Trunk security checks
+        run: ./trunk check --ci --no-progress --all --scope security
 
   # TESTS
   tests:
     name: Run Tests
     runs-on: ubuntu-latest
-    needs: [lint, security]
+    needs: [trunk-fmt, trunk, trunk-security]
     services:
       postgres:
         image: postgres:17
@@ -88,7 +72,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -96,7 +80,7 @@ jobs:
         with:
           enable-cache: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Install dependencies
         run: uv sync --dev
 
@@ -129,53 +113,53 @@ jobs:
           username: ${{ secrets.EC2_USER}}
           key: ${{ secrets.EC2_SSH_KEY}}
           script: |
-              set -euo pipefail
+            set -euo pipefail
 
-              cd /var/www/backend
+            cd /var/www/backend
 
-              git fetch origin staging
-              git checkout staging
-              git pull origin staging
+            git fetch origin staging
+            git checkout staging
+            git pull origin staging
 
-              if [ ! -x .venv/bin/python ]; then
-                  python3 -m venv .venv
-              fi
+            if [ ! -x .venv/bin/python ]; then
+                python3 -m venv .venv
+            fi
 
-              .venv/bin/pip install --upgrade pip
-              .venv/bin/pip install -r requirements.txt
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install -r requirements.txt
 
-              set -a
-              source /var/www/backend/.env
-              set +a
+            set -a
+            source /var/www/backend/.env
+            set +a
 
-              .venv/bin/alembic current
-              .venv/bin/alembic upgrade head
+            .venv/bin/alembic current
+            .venv/bin/alembic upgrade head
 
-              if command -v pm2 >/dev/null 2>&1; then
-                  pm2 delete all || true
-                  pm2 kill || true
-                  rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                  pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
-                  pm2 save
-              elif command -v npx >/dev/null 2>&1; then
-                  npx --yes pm2 delete all || true
-                  npx --yes pm2 kill || true
-                  rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                  npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
-                  npx --yes pm2 save
-              else
-                  echo "❌ pm2 and npx are not available on the server."
-                  exit 1
-              fi
+            if command -v pm2 >/dev/null 2>&1; then
+                pm2 delete all || true
+                pm2 kill || true
+                rm -f /home/ubuntu/.pm2/dump.pm2 || true
+                pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
+                pm2 save
+            elif command -v npx >/dev/null 2>&1; then
+                npx --yes pm2 delete all || true
+                npx --yes pm2 kill || true
+                rm -f /home/ubuntu/.pm2/dump.pm2 || true
+                npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
+                npx --yes pm2 save
+            else
+                echo "❌ pm2 and npx are not available on the server."
+                exit 1
+            fi
 
-              echo  "⏳ Waiting for API to be ready..."
-              for i in $(seq 1 10); do
-                  curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
-                  sleep 1
-              done
-              if command -v pm2 >/dev/null 2>&1; then
-                  pm2 status || true
-                  pm2 logs staging --lines 50 || true
-              fi
-              echo "❌ API failed to start within expected time."
-              exit 1
+            echo  "⏳ Waiting for API to be ready..."
+            for i in $(seq 1 10); do
+                curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
+                sleep 1
+            done
+            if command -v pm2 >/dev/null 2>&1; then
+                pm2 status || true
+                pm2 logs staging --lines 50 || true
+            fi
+            echo "❌ API failed to start within expected time."
+            exit 1

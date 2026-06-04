@@ -113,7 +113,7 @@ class Settings(BaseSettings):
     # =========================
     NEWSLETTER_USE_TEST_RECIPIENTS: bool = False
     NEWSLETTER_TEST_RECIPIENTS: str = ""
-    
+
     # =========================
     # Search matching
     # =========================

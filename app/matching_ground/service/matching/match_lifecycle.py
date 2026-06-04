@@ -9,6 +9,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.matching_ground.core.interest_normalization import normalize_interest_name
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
@@ -16,7 +17,6 @@ from app.matching_ground.model.notification import Notification
 from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.user_interest import UserInterest
 from app.matching_ground.service.buddy_search import BuddySearchService
-from app.core.config import settings
 from app.models.chat import Conversation
 from app.models.user import User
 from app.utils.emails import generate_email_content, send_email
@@ -96,7 +96,10 @@ class MatchLifecycleService:
                                 best_score, settings.SEARCH_MATCH_PREFIX_SCORE
                             )
                             continue
-                        if prompt_variant in interest_variant or interest_variant in prompt_variant:
+                        if (
+                            prompt_variant in interest_variant
+                            or interest_variant in prompt_variant
+                        ):
                             best_score = max(
                                 best_score, settings.SEARCH_MATCH_TOKEN_CONTAINS_SCORE
                             )
@@ -115,7 +118,9 @@ class MatchLifecycleService:
 
     @classmethod
     def _score_interest_match(cls, message_text: str, interest_name: str) -> float:
-        return cls._score_text_match(message_text, normalize_interest_name(interest_name))
+        return cls._score_text_match(
+            message_text, normalize_interest_name(interest_name)
+        )
 
     @staticmethod
     def _build_score_explanation(

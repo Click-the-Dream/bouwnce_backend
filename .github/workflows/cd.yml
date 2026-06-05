@@ -1,137 +1,137 @@
 name: CD
 
 on:
-    push:
-        branches: [staging]
-    pull_request:
-        branches: [staging, main]
-        types: [closed]
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [staging, main]
+    types: [closed]
 
 concurrency:
-    group: backend-cd-${{ github.base_ref || github.ref_name }}
-    cancel-in-progress: true
+  group: backend-cd-${{ github.base_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-    ci:
-        name: CI
-        uses: ./.github/workflows/ci.yml
-        permissions:
-            contents: read
-            security-events: write
-    
-    deploy-staging:
-        name: Deploy to Staging
-        needs: ci
-        runs-on: ubuntu-latest
-        environment: staging
-        if: github.ref == 'refs/heads/staging'
-        steps:
-          - name: Deploy to Staging
-            uses: appleboy/ssh-action@v1.0.3
-            with:
-                host: ${{ secrets.EC2_HOST}}
-                username: ${{ secrets.EC2_USER}}
-                key: ${{ secrets.EC2_SSH_KEY}}
-                script: |
-                    set -euo pipefail
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      security-events: write
 
-                    cd /var/www/backend
+  deploy-staging:
+    name: Deploy to Staging
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: staging
+    if: github.ref == 'refs/heads/staging'
+    steps:
+      - name: Deploy to Staging
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST}}
+          username: ${{ secrets.EC2_USER}}
+          key: ${{ secrets.EC2_SSH_KEY}}
+          script: |
+            set -euo pipefail
 
-                    git fetch origin staging
-                    git checkout staging
-                    git pull origin staging
+            cd /var/www/backend
 
-                    if [ ! -x .venv/bin/python ]; then
-                        python3 -m venv .venv
-                    fi
+            git fetch origin staging
+            git checkout staging
+            git pull origin staging
 
-                    .venv/bin/pip install --upgrade pip
-                    .venv/bin/pip install -r requirements.txt
+            if [ ! -x .venv/bin/python ]; then
+                python3 -m venv .venv
+            fi
 
-                    set -a
-                    source /var/www/backend/.env
-                    set +a
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install -r requirements.txt
 
-                    .venv/bin/alembic current
-                    .venv/bin/alembic upgrade head
+            set -a
+            source /var/www/backend/.env
+            set +a
 
-                    if command -v pm2 >/dev/null 2>&1; then
-                        pm2 delete all || true
-                        pm2 kill || true
-                        rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                        pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
-                        pm2 save
-                    elif command -v npx >/dev/null 2>&1; then
-                        npx --yes pm2 delete all || true
-                        npx --yes pm2 kill || true
-                        rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                        npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
-                        npx --yes pm2 save
-                    else
-                        echo "❌ pm2 and npx are not available on the server."
-                        exit 1
-                    fi
+            .venv/bin/alembic current
+            .venv/bin/alembic upgrade head
 
-                    echo  "⏳ Waiting for API to be ready..."
-                    for i in $(seq 1 10); do
-                        curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
-                        sleep 1
-                    done
-                    if command -v pm2 >/dev/null 2>&1; then
-                        pm2 status || true
-                        pm2 logs staging --lines 50 || true
-                    fi
-                    echo "❌ API failed to start within expected time."
-                    exit 1
-    
-    deploy-production:
-        name: Deploy to Production
-        needs: ci
-        runs-on: ubuntu-latest
-        environment: production
-        if: github.event.pull_request.merged == true && github.ref == 'refs/heads/main'
-        steps:
-          - name: Deploy to Production
-            uses: appleboy/ssh-action@v1.0.3
-            with:
-                host: ${{ secrets.EC2_HOST}}
-                username: ${{ secrets.EC2_USER}}
-                key: ${{ secrets.EC2_SSH_KEY}}
-                script: |
-                    set -euo pipefail
+            if command -v pm2 >/dev/null 2>&1; then
+                pm2 delete all || true
+                pm2 kill || true
+                rm -f /home/ubuntu/.pm2/dump.pm2 || true
+                pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
+                pm2 save
+            elif command -v npx >/dev/null 2>&1; then
+                npx --yes pm2 delete all || true
+                npx --yes pm2 kill || true
+                rm -f /home/ubuntu/.pm2/dump.pm2 || true
+                npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
+                npx --yes pm2 save
+            else
+                echo "❌ pm2 and npx are not available on the server."
+                exit 1
+            fi
 
-                    cd /home/production/bouwnce/backend
+            echo  "⏳ Waiting for API to be ready..."
+            for i in $(seq 1 10); do
+                curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
+                sleep 1
+            done
+            if command -v pm2 >/dev/null 2>&1; then
+                pm2 status || true
+                pm2 logs staging --lines 50 || true
+            fi
+            echo "❌ API failed to start within expected time."
+            exit 1
 
-                    git fetch origin main
-                    git checkout main
-                    git pull origin main
+  deploy-production:
+    name: Deploy to Production
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.event.pull_request.merged == true && github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to Production
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST}}
+          username: ${{ secrets.EC2_USER}}
+          key: ${{ secrets.EC2_SSH_KEY}}
+          script: |
+            set -euo pipefail
 
-                    if [ ! -x .venv/bin/python ]; then
-                        python3 -m venv .venv
-                    fi
+            cd /home/production/bouwnce/backend
 
-                    .venv/bin/pip install --upgrade pip
-                    .venv/bin/pip install -r requirements.txt
+            git fetch origin main
+            git checkout main
+            git pull origin main
 
-                    set -a
-                    source /home/production/bouwnce/backend/.env
-                    set +a
+            if [ ! -x .venv/bin/python ]; then
+                python3 -m venv .venv
+            fi
 
-                    .venv/bin/alembic current
-                    .venv/bin/alembic upgrade head
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install -r requirements.txt
 
-                    pm2 reload ecosystem.config.js --only production-api,celery-worker-production --update-env || \
-                    pm2 start ecosystem.config.js --only production-api,celery-worker-production --update-env
-                    pm2 save
+            set -a
+            source /home/production/bouwnce/backend/.env
+            set +a
 
-                    echo  "⏳ Waiting for API to be ready..."
-                    for i in $(seq 1 10); do
-                        curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
-                        sleep 1
-                    done
-                    if command -v pm2 >/dev/null 2>&1; then
-                        pm2 status || true
-                        pm2 logs production-api --lines 50 || true
-                    fi
-                    echo "❌ API failed to start within expected time."
-                    exit 1
+            .venv/bin/alembic current
+            .venv/bin/alembic upgrade head
+
+            pm2 reload ecosystem.config.js --only production-api,celery-worker-production --update-env || \
+            pm2 start ecosystem.config.js --only production-api,celery-worker-production --update-env
+            pm2 save
+
+            echo  "⏳ Waiting for API to be ready..."
+            for i in $(seq 1 10); do
+                curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
+                sleep 1
+            done
+            if command -v pm2 >/dev/null 2>&1; then
+                pm2 status || true
+                pm2 logs production-api --lines 50 || true
+            fi
+            echo "❌ API failed to start within expected time."
+            exit 1

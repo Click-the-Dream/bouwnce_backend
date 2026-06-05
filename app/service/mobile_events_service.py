@@ -272,9 +272,10 @@ class MobileEventsService:
                         payload_raw = fields.get("payload")
                         if not event_name or not payload_raw:
                             continue
-                        try:
+                        payload_obj = None
+                        with contextlib.suppress(Exception):
                             payload_obj = json.loads(payload_raw)
-                        except Exception:
+                        if payload_obj is None:
                             continue
                         if str(payload_obj.get("user_id") or "") != str(user_id):
                             continue
@@ -361,11 +362,12 @@ class MobileEventsService:
             while True:
                 try:
                     raw = await websocket.receive_text()
-                except WebSocketDisconnect:
+                except (WebSocketDisconnect, RuntimeError):
                     break
-                try:
+                incoming = None
+                with contextlib.suppress(Exception):
                     incoming = json.loads(raw)
-                except Exception:
+                if incoming is None:
                     continue
 
                 msg_type = str(incoming.get("type") or "").strip().lower()

@@ -17,10 +17,34 @@ from app.models.user import User
 
 
 class BuddySearchService:
+    _PLACEHOLDER_DISPLAY_NAMES = {
+        "string",
+        "null",
+        "undefined",
+        "none",
+        "unknown",
+        "na",
+        "n/a",
+    }
+
     def __init__(self) -> None:
         self.geolocation_model = UserGeolocation
         self.interest_model = UserInterest
         self.user_model = User
+
+    @classmethod
+    def _clean_display_name(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+
+        cleaned = " ".join(value.split()).strip()
+        if not cleaned:
+            return None
+
+        if cleaned.lower() in cls._PLACEHOLDER_DISPLAY_NAMES:
+            return None
+
+        return cleaned
 
     async def search(
         self,
@@ -185,6 +209,7 @@ class BuddySearchService:
         base_query = (
             select(
                 self.user_model.id.label("user_id"),
+                self.user_model.username,
                 self.user_model.full_name,
                 self.user_model.profile_pic,
                 self.user_model.bio,
@@ -214,6 +239,9 @@ class BuddySearchService:
                 self.user_model.created_at.desc(),
             )
         )
+        base_query = base_query.where(func.coalesce(cand_interest_count, 0) > 0)
+        if query_interest_ids and not targeted_user_ids:
+            base_query = base_query.where(shared_interest_count > 0)
         if targeted_user_ids:
             base_query = base_query.where(
                 self.user_model.id.in_(list(targeted_user_ids))
@@ -267,10 +295,14 @@ class BuddySearchService:
         for r in rows:
             dist = r.distance_km
             distance_val = round(float(dist), 2) if dist is not None else -1.0
+            full_name = self._clean_display_name(
+                r.full_name
+            ) or self._clean_display_name(r.username)
             matches.append(
                 BuddyMatch(
                     user_id=str(r.user_id),
-                    full_name=r.full_name,
+                    username=r.username,
+                    full_name=full_name,
                     distance_km=distance_val,
                     profile_pic=r.profile_pic,
                     bio=r.bio,

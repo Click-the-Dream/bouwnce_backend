@@ -33,7 +33,7 @@ def fuzz_location(
 ) -> Coordinates:
     if max_meters <= 0:
         return coord
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # nosec B311 - deterministic fuzzing, not crypto
     # Convert meters to degrees approximately
     max_km = max_meters / 1000.0
     delta_lat = (rng.random() * 2 - 1) * (max_km / 110.574)

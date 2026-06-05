@@ -115,6 +115,16 @@ class Settings(BaseSettings):
     NEWSLETTER_TEST_RECIPIENTS: str = ""
 
     # =========================
+    # Search matching
+    # =========================
+    SEARCH_MATCH_REGEX_SCORE: float = 0.99
+    SEARCH_MATCH_NORMALIZED_SCORE: float = 0.98
+    SEARCH_MATCH_PREFIX_SCORE: float = 0.97
+    SEARCH_MATCH_TOKEN_CONTAINS_SCORE: float = 0.95
+    SEARCH_MATCH_FUZZY_SCORE: float = 0.86
+    SEARCH_MATCH_USER_SCORE: float = 0.92
+
+    # =========================
     # QStash
     # =========================
     QSTASH_API_KEY: str = ""

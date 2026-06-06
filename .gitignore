@@ -9,3 +9,8 @@ wheels/
 .venv
 .env
 /venv
+.trunk/
+
+# Deployment files
+bin/
+ecosystem.config.js

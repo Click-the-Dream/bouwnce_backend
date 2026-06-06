@@ -1,13 +1,14 @@
-name: CI/CD
+name: CI
 
 permissions:
   contents: read
 
 on:
   push:
-    branches: [staging]
+    branches: [staging, main]
   pull_request:
-    branches: [staging]
+    branches: [staging, main]
+  workflow_call:
 
 concurrency:
   group: backend-${{ github.base_ref || github.ref_name }}
@@ -101,68 +102,3 @@ jobs:
 
       - name: Run tests
         run: uv run pytest --tb=short -q
-
-  deploy-staging:
-    name: Deploy to Staging
-    needs: tests
-    runs-on: ubuntu-latest
-    environment: staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    steps:
-      - name: Deploy to Staging
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST}}
-          username: ${{ secrets.EC2_USER}}
-          key: ${{ secrets.EC2_SSH_KEY}}
-          script: |
-            set -euo pipefail
-
-            cd /var/www/backend
-
-            git fetch origin staging
-            git checkout staging
-            git pull origin staging
-
-            if [ ! -x .venv/bin/python ]; then
-                python3 -m venv .venv
-            fi
-
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install -r requirements.txt
-
-            set -a
-            source /var/www/backend/.env
-            set +a
-
-            .venv/bin/alembic current
-            .venv/bin/alembic upgrade head
-
-            if command -v pm2 >/dev/null 2>&1; then
-                pm2 delete all || true
-                pm2 kill || true
-                rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
-                pm2 save
-            elif command -v npx >/dev/null 2>&1; then
-                npx --yes pm2 delete all || true
-                npx --yes pm2 kill || true
-                rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                npx --yes pm2 start ecosystem.config.js --only staging,celery-worker-staging,flower-staging --update-env
-                npx --yes pm2 save
-            else
-                echo "❌ pm2 and npx are not available on the server."
-                exit 1
-            fi
-
-            echo  "⏳ Waiting for API to be ready..."
-            for i in $(seq 1 10); do
-                curl --connect-timeout 1 --max-time 2 -sf http://localhost:8000/api/health && echo "✅ API is healthy!" && exit 0
-                sleep 1
-            done
-            if command -v pm2 >/dev/null 2>&1; then
-                pm2 status || true
-                pm2 logs staging --lines 50 || true
-            fi
-            echo "❌ API failed to start within expected time."
-            exit 1

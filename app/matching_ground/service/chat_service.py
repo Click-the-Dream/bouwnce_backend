@@ -226,6 +226,7 @@ class ChatService:
             MobileEvent(
                 event_name="chat.message.created",
                 payload={
+                    "user_id": str(recipient.id),
                     "conversation_id": str(conversation.id),
                     "message_id": str(msg.id),
                     "sender_id": str(sender.id),
@@ -360,6 +361,25 @@ class ChatService:
             await redis.publish(f"chat:conversation:{conversation.id}", payload)
             await redis.publish(f"chat:user:{sender.id}", payload)
             await redis.publish(f"chat:user:{recipient.id}", payload)
+
+        await dispatch_event(
+            EventNames.MOBILE_EVENT,
+            MobileEvent(
+                event_name="chat.message.created",
+                payload={
+                    "user_id": str(recipient.id),
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(msg.id),
+                    "sender_id": str(sender.id),
+                    "recipient_id": str(recipient.id),
+                    "media_type": media_type,
+                    "media_urls": urls,
+                    "media_name": msg.media_name,
+                },
+            ),
+            db=db,
+            redis=redis,
+        )
 
         result = {
             "conversation_id": str(conversation.id),

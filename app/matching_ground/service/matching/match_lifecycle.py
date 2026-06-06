@@ -29,6 +29,10 @@ from app.utils.exception import (
 
 class MatchLifecycleService:
     @staticmethod
+    def _normalized_interest_key(value: str | None) -> str:
+        return normalize_interest_name(value or "")
+
+    @staticmethod
     def _tokenize_search_text(value: str) -> list[str]:
         return [token for token in re.split(r"[^a-z0-9]+", value.lower()) if token]
 
@@ -281,19 +285,40 @@ class MatchLifecycleService:
         if message_text:
             direct_user_ids = {str(uid) for uid in target_user_ids}
             filtered_items = []
+            matched_interest_norms = {
+                self._normalized_interest_key(interest) for interest in interest_hints
+            }
             for item in items:
                 score = float(item.get("score") or 0.0)
                 is_direct_user_hit = item.get("user_id") in direct_user_ids
                 matched_interest = item.get("matched_interest")
                 matched_interests = item.get("matched_interests") or []
-                if (
-                    is_direct_user_hit
+                item_interest_norms = {
+                    self._normalized_interest_key(name)
+                    for name in item.get("shared_interests") or []
+                }
+                has_interest_match = bool(
+                    matched_interest_norms & item_interest_norms
                     or matched_interest
                     or matched_interests
+                )
+                if (
+                    is_direct_user_hit
+                    or has_interest_match
                     or score >= settings.SEARCH_MATCH_FUZZY_SCORE
                 ):
                     filtered_items.append(item)
             items = filtered_items
+
+        if message_text and not items and interest_hints:
+            fallback_result = await self.suggest_candidates(
+                session=session,
+                requester_id=requester_id,
+                interest_hints=None,
+                target_user_ids=set(),
+                radius_km=radius_km,
+            )
+            items = fallback_result.get("items", []) or []
 
         if not message_text:
             suggested_queries = await self._build_suggested_queries(
@@ -370,12 +395,20 @@ class MatchLifecycleService:
                     "score": item.score,
                     "shared_interests": item.shared_interests,
                     "candidate_interests": item.candidate_interests,
+                    "shared_interest_norms": [
+                        self._normalized_interest_key(name)
+                        for name in item.shared_interests
+                    ],
                     "matched_interest": (
                         next(
                             (
                                 interest
                                 for interest in interest_hint_list
-                                if interest in item.shared_interests
+                                if self._normalized_interest_key(interest)
+                                in {
+                                    self._normalized_interest_key(name)
+                                    for name in item.shared_interests
+                                }
                             ),
                             None,
                         )
@@ -394,7 +427,11 @@ class MatchLifecycleService:
                     "matched_interests": [
                         interest
                         for interest in interest_hint_list
-                        if interest in item.shared_interests
+                        if self._normalized_interest_key(interest)
+                        in {
+                            self._normalized_interest_key(name)
+                            for name in item.shared_interests
+                        }
                     ],
                     "score_explanation": self._build_score_explanation(
                         score=float(item.score or 0.0),
@@ -403,7 +440,11 @@ class MatchLifecycleService:
                             (
                                 interest
                                 for interest in interest_hint_list
-                                if interest in item.shared_interests
+                                if self._normalized_interest_key(interest)
+                                in {
+                                    self._normalized_interest_key(name)
+                                    for name in item.shared_interests
+                                }
                             ),
                             None,
                         ),

@@ -17,15 +17,6 @@ from app.models.user import User
 
 
 class BuddySearchService:
-    _PLACEHOLDER_DISPLAY_NAMES = {
-        "string",
-        "null",
-        "undefined",
-        "none",
-        "unknown",
-        "na",
-        "n/a",
-    }
 
     def __init__(self) -> None:
         self.geolocation_model = UserGeolocation
@@ -39,9 +30,6 @@ class BuddySearchService:
 
         cleaned = " ".join(value.split()).strip()
         if not cleaned:
-            return None
-
-        if cleaned.lower() in cls._PLACEHOLDER_DISPLAY_NAMES:
             return None
 
         return cleaned

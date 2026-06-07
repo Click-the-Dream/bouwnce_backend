@@ -344,8 +344,21 @@ class MobileEventsService:
         await pubsub.subscribe(f"chat:user:{user_id}")
 
         await websocket.accept()
+        send_lock = asyncio.Lock()
+        original_send_json = websocket.send_json
+        original_send_text = websocket.send_text
 
-        # Tell client who the Bouwnce system user is (for disabling replies in UI).
+        async def locked_send_json(payload):
+            async with send_lock:
+                return await original_send_json(payload)
+
+        async def locked_send_text(payload):
+            async with send_lock:
+                return await original_send_text(payload)
+
+        websocket.send_json = locked_send_json
+        websocket.send_text = locked_send_text
+
         with contextlib.suppress(Exception):
             async with get_async_session() as db:
                 system_user = await bouwnce_dm_service.get_system_user(db=db)
@@ -367,7 +380,6 @@ class MobileEventsService:
                         }
                     )
 
-        # Ensure Bouwnce inbox conversation exists with welcome message
         with contextlib.suppress(Exception):
             async with get_async_session() as db:
                 await bouwnce_dm_service.ensure_welcome_conversation(

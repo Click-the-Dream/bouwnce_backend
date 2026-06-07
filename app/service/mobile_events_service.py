@@ -8,6 +8,7 @@ import uuid
 from fastapi import WebSocket
 from sqlalchemy import func, select
 from starlette.websockets import WebSocketDisconnect
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
 from app.core.config import (
     MOBILE_EVENTS_STREAM_KEY,
@@ -45,6 +46,32 @@ class MobileEventsService:
             return False
         prefix = f"https://res.cloudinary.com/{settings.CLOUDINARY_NAME}/"
         return str(url).startswith(prefix)
+
+    @staticmethod
+    async def _send_json_safe(websocket: WebSocket, payload: dict) -> bool:
+        try:
+            await websocket.send_json(payload)
+            return True
+        except (
+            WebSocketDisconnect,
+            RuntimeError,
+            ConnectionClosedError,
+            ConnectionClosedOK,
+        ):
+            return False
+
+    @staticmethod
+    async def _send_text_safe(websocket: WebSocket, payload: str) -> bool:
+        try:
+            await websocket.send_text(payload)
+            return True
+        except (
+            WebSocketDisconnect,
+            RuntimeError,
+            ConnectionClosedError,
+            ConnectionClosedOK,
+        ):
+            return False
 
     async def read_mobile_events(
         self,
@@ -235,9 +262,10 @@ class MobileEventsService:
                     "online": bool(val),
                 }
             )
-        await websocket.send_json(
-            {"type": "user.online.snapshot", "data": {"items": items}}
-        )
+        if not await self._send_json_safe(
+            websocket, {"type": "user.online.snapshot", "data": {"items": items}}
+        ):
+            return
 
     async def _forward_pubsub(self, *, websocket: WebSocket, pubsub) -> None:
         try:
@@ -250,9 +278,13 @@ class MobileEventsService:
                 if isinstance(data, (bytes, bytearray)):
                     data = data.decode()
                 try:
-                    await websocket.send_json(json.loads(data))
+                    parsed_data = json.loads(data)
                 except Exception:
-                    await websocket.send_text(str(data))
+                    if not await self._send_text_safe(websocket, str(data)):
+                        return
+                    continue
+                if not await self._send_json_safe(websocket, parsed_data):
+                    return
         except Exception:
             return
 
@@ -279,13 +311,15 @@ class MobileEventsService:
                             continue
                         if str(payload_obj.get("user_id") or "") != str(user_id):
                             continue
-                        await websocket.send_json(
+                        if not await self._send_json_safe(
+                            websocket,
                             {
                                 "type": "event",
                                 "event_name": event_name,
                                 "payload": payload_obj,
-                            }
-                        )
+                            },
+                        ):
+                            return
         except Exception:
             return
 
@@ -362,7 +396,12 @@ class MobileEventsService:
             while True:
                 try:
                     raw = await websocket.receive_text()
-                except (WebSocketDisconnect, RuntimeError):
+                except (
+                    WebSocketDisconnect,
+                    RuntimeError,
+                    ConnectionClosedError,
+                    ConnectionClosedOK,
+                ):
                     break
                 incoming = None
                 with contextlib.suppress(Exception):
@@ -375,20 +414,23 @@ class MobileEventsService:
                     continue
 
                 if msg_type == "ping":
-                    await websocket.send_json({"type": "pong"})
+                    if not await self._send_json_safe(websocket, {"type": "pong"}):
+                        break
                     continue
 
                 if msg_type == "chat.send":
                     try:
                         payload = SendMessagePayload.model_validate(incoming)
                     except Exception:
-                        await websocket.send_json(
+                        if not await self._send_json_safe(
+                            websocket,
                             {
                                 "type": "error",
                                 "error": "invalid_payload",
                                 "message": "Expected: {type:'chat.send', recipient_id:'<uuid>', body:'...'}",
-                            }
-                        )
+                            },
+                        ):
+                            break
                         continue
 
                     async with get_async_session() as db:
@@ -413,60 +455,74 @@ class MobileEventsService:
                             ForbiddenException,
                             BadRequestException,
                         ) as e:
-                            await websocket.send_json(
+                            if not await self._send_json_safe(
+                                websocket,
                                 {
                                     "type": "error",
                                     "error": "chat.send.failed",
                                     "message": str(e),
-                                }
-                            )
+                                },
+                            ):
+                                break
                             continue
 
-                    await websocket.send_json(
+                    if not await self._send_json_safe(
+                        websocket,
                         {
                             "type": "chat.sent",
                             "client_id": payload.client_id,
                             "data": {**result},
-                        }
-                    )
+                        },
+                    ):
+                        break
                     continue
 
                 if msg_type == "chat.upload_media":
                     try:
                         payload = UploadMediaPayload.model_validate(incoming)
                     except Exception:
-                        await websocket.send_json(
+                        if not await self._send_json_safe(
+                            websocket,
                             {
                                 "type": "error",
                                 "error": "invalid_payload",
                                 "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_type:'image|video|file', media_urls:['https://...'], body?:'...'}",
-                            }
-                        )
+                            },
+                        ):
+                            break
                         continue
 
                     if str(payload.recipient_id) == str(user_id):
-                        await websocket.send_json(
-                            {"type": "error", "error": "self_send_not_allowed"}
-                        )
+                        if not await self._send_json_safe(
+                            websocket,
+                            {"type": "error", "error": "self_send_not_allowed"},
+                        ):
+                            break
                         continue
 
                     media_type = (payload.media_type or "").strip().lower()
                     if media_type not in {"image", "video", "file"}:
-                        await websocket.send_json(
-                            {"type": "error", "error": "invalid_media_type"}
-                        )
+                        if not await self._send_json_safe(
+                            websocket,
+                            {"type": "error", "error": "invalid_media_type"},
+                        ):
+                            break
                         continue
 
                     urls = [u for u in (payload.media_urls or []) if u]
                     if not urls:
-                        await websocket.send_json(
-                            {"type": "error", "error": "missing_media_urls"}
-                        )
+                        if not await self._send_json_safe(
+                            websocket,
+                            {"type": "error", "error": "missing_media_urls"},
+                        ):
+                            break
                         continue
                     if any(not self._is_cloudinary_secure_url(u) for u in urls):
-                        await websocket.send_json(
-                            {"type": "error", "error": "invalid_media_urls"}
-                        )
+                        if not await self._send_json_safe(
+                            websocket,
+                            {"type": "error", "error": "invalid_media_urls"},
+                        ):
+                            break
                         continue
 
                     async with get_async_session() as db:
@@ -494,35 +550,41 @@ class MobileEventsService:
                             ForbiddenException,
                             BadRequestException,
                         ) as e:
-                            await websocket.send_json(
+                            if not await self._send_json_safe(
+                                websocket,
                                 {
                                     "type": "error",
                                     "error": "chat.upload_media.failed",
                                     "message": str(e),
-                                }
-                            )
+                                },
+                            ):
+                                break
                             continue
 
-                    await websocket.send_json(
+                    if not await self._send_json_safe(
+                        websocket,
                         {
                             "type": "chat.sent",
                             "client_id": payload.client_id,
                             "data": {**result},
-                        }
-                    )
+                        },
+                    ):
+                        break
                     continue
 
                 if msg_type == "chat.read":
                     try:
                         payload = MarkConversationReadPayload.model_validate(incoming)
                     except Exception:
-                        await websocket.send_json(
+                        if not await self._send_json_safe(
+                            websocket,
                             {
                                 "type": "error",
                                 "error": "invalid_payload",
                                 "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', message_id:'<uuid>', mark_all?:true|false}",
-                            }
-                        )
+                            },
+                        ):
+                            break
                         continue
 
                     async with get_async_session() as db:
@@ -558,29 +620,36 @@ class MobileEventsService:
                             ForbiddenException,
                             BadRequestException,
                         ) as e:
-                            await websocket.send_json(
+                            if not await self._send_json_safe(
+                                websocket,
                                 {
                                     "type": "error",
                                     "error": "chat.read.failed",
                                     "message": str(e),
-                                }
-                            )
+                                },
+                            ):
+                                break
                             continue
 
-                    await websocket.send_json({"type": "chat.read.ack", "data": result})
+                    if not await self._send_json_safe(
+                        websocket, {"type": "chat.read.ack", "data": result}
+                    ):
+                        break
                     continue
 
                 if msg_type == "chat.typing":
                     try:
                         payload = TypingPayload.model_validate(incoming)
                     except Exception:
-                        await websocket.send_json(
+                        if not await self._send_json_safe(
+                            websocket,
                             {
                                 "type": "error",
                                 "error": "invalid_payload",
                                 "message": "Expected: {type:'chat.typing', user_id:'<uuid>', is_typing:true|false}",
-                            }
-                        )
+                            },
+                        ):
+                            break
                         continue
 
                     async with get_async_session() as db:
@@ -600,13 +669,15 @@ class MobileEventsService:
                             ForbiddenException,
                             BadRequestException,
                         ) as e:
-                            await websocket.send_json(
+                            if not await self._send_json_safe(
+                                websocket,
                                 {
                                     "type": "error",
                                     "error": "chat.typing.failed",
                                     "message": str(e),
-                                }
-                            )
+                                },
+                            ):
+                                break
                             continue
 
                     event_payload = json.dumps(
@@ -629,7 +700,8 @@ class MobileEventsService:
                     for target_id in targets:
                         await redis.publish(f"chat:user:{target_id}", event_payload)
 
-                    await websocket.send_json(
+                    if not await self._send_json_safe(
+                        websocket,
                         {
                             "type": "chat.typing.ack",
                             "data": {
@@ -637,8 +709,9 @@ class MobileEventsService:
                                 "user_id": str(payload.user_id),
                                 "is_typing": bool(payload.is_typing),
                             },
-                        }
-                    )
+                        },
+                    ):
+                        break
                     continue
         finally:
             pubsub_task.cancel()

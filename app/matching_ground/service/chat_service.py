@@ -191,6 +191,9 @@ class ChatService:
                     reply_row, sender=reply_sender, recipient=reply_recipient
                 )
 
+        if commit:
+            await db.commit()
+
         if redis is not None:
             msg_payload = self._serialize_message(
                 msg, sender=sender, recipient=recipient
@@ -244,9 +247,6 @@ class ChatService:
                 "reply_to_message": reply_obj,
             },
         }
-
-        if commit:
-            await db.commit()
 
         if as_response:
             return response_builder(
@@ -352,6 +352,9 @@ class ChatService:
                     reply_row, sender=reply_sender, recipient=reply_recipient
                 )
 
+        if commit:
+            await db.commit()
+
         if redis is not None:
             msg_payload = self._serialize_message(
                 msg, sender=sender, recipient=recipient
@@ -388,9 +391,6 @@ class ChatService:
                 "reply_to_message": reply_obj,
             },
         }
-
-        if commit:
-            await db.commit()
 
         if as_response:
             return response_builder(

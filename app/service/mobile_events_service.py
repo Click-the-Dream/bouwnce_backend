@@ -405,7 +405,7 @@ class MobileEventsService:
                                     if payload.reply_to_message_id
                                     else None
                                 ),
-                                commit=False,
+                                commit=True,
                                 as_response=False,
                             )
                         except (
@@ -486,7 +486,7 @@ class MobileEventsService:
                                     if payload.reply_to_message_id
                                     else None
                                 ),
-                                commit=False,
+                                commit=True,
                                 as_response=False,
                             )
                         except (

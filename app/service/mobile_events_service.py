@@ -853,6 +853,13 @@ class MobileEventsService:
             pubsub_task.cancel()
             stream_task.cancel()
             presence_task.cancel()
+            await asyncio.gather(
+                bootstrap_task,
+                pubsub_task,
+                stream_task,
+                presence_task,
+                return_exceptions=True,
+            )
             await pubsub.unsubscribe(f"chat:user:{user_id}")
             await pubsub.close()
             await self._unregister_websocket(str(user_id), websocket)

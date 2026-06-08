@@ -332,11 +332,7 @@ class MatchLifecycleService:
                     or matched_interest
                     or matched_interests
                 )
-                if (
-                    is_direct_user_hit
-                    or has_interest_match
-                    or score >= settings.SEARCH_MATCH_FUZZY_SCORE
-                ):
+                if is_direct_user_hit or has_interest_match:
                     filtered_items.append(item)
             items = filtered_items
 

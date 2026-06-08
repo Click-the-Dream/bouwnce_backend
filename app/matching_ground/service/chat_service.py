@@ -126,6 +126,8 @@ class ChatService:
         reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
+        notify_side_effects: bool = True,
+        publish_redis_fanout: bool = True,
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
         recipient_is_bouwnce = (
@@ -194,7 +196,7 @@ class ChatService:
         if commit:
             await db.commit()
 
-        if redis is not None:
+        if redis is not None and publish_redis_fanout:
             msg_payload = self._serialize_message(
                 msg, sender=sender, recipient=recipient
             )
@@ -208,37 +210,38 @@ class ChatService:
             await redis.publish(f"chat:user:{sender.id}", payload)
             await redis.publish(f"chat:user:{recipient.id}", payload)
 
-        await dispatch_event(
-            EventNames.PUSH_NOTIFICATION,
-            PushNotificationEvent(
-                user_id=str(recipient.id),
-                title=(sender.full_name or sender.username or "New message"),
-                body=body[:80],
-                data={
-                    "type": "chat.message.created",
-                    "conversation_id": str(conversation.id),
-                    "message_id": str(msg.id),
-                },
-            ),
-            db=db,
-            redis=redis,
-        )
+        if notify_side_effects:
+            await dispatch_event(
+                EventNames.PUSH_NOTIFICATION,
+                PushNotificationEvent(
+                    user_id=str(recipient.id),
+                    title=(sender.full_name or sender.username or "New message"),
+                    body=body[:80],
+                    data={
+                        "type": "chat.message.created",
+                        "conversation_id": str(conversation.id),
+                        "message_id": str(msg.id),
+                    },
+                ),
+                db=db,
+                redis=redis,
+            )
 
-        await dispatch_event(
-            EventNames.MOBILE_EVENT,
-            MobileEvent(
-                event_name="chat.message.created",
-                payload={
-                    "user_id": str(recipient.id),
-                    "conversation_id": str(conversation.id),
-                    "message_id": str(msg.id),
-                    "sender_id": str(sender.id),
-                    "recipient_id": str(recipient.id),
-                },
-            ),
-            db=db,
-            redis=redis,
-        )
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="chat.message.created",
+                    payload={
+                        "user_id": str(recipient.id),
+                        "conversation_id": str(conversation.id),
+                        "message_id": str(msg.id),
+                        "sender_id": str(sender.id),
+                        "recipient_id": str(recipient.id),
+                    },
+                ),
+                db=db,
+                redis=redis,
+            )
 
         result = {
             "conversation_id": str(conversation.id),
@@ -272,6 +275,8 @@ class ChatService:
         reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
+        notify_side_effects: bool = True,
+        publish_redis_fanout: bool = True,
     ) -> dict:
         recipient = await User.get_by_id(str(recipient_id), db)
         recipient_is_bouwnce = (
@@ -355,7 +360,7 @@ class ChatService:
         if commit:
             await db.commit()
 
-        if redis is not None:
+        if redis is not None and publish_redis_fanout:
             msg_payload = self._serialize_message(
                 msg, sender=sender, recipient=recipient
             )
@@ -365,24 +370,25 @@ class ChatService:
             await redis.publish(f"chat:user:{sender.id}", payload)
             await redis.publish(f"chat:user:{recipient.id}", payload)
 
-        await dispatch_event(
-            EventNames.MOBILE_EVENT,
-            MobileEvent(
-                event_name="chat.message.created",
-                payload={
-                    "user_id": str(recipient.id),
-                    "conversation_id": str(conversation.id),
-                    "message_id": str(msg.id),
-                    "sender_id": str(sender.id),
-                    "recipient_id": str(recipient.id),
-                    "media_type": media_type,
-                    "media_urls": urls,
-                    "media_name": msg.media_name,
-                },
-            ),
-            db=db,
-            redis=redis,
-        )
+        if notify_side_effects:
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="chat.message.created",
+                    payload={
+                        "user_id": str(recipient.id),
+                        "conversation_id": str(conversation.id),
+                        "message_id": str(msg.id),
+                        "sender_id": str(sender.id),
+                        "recipient_id": str(recipient.id),
+                        "media_type": media_type,
+                        "media_urls": urls,
+                        "media_name": msg.media_name,
+                    },
+                ),
+                db=db,
+                redis=redis,
+            )
 
         result = {
             "conversation_id": str(conversation.id),

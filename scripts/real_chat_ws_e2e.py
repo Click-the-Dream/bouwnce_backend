@@ -181,7 +181,7 @@ async def main(base_url: str | None = None) -> None:
                     while time.monotonic() < sender_deadline:
                         try:
                             raw = await asyncio.wait_for(sender_ws.recv(), timeout=2)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             continue
                         message = json.loads(raw)
                         sender_messages.append(message)

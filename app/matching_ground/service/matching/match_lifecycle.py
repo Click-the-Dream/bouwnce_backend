@@ -319,7 +319,6 @@ class MatchLifecycleService:
                 self._normalized_interest_key(interest) for interest in interest_hints
             }
             for item in items:
-                score = float(item.get("score") or 0.0)
                 is_direct_user_hit = item.get("user_id") in direct_user_ids
                 matched_interest = item.get("matched_interest")
                 matched_interests = item.get("matched_interests") or []

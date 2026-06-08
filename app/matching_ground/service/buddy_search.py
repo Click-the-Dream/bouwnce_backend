@@ -188,11 +188,6 @@ class BuddySearchService:
         )
 
         score_expr = prompt_value if hint_interest_ids else interest_value
-        if distance_expr is not None:
-            location_value = func.greatest(
-                0.0, 1.0 - (distance_expr / float(radius_km))
-            )
-            score_expr = (score_expr + location_value) / 2.0
 
         base_query = (
             select(
@@ -223,6 +218,11 @@ class BuddySearchService:
                     else self.user_model.created_at.desc()
                 ),
                 score_expr.desc(),
+                (
+                    distance_expr.asc()
+                    if distance_expr is not None
+                    else self.user_model.created_at.desc()
+                ),
                 interest_value.desc(),
                 self.user_model.created_at.desc(),
             )

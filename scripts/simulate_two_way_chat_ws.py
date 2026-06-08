@@ -199,9 +199,9 @@ async def main():
 
     try:
         service = mobile_events_module.MobileEventsService()
-        recipient_ws = FakeWebSocket(token="recipient-token")
+        recipient_ws = FakeWebSocket(token=f"recipient-{uuid.uuid4().hex}")
         sender_ws = FakeWebSocket(
-            token="sender-token",
+            token=f"sender-{uuid.uuid4().hex}",
             incoming=[
                 json.dumps(
                     {

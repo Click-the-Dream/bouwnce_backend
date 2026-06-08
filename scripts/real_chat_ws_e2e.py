@@ -65,7 +65,7 @@ async def _read_until_chat_message(websocket, label: str) -> tuple[list[dict], d
     while time.monotonic() < deadline:
         try:
             raw = await asyncio.wait_for(websocket.recv(), timeout=2)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
 
         message = json.loads(raw)
@@ -84,8 +84,8 @@ async def _wait_for_health(client: httpx.AsyncClient) -> None:
             response = await client.get("/api/health")
             if response.status_code == 200:
                 return
-        except Exception:
-            pass
+        except httpx.HTTPError:
+            continue
         await asyncio.sleep(0.2)
     raise RuntimeError("Local app never became healthy")
 

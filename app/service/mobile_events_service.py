@@ -100,6 +100,31 @@ class MobileEventsService:
         ):
             return False
 
+    async def _should_deliver_chat_message(
+        self,
+        *,
+        redis,
+        user_id: str,
+        payload: dict,
+    ) -> bool:
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            return False
+        if str(data.get("recipient_id") or "") != str(user_id):
+            return False
+        message_id = str(data.get("id") or "").strip()
+        if not message_id:
+            return False
+        delivered_key = f"chat:delivered:{user_id}:{message_id}"
+        return bool(
+            await redis.set(
+                delivered_key,
+                "1",
+                ex=PRESENCE_TTL_SECONDS * 48,
+                nx=True,
+            )
+        )
+
     async def _dispatch_chat_side_effects(
         self,
         *,
@@ -447,6 +472,8 @@ class MobileEventsService:
         *,
         websocket: WebSocket,
         pubsub,
+        redis,
+        user_id: str,
         send_lock: asyncio.Lock | None = None,
     ) -> None:
         try:
@@ -467,7 +494,10 @@ class MobileEventsService:
                         return
                     continue
                 if str(parsed_data.get("type") or "") == "chat.message":
-                    continue
+                    if not await self._should_deliver_chat_message(
+                        redis=redis, user_id=user_id, payload=parsed_data
+                    ):
+                        continue
                 if not await self._send_json_safe(
                     websocket, parsed_data, send_lock=send_lock
                 ):
@@ -513,14 +543,18 @@ class MobileEventsService:
                             payload_obj = None
                         if payload_obj is None:
                             continue
-                        if not await self._send_json_safe(
-                            websocket, payload_obj, send_lock=send_lock
-                        ):
-                            return
                         last_id = msg_id
                         await redis.set(
                             last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8
                         )
+                        if not await self._should_deliver_chat_message(
+                            redis=redis, user_id=user_id, payload=payload_obj
+                        ):
+                            continue
+                        if not await self._send_json_safe(
+                            websocket, payload_obj, send_lock=send_lock
+                        ):
+                            return
         except Exception:
             return
 
@@ -598,7 +632,11 @@ class MobileEventsService:
 
         pubsub_task = asyncio.create_task(
             self._forward_pubsub(
-                websocket=websocket, pubsub=pubsub, send_lock=send_lock
+                websocket=websocket,
+                pubsub=pubsub,
+                redis=redis,
+                user_id=str(user_id),
+                send_lock=send_lock,
             )
         )
         chat_stream_task = asyncio.create_task(

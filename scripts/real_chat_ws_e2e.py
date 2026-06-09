@@ -77,6 +77,22 @@ async def _read_until_chat_message(websocket, label: str) -> tuple[list[dict], d
     raise RuntimeError(f"{label} did not receive chat.message")
 
 
+async def _wait_for_type(websocket, expected_type: str, label: str) -> dict:
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        try:
+            raw = await asyncio.wait_for(websocket.recv(), timeout=2)
+        except TimeoutError:
+            continue
+
+        message = json.loads(raw)
+        print(f"[{label}] {message}", flush=True)
+        if message.get("type") == expected_type:
+            return message
+
+    raise RuntimeError(f"{label} did not receive {expected_type}")
+
+
 async def _wait_for_health(client: httpx.AsyncClient) -> None:
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
@@ -151,9 +167,7 @@ async def main(base_url: str | None = None) -> None:
                 recipient_ws_url, ping_interval=20, ping_timeout=20
             ) as recipient_ws:
                 print("[ws] recipient websocket open", flush=True)
-                recipient_reader = asyncio.create_task(
-                    _read_until_chat_message(recipient_ws, "recipient")
-                )
+                await _wait_for_type(recipient_ws, "chat.ready", "recipient")
 
                 await asyncio.sleep(0.25)
 
@@ -162,6 +176,7 @@ async def main(base_url: str | None = None) -> None:
                     sender_ws_url, ping_interval=20, ping_timeout=20
                 ) as sender_ws:
                     print("[ws] sender websocket open", flush=True)
+                    await _wait_for_type(sender_ws, "chat.ready", "sender")
                     client_id = f"temp-{uuid.uuid4().hex}"
                     await sender_ws.send(
                         json.dumps(
@@ -193,7 +208,9 @@ async def main(base_url: str | None = None) -> None:
                     if sender_ack is None:
                         raise RuntimeError("Sender did not receive chat.sent")
 
-                    recipient_messages, recipient_chat_message = await recipient_reader
+                    recipient_messages, recipient_chat_message = (
+                        await _read_until_chat_message(recipient_ws, "recipient")
+                    )
                     print("RESULT: sender ack and recipient live message received")
 
     finally:

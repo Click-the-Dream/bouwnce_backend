@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import UTC, datetime
 
@@ -10,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CHAT_EVENTS_STREAM_KEY_PREFIX, settings
 from app.matching_ground.model.notification import Notification
+from app.matching_ground.schema.chat import (
+    ChatMessageData,
+    ChatMessageEvent,
+    ChatReadUpdatedData,
+    ChatReadUpdatedEvent,
+)
 from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.utils.exception import ForbiddenException, NotFoundException
@@ -83,30 +88,36 @@ class ChatService:
         }
         return base
 
-    @classmethod
-    def _serialize_message(
-        cls, msg: Message, *, sender: User | None = None, recipient: User | None = None
-    ) -> dict:
-        data = msg.to_dict()
-        if sender is not None:
-            data["sender"] = cls._serialize_user(sender)
-        if recipient is not None:
-            data["recipient"] = cls._serialize_user(recipient)
-        return data
+    def _build_chat_message_data(
+        self,
+        *,
+        msg: Message,
+        sender: User,
+        recipient: User,
+        reply_obj: dict | bool,
+    ) -> ChatMessageData:
+        message_payload = msg.to_dict()
+        message_payload["sender"] = self._serialize_user(sender)
+        message_payload["recipient"] = self._serialize_user(recipient)
+        message_payload["reply_to_message"] = reply_obj
+        return ChatMessageData.model_validate(message_payload)
 
-    @classmethod
-    def _serialize_reply_message(
-        cls, msg: Message, *, sender: User | None = None, recipient: User | None = None
-    ) -> dict:
-        # Minimal, non-recursive representation for replies.
-        data = msg.to_dict()
-        if sender is not None:
-            data["sender"] = cls._serialize_user(sender)
-        if recipient is not None:
-            data["recipient"] = cls._serialize_user(recipient)
-        data.pop("reply_to_message_id", None)
-        data.pop("reply_to_message", None)
-        return data
+    def _build_chat_message_event(
+        self,
+        *,
+        msg: Message,
+        sender: User,
+        recipient: User,
+        reply_obj: dict | bool,
+    ) -> ChatMessageEvent:
+        return ChatMessageEvent(
+            data=self._build_chat_message_data(
+                msg=msg,
+                sender=sender,
+                recipient=recipient,
+                reply_obj=reply_obj,
+            )
+        )
 
     async def get_or_create_conversation(
         self, *, db: AsyncSession, user1_id: str, user2_id: str
@@ -191,19 +202,24 @@ class ChatService:
             if reply_row is not None:
                 reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
                 reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
-                reply_obj = self._serialize_reply_message(
-                    reply_row, sender=reply_sender, recipient=reply_recipient
-                )
+                reply_payload = reply_row.to_dict()
+                reply_payload["sender"] = self._serialize_user(reply_sender)
+                reply_payload["recipient"] = self._serialize_user(reply_recipient)
+                reply_payload.pop("reply_to_message_id", None)
+                reply_payload.pop("reply_to_message", None)
+                reply_obj = reply_payload
 
         if commit:
             await db.commit()
 
         if redis is not None and publish_redis_fanout:
-            msg_payload = self._serialize_message(
-                msg, sender=sender, recipient=recipient
+            chat_message_event = self._build_chat_message_event(
+                msg=msg,
+                sender=sender,
+                recipient=recipient,
+                reply_obj=reply_obj,
             )
-            msg_payload["reply_to_message"] = reply_obj
-            payload = json.dumps({"type": "chat.message", "data": msg_payload})
+            payload = chat_message_event.model_dump_json()
             await redis.publish(
                 f"chat:conversation:{conversation.id}",
                 payload,
@@ -250,12 +266,12 @@ class ChatService:
                 redis=redis,
             )
 
+        message_data = self._build_chat_message_data(
+            msg=msg, sender=sender, recipient=recipient, reply_obj=reply_obj
+        )
         result = {
             "conversation_id": str(conversation.id),
-            "message": {
-                **self._serialize_message(msg, sender=sender, recipient=recipient),
-                "reply_to_message": reply_obj,
-            },
+            "message": message_data,
         }
 
         if as_response:
@@ -263,7 +279,10 @@ class ChatService:
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Message sent",
-                data=result,
+                data={
+                    "conversation_id": str(conversation.id),
+                    "message": message_data.model_dump(mode="json"),
+                },
             )
 
         return result
@@ -362,19 +381,24 @@ class ChatService:
             if reply_row is not None:
                 reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
                 reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
-                reply_obj = self._serialize_reply_message(
-                    reply_row, sender=reply_sender, recipient=reply_recipient
-                )
+                reply_payload = reply_row.to_dict()
+                reply_payload["sender"] = self._serialize_user(reply_sender)
+                reply_payload["recipient"] = self._serialize_user(reply_recipient)
+                reply_payload.pop("reply_to_message_id", None)
+                reply_payload.pop("reply_to_message", None)
+                reply_obj = reply_payload
 
         if commit:
             await db.commit()
 
         if redis is not None and publish_redis_fanout:
-            msg_payload = self._serialize_message(
-                msg, sender=sender, recipient=recipient
+            chat_message_event = self._build_chat_message_event(
+                msg=msg,
+                sender=sender,
+                recipient=recipient,
+                reply_obj=reply_obj,
             )
-            msg_payload["reply_to_message"] = reply_obj
-            payload = json.dumps({"type": "chat.message", "data": msg_payload})
+            payload = chat_message_event.model_dump_json()
             await redis.publish(f"chat:conversation:{conversation.id}", payload)
             await redis.publish(f"chat:user:{sender.id}", payload)
             await redis.publish(f"chat:user:{recipient.id}", payload)
@@ -405,12 +429,12 @@ class ChatService:
                 redis=redis,
             )
 
+        message_data = self._build_chat_message_data(
+            msg=msg, sender=sender, recipient=recipient, reply_obj=reply_obj
+        )
         result = {
             "conversation_id": str(conversation.id),
-            "message": {
-                **self._serialize_message(msg, sender=sender, recipient=recipient),
-                "reply_to_message": reply_obj,
-            },
+            "message": message_data,
         }
 
         if as_response:
@@ -418,7 +442,10 @@ class ChatService:
                 status_code=status.HTTP_201_CREATED,
                 status="success",
                 message="Message sent",
-                data=result,
+                data={
+                    "conversation_id": str(conversation.id),
+                    "message": message_data.model_dump(mode="json"),
+                },
             )
 
         return result
@@ -583,24 +610,25 @@ class ChatService:
 
         items: list[dict] = []
         for m in msgs:
-            row = self._serialize_message(
-                m,
+            row = self._build_chat_message_data(
+                msg=m,
                 sender=users_by_id.get(str(m.sender_id)),
                 recipient=users_by_id.get(str(m.recipient_id)),
+                reply_obj=False,
             )
             if m.reply_to_message_id:
                 reply = reply_by_id.get(str(m.reply_to_message_id))
                 if reply is not None:
-                    row["reply_to_message"] = self._serialize_reply_message(
-                        reply,
+                    reply = self._build_chat_message_data(
+                        msg=reply,
                         sender=users_by_id.get(str(reply.sender_id)),
                         recipient=users_by_id.get(str(reply.recipient_id)),
+                        reply_obj=False,
                     )
                 else:
-                    row["reply_to_message"] = False
-            else:
-                row["reply_to_message"] = False
-            items.append(row)
+                    reply = False
+                row = row.model_copy(update={"reply_to_message": reply})
+            items.append(row.model_dump(mode="json"))
         data = {"items": items, "page": page, "page_size": page_size, "total": total}
         if as_response:
             return response_builder(
@@ -736,7 +764,15 @@ class ChatService:
         }
 
         if redis is not None and updated > 0:
-            payload = json.dumps({"type": "chat.read.updated", "data": data})
+            payload = ChatReadUpdatedEvent(
+                data=ChatReadUpdatedData(
+                    conversation_id=str(conv.id),
+                    reader_id=current_user_id,
+                    read=unread_remaining == 0,
+                    updated=updated,
+                    found=True,
+                )
+            ).model_dump_json()
             await redis.publish(f"chat:user:{conv.user_a_id}", payload)
             await redis.publish(f"chat:user:{conv.user_b_id}", payload)
         if commit:
@@ -804,15 +840,16 @@ class ChatService:
         }
 
         if redis is not None and updated > 0:
-            payload = json.dumps(
-                {
-                    "type": "chat.read.updated",
-                    "data": {
-                        **data,
-                        "reader_id": current_id,
-                    },
-                }
-            )
+            payload = ChatReadUpdatedEvent(
+                data=ChatReadUpdatedData(
+                    conversation_id=str(conv.id),
+                    message_id=str(target.id),
+                    reader_id=current_id,
+                    read=unread_remaining == 0,
+                    updated=updated,
+                    found=True,
+                )
+            ).model_dump_json()
             await redis.publish(f"chat:user:{conv.user_a_id}", payload)
             await redis.publish(f"chat:user:{conv.user_b_id}", payload)
 
@@ -926,18 +963,16 @@ class ChatService:
         }
 
         if redis is not None and updated > 0:
-            payload = json.dumps(
-                {
-                    "type": "chat.read.updated",
-                    "data": {
-                        "conversation_id": str(conv.id),
-                        "message_id": str(target.id),
-                        "updated": updated,
-                        "read": unread_remaining == 0,
-                        "reader_id": current_id,
-                    },
-                }
-            )
+            payload = ChatReadUpdatedEvent(
+                data=ChatReadUpdatedData(
+                    conversation_id=str(conv.id),
+                    message_id=str(target.id),
+                    reader_id=current_id,
+                    read=unread_remaining == 0,
+                    updated=updated,
+                    found=True,
+                )
+            ).model_dump_json()
             await redis.publish(f"chat:user:{conv.user_a_id}", payload)
             await redis.publish(f"chat:user:{conv.user_b_id}", payload)
 

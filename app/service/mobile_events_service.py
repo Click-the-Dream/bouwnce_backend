@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 from fastapi import WebSocket
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
@@ -23,7 +24,19 @@ from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
 from app.matching_ground.model.notification import Notification
 from app.matching_ground.schema.chat import (
+    ChatMessageData,
+    ChatMessageEvent,
+    ChatReadAckData,
+    ChatReadAckEvent,
+    ChatReadyData,
+    ChatReadyEvent,
+    ChatSentData,
+    ChatSentEvent,
+    ChatTypingData,
+    ChatTypingEvent,
+    ChatUserLite,
     MarkConversationReadPayload,
+    PongEvent,
     SendMessagePayload,
     TypingPayload,
     UploadMediaPayload,
@@ -47,7 +60,8 @@ from app.worker.event_system import (
 PRESENCE_KEY_PREFIX = "presence:user:"
 PRESENCE_TTL_SECONDS = 75
 ACTIVE_CHAT_CONNECTIONS: dict[
-    str, tuple[WebSocket, asyncio.Lock, asyncio.Queue[dict[str, Any]]]
+    str,
+    dict[str, tuple[WebSocket, asyncio.Lock, asyncio.Queue[ChatMessageEvent]]],
 ] = {}
 
 
@@ -103,19 +117,39 @@ class MobileEventsService:
         ):
             return False
 
+    @staticmethod
+    async def _send_model_safe(
+        websocket: WebSocket,
+        payload: BaseModel,
+        *,
+        send_lock: asyncio.Lock | None = None,
+    ) -> bool:
+        return await MobileEventsService._send_json_safe(
+            websocket,
+            payload.model_dump(mode="json"),
+            send_lock=send_lock,
+        )
+
     async def _should_deliver_chat_message(
         self,
         *,
         redis,
         user_id: str,
-        payload: dict,
+        payload: ChatMessageEvent | dict,
     ) -> bool:
-        data = payload.get("data")
-        if not isinstance(data, dict):
+        if isinstance(payload, ChatMessageEvent):
+            data = payload.data
+            recipient_id = str(data.recipient_id)
+            message_id = str(data.id).strip()
+        else:
+            data = payload.get("data")
+            if not isinstance(data, dict):
+                return False
+            recipient_id = str(data.get("recipient_id") or "")
+            message_id = str(data.get("id") or "").strip()
+
+        if recipient_id != str(user_id):
             return False
-        if str(data.get("recipient_id") or "") != str(user_id):
-            return False
-        message_id = str(data.get("id") or "").strip()
         if not message_id:
             return False
         delivered_key = f"chat:delivered:{user_id}:{message_id}"
@@ -133,19 +167,17 @@ class MobileEventsService:
         *,
         redis,
         recipient_id: str,
-        payload: dict,
+        payload: ChatMessageEvent,
     ) -> bool:
-        connection = ACTIVE_CHAT_CONNECTIONS.get(str(recipient_id))
-        if connection is None:
+        connections = ACTIVE_CHAT_CONNECTIONS.get(str(recipient_id))
+        if not connections:
             return False
-        _websocket, _send_lock, chat_queue = connection
-        if not isinstance(payload, dict):
-            return False
-        try:
-            await chat_queue.put(payload)
-            return True
-        except Exception:
-            return False
+        delivered = False
+        for _connection_id, (_websocket, _send_lock, chat_queue) in connections.items():
+            with contextlib.suppress(Exception):
+                await chat_queue.put(payload)
+                delivered = True
+        return delivered
 
     async def _drain_chat_queue(
         self,
@@ -153,19 +185,17 @@ class MobileEventsService:
         websocket: WebSocket,
         redis,
         user_id: str,
-        chat_queue: asyncio.Queue[dict[str, Any]],
+        chat_queue: asyncio.Queue[ChatMessageEvent],
         send_lock: asyncio.Lock,
     ) -> None:
         try:
             while True:
                 payload = await chat_queue.get()
-                if not isinstance(payload, dict):
-                    continue
                 if not await self._should_deliver_chat_message(
                     redis=redis, user_id=user_id, payload=payload
                 ):
                     continue
-                if not await self._send_json_safe(
+                if not await self._send_model_safe(
                     websocket, payload, send_lock=send_lock
                 ):
                     return
@@ -696,8 +726,13 @@ class MobileEventsService:
 
         await websocket.accept()
         send_lock = asyncio.Lock()
-        chat_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=200)
-        ACTIVE_CHAT_CONNECTIONS[str(user_id)] = (websocket, send_lock, chat_queue)
+        chat_queue: asyncio.Queue[ChatMessageEvent] = asyncio.Queue(maxsize=200)
+        connection_id = uuid.uuid4().hex
+        ACTIVE_CHAT_CONNECTIONS.setdefault(str(user_id), {})[connection_id] = (
+            websocket,
+            send_lock,
+            chat_queue,
+        )
         chat_stream_ready = asyncio.Event()
         bootstrap_task = asyncio.create_task(
             self._bootstrap_connection(
@@ -752,9 +787,9 @@ class MobileEventsService:
         with contextlib.suppress(Exception):
             await asyncio.wait_for(chat_stream_ready.wait(), timeout=5)
 
-        await self._send_json_safe(
+        await self._send_model_safe(
             websocket,
-            {"type": "chat.ready", "data": {"user_id": str(user_id)}},
+            ChatReadyEvent(data=ChatReadyData(user_id=str(user_id))),
             send_lock=send_lock,
         )
 
@@ -780,8 +815,8 @@ class MobileEventsService:
                     continue
 
                 if msg_type == "ping":
-                    if not await self._send_json_safe(
-                        websocket, {"type": "pong"}, send_lock=send_lock
+                    if not await self._send_model_safe(
+                        websocket, PongEvent(), send_lock=send_lock
                     ):
                         break
                     continue
@@ -838,20 +873,25 @@ class MobileEventsService:
                                 break
                             continue
 
-                    if not await self._send_json_safe(
+                    if not await self._send_model_safe(
                         websocket,
-                        {
-                            "type": "chat.sent",
-                            "client_id": payload.client_id,
-                            "data": {**result},
-                        },
+                        ChatSentEvent(
+                            client_id=payload.client_id,
+                            data=ChatSentData(
+                                conversation_id=str(result["conversation_id"]),
+                                message=ChatMessageData.model_validate(
+                                    result["message"]
+                                ),
+                            ),
+                        ),
                         send_lock=send_lock,
                     ):
                         break
+                    message_data = ChatMessageData.model_validate(result["message"])
                     await self._send_chat_message_direct(
                         redis=redis,
                         recipient_id=str(payload.recipient_id),
-                        payload={"type": "chat.message", "data": result["message"]},
+                        payload=ChatMessageEvent(data=message_data),
                     )
                     asyncio.create_task(
                         self._dispatch_chat_side_effects(
@@ -859,7 +899,7 @@ class MobileEventsService:
                             sender=sender,
                             recipient_id=str(payload.recipient_id),
                             conversation_id=result["conversation_id"],
-                            message_id=result["message"]["id"],
+                            message_id=str(message_data.id),
                             body=payload.body or "",
                         )
                     )
@@ -957,20 +997,25 @@ class MobileEventsService:
                                 break
                             continue
 
-                    if not await self._send_json_safe(
+                    if not await self._send_model_safe(
                         websocket,
-                        {
-                            "type": "chat.sent",
-                            "client_id": payload.client_id,
-                            "data": {**result},
-                        },
+                        ChatSentEvent(
+                            client_id=payload.client_id,
+                            data=ChatSentData(
+                                conversation_id=str(result["conversation_id"]),
+                                message=ChatMessageData.model_validate(
+                                    result["message"]
+                                ),
+                            ),
+                        ),
                         send_lock=send_lock,
                     ):
                         break
+                    message_data = ChatMessageData.model_validate(result["message"])
                     await self._send_chat_message_direct(
                         redis=redis,
                         recipient_id=str(payload.recipient_id),
-                        payload={"type": "chat.message", "data": result["message"]},
+                        payload=ChatMessageEvent(data=message_data),
                     )
                     asyncio.create_task(
                         self._dispatch_chat_side_effects(
@@ -978,11 +1023,11 @@ class MobileEventsService:
                             sender=sender,
                             recipient_id=str(payload.recipient_id),
                             conversation_id=result["conversation_id"],
-                            message_id=result["message"]["id"],
+                            message_id=str(message_data.id),
                             body=payload.body or "",
                             media_type=media_type,
                             media_urls=urls,
-                            media_name=result["message"].get("media_name"),
+                            media_name=message_data.media_name,
                         )
                     )
                     continue
@@ -1048,9 +1093,9 @@ class MobileEventsService:
                                 break
                             continue
 
-                    if not await self._send_json_safe(
+                    if not await self._send_model_safe(
                         websocket,
-                        {"type": "chat.read.ack", "data": result},
+                        ChatReadAckEvent(data=ChatReadAckData.model_validate(result)),
                         send_lock=send_lock,
                     ):
                         break
@@ -1101,42 +1146,30 @@ class MobileEventsService:
                                 break
                             continue
 
-                    event_payload = json.dumps(
-                        {
-                            "type": "chat.typing",
-                            "data": {
-                                "conversation_id": str(conv.id),
-                                "user": {
-                                    "id": str(sender.id),
-                                    "username": sender.username,
-                                    "full_name": sender.full_name,
-                                    "profile_pic": chat_service._serialize_profile_pic(
-                                        sender
-                                    ),
-                                },
-                                "is_typing": bool(payload.is_typing),
-                            },
-                        }
+                    event_payload = ChatTypingEvent(
+                        data=ChatTypingData(
+                            conversation_id=str(conv.id),
+                            user=ChatUserLite(
+                                id=sender.id,
+                                username=sender.username,
+                                full_name=sender.full_name,
+                                profile_pic=chat_service._serialize_profile_pic(sender),
+                            ),
+                            is_typing=bool(payload.is_typing),
+                        )
                     )
                     for target_id in targets:
-                        await redis.publish(f"chat:user:{target_id}", event_payload)
+                        await redis.publish(
+                            f"chat:user:{target_id}", event_payload.model_dump_json()
+                        )
 
-                    if not await self._send_json_safe(
-                        websocket,
-                        {
-                            "type": "chat.typing.ack",
-                            "data": {
-                                "conversation_id": str(conv.id),
-                                "user_id": str(payload.user_id),
-                                "is_typing": bool(payload.is_typing),
-                            },
-                        },
-                        send_lock=send_lock,
-                    ):
-                        break
                     continue
         finally:
-            ACTIVE_CHAT_CONNECTIONS.pop(str(user_id), None)
+            user_connections = ACTIVE_CHAT_CONNECTIONS.get(str(user_id))
+            if user_connections is not None:
+                user_connections.pop(connection_id, None)
+                if not user_connections:
+                    ACTIVE_CHAT_CONNECTIONS.pop(str(user_id), None)
             bootstrap_task.cancel()
             pubsub_task.cancel()
             chat_stream_task.cancel()

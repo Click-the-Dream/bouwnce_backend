@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Redis keys / streams
 MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
+CHAT_EVENTS_STREAM_KEY_PREFIX = "chat:events:stream:"
+CHAT_EVENTS_LAST_ID_KEY_PREFIX = "chat:events:last:"
 PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
 
 

@@ -8,7 +8,7 @@ from fastapi import status
 from sqlalchemy import desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import CHAT_EVENTS_STREAM_KEY_PREFIX, settings
 from app.matching_ground.model.notification import Notification
 from app.models.chat import Conversation, Message
 from app.models.user import User
@@ -126,6 +126,7 @@ class ChatService:
         reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
+        persist_notification: bool = True,
         notify_side_effects: bool = True,
         publish_redis_fanout: bool = True,
     ) -> dict:
@@ -163,21 +164,22 @@ class ChatService:
         await db.flush()
         await db.refresh(msg)
 
-        await Notification.create(
-            data={
-                "user_id": recipient.id,
-                "title": sender.full_name or sender.username or "New message",
-                "body": body[:120],
-                "event_type": "chat_message",
-                "payload": {
-                    "route": "chat.conversation",
-                    "conversation_id": str(conversation.id),
-                    "message_id": str(msg.id),
-                    "sender": self._serialize_user(sender),
+        if persist_notification:
+            await Notification.create(
+                data={
+                    "user_id": recipient.id,
+                    "title": sender.full_name or sender.username or "New message",
+                    "body": body[:120],
+                    "event_type": "chat_message",
+                    "payload": {
+                        "route": "chat.conversation",
+                        "conversation_id": str(conversation.id),
+                        "message_id": str(msg.id),
+                        "sender": self._serialize_user(sender),
+                    },
                 },
-            },
-            db=db,
-        )
+                db=db,
+            )
 
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
@@ -201,14 +203,19 @@ class ChatService:
                 msg, sender=sender, recipient=recipient
             )
             msg_payload["reply_to_message"] = reply_obj
+            payload = json.dumps({"type": "chat.message", "data": msg_payload})
             await redis.publish(
                 f"chat:conversation:{conversation.id}",
-                json.dumps({"type": "chat.message", "data": msg_payload}),
+                payload,
             )
-            # User-level fanout (single inbox websocket can subscribe to this)
-            payload = json.dumps({"type": "chat.message", "data": msg_payload})
             await redis.publish(f"chat:user:{sender.id}", payload)
             await redis.publish(f"chat:user:{recipient.id}", payload)
+            await redis.xadd(
+                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
+                {"type": "chat.message", "data": payload},
+                maxlen=5000,
+                approximate=True,
+            )
 
         if notify_side_effects:
             await dispatch_event(
@@ -275,6 +282,7 @@ class ChatService:
         reply_to_message_id: str | None = None,
         commit: bool = False,
         as_response: bool = False,
+        persist_notification: bool = True,
         notify_side_effects: bool = True,
         publish_redis_fanout: bool = True,
     ) -> dict:
@@ -324,24 +332,25 @@ class ChatService:
         await db.flush()
         await db.refresh(msg)
 
-        await Notification.create(
-            data={
-                "user_id": recipient.id,
-                "title": sender.full_name or sender.username or "New message",
-                "body": (msg.body or "")[:120],
-                "event_type": "chat_message",
-                "payload": {
-                    "route": "chat.conversation",
-                    "conversation_id": str(conversation.id),
-                    "message_id": str(msg.id),
-                    "sender": self._serialize_user(sender),
-                    "media_type": media_type,
-                    "media_urls": urls,
-                    "media_name": msg.media_name,
+        if persist_notification:
+            await Notification.create(
+                data={
+                    "user_id": recipient.id,
+                    "title": sender.full_name or sender.username or "New message",
+                    "body": (msg.body or "")[:120],
+                    "event_type": "chat_message",
+                    "payload": {
+                        "route": "chat.conversation",
+                        "conversation_id": str(conversation.id),
+                        "message_id": str(msg.id),
+                        "sender": self._serialize_user(sender),
+                        "media_type": media_type,
+                        "media_urls": urls,
+                        "media_name": msg.media_name,
+                    },
                 },
-            },
-            db=db,
-        )
+                db=db,
+            )
 
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
@@ -369,6 +378,12 @@ class ChatService:
             await redis.publish(f"chat:conversation:{conversation.id}", payload)
             await redis.publish(f"chat:user:{sender.id}", payload)
             await redis.publish(f"chat:user:{recipient.id}", payload)
+            await redis.xadd(
+                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
+                {"type": "chat.message", "data": payload},
+                maxlen=5000,
+                approximate=True,
+            )
 
         if notify_side_effects:
             await dispatch_event(

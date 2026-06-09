@@ -169,7 +169,7 @@ class MobileEventsService:
                     websocket, payload, send_lock=send_lock
                 ):
                     return
-        except Exception as exc:
+        except Exception:
             return
 
     async def _dispatch_chat_side_effects(
@@ -579,10 +579,7 @@ class MobileEventsService:
             last_id = last_id.decode()
         if not last_id:
             latest_entries = await redis.xrevrange(stream_key, count=1)
-            if latest_entries:
-                last_id = str(latest_entries[0][0])
-            else:
-                last_id = "0-0"
+            last_id = str(latest_entries[0][0]) if latest_entries else "0-0"
 
         if ready_event is not None:
             ready_event.set()

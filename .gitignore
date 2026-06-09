@@ -14,3 +14,4 @@ wheels/
 # Deployment files
 bin/
 ecosystem.config.js
+/scripts/measure_chat_latency.py

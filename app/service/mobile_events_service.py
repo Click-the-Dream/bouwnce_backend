@@ -506,9 +506,12 @@ class MobileEventsService:
                             payload_raw = payload_raw.decode()
                         if str(event_type or "") != "chat.message" or not payload_raw:
                             continue
+                        payload_obj = None
                         try:
                             payload_obj = json.loads(payload_raw)
                         except Exception:
+                            payload_obj = None
+                        if payload_obj is None:
                             continue
                         if not await self._send_json_safe(
                             websocket, payload_obj, send_lock=send_lock

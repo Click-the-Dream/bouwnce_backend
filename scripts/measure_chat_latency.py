@@ -198,12 +198,10 @@ async def main() -> None:
                     flush=True,
                 )
                 print(
-                    "[timing] sender_ack_wait={:.3f}s total_sender={:.3f}s recipient_wait={:.3f}s total_recipient={:.3f}s".format(
-                        sender_ack_elapsed,
-                        total_sender_elapsed,
-                        recipient_message_elapsed,
-                        total_recipient_elapsed,
-                    ),
+                    f"[timing] sender_ack_wait={sender_ack_elapsed:.3f}s "
+                    f"total_sender={total_sender_elapsed:.3f}s "
+                    f"recipient_wait={recipient_message_elapsed:.3f}s "
+                    f"total_recipient={total_recipient_elapsed:.3f}s",
                     flush=True,
                 )
 

@@ -493,11 +493,12 @@ class MobileEventsService:
                     ):
                         return
                     continue
-                if str(parsed_data.get("type") or "") == "chat.message":
-                    if not await self._should_deliver_chat_message(
-                        redis=redis, user_id=user_id, payload=parsed_data
-                    ):
-                        continue
+                if str(
+                    parsed_data.get("type") or ""
+                ) == "chat.message" and not await self._should_deliver_chat_message(
+                    redis=redis, user_id=user_id, payload=parsed_data
+                ):
+                    continue
                 if not await self._send_json_safe(
                     websocket, parsed_data, send_lock=send_lock
                 ):

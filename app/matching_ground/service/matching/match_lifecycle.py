@@ -186,17 +186,32 @@ class MatchLifecycleService:
         rows = await session.execute(select(Interest.name))
         known_names = [r[0] for r in rows.all() if r and r[0]]
 
-        scored_hits: list[tuple[float, str]] = []
+        exact_hits: list[str] = []
+        normalized_hits: list[str] = []
+        fuzzy_hits: list[tuple[float, str]] = []
         for name in known_names:
             score = MatchLifecycleService._score_interest_match(text, name)
+            normalized_name = normalize_interest_name(name)
+            if score >= settings.SEARCH_MATCH_REGEX_SCORE:
+                exact_hits.append(normalized_name)
+                continue
+            if score >= settings.SEARCH_MATCH_NORMALIZED_SCORE:
+                normalized_hits.append(normalized_name)
+                continue
             if score >= settings.SEARCH_MATCH_FUZZY_SCORE:
-                scored_hits.append((score, normalize_interest_name(name)))
+                fuzzy_hits.append((score, normalized_name))
 
-        scored_hits.sort(key=lambda item: (-item[0], item[1].lower()))
+        if exact_hits:
+            hits_source = exact_hits
+        elif normalized_hits:
+            hits_source = normalized_hits
+        else:
+            fuzzy_hits.sort(key=lambda item: (-item[0], item[1].lower()))
+            hits_source = [name for _, name in fuzzy_hits]
 
         hits: list[str] = []
         seen: set[str] = set()
-        for _, name in scored_hits:
+        for name in hits_source:
             if name in seen:
                 continue
             seen.add(name)
@@ -226,17 +241,32 @@ class MatchLifecycleService:
                 User.is_active.is_(True), User.is_deleted.is_(False)
             )
         )
-        hits: set[uuid.UUID] = set()
+        exact_hits: set[uuid.UUID] = set()
+        normalized_hits: set[uuid.UUID] = set()
+        fuzzy_hits: set[uuid.UUID] = set()
         for user_id, username, full_name in rows.all():
             candidate_score = max(
                 self._score_text_match(text, username or ""),
                 self._score_text_match(text, full_name or ""),
             )
+            if candidate_score >= settings.SEARCH_MATCH_REGEX_SCORE:
+                exact_hits.add(user_id)
+                continue
+            if candidate_score >= settings.SEARCH_MATCH_NORMALIZED_SCORE:
+                normalized_hits.add(user_id)
+                continue
             if candidate_score >= settings.SEARCH_MATCH_USER_SCORE:
-                hits.add(user_id)
-                if len(hits) >= max_users:
-                    break
-        return hits
+                fuzzy_hits.add(user_id)
+
+        if exact_hits:
+            hits = exact_hits
+        elif normalized_hits:
+            hits = normalized_hits
+        else:
+            hits = fuzzy_hits
+
+        ordered_hits = list(hits)[:max_users]
+        return set(ordered_hits)
 
     async def _build_suggested_queries(
         self, session: AsyncSession, requester_id: uuid.UUID, *, limit: int = 5
@@ -291,7 +321,6 @@ class MatchLifecycleService:
                 self._normalized_interest_key(interest) for interest in interest_hints
             }
             for item in items:
-                score = float(item.get("score") or 0.0)
                 is_direct_user_hit = item.get("user_id") in direct_user_ids
                 matched_interest = item.get("matched_interest")
                 matched_interests = item.get("matched_interests") or []
@@ -304,11 +333,7 @@ class MatchLifecycleService:
                     or matched_interest
                     or matched_interests
                 )
-                if (
-                    is_direct_user_hit
-                    or has_interest_match
-                    or score >= settings.SEARCH_MATCH_FUZZY_SCORE
-                ):
+                if is_direct_user_hit or has_interest_match:
                     filtered_items.append(item)
             items = filtered_items
 

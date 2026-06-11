@@ -10,6 +10,7 @@ from app.matching_ground.core.interest_normalization import normalize_interest_n
 from app.matching_ground.core.location import Coordinates
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
+from app.matching_ground.model.user_block import UserBlock
 from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.user_interest import UserInterest
 from app.matching_ground.schema.buddy_search import BuddyMatch, BuddySearchResult
@@ -17,6 +18,7 @@ from app.models.user import User
 
 
 class BuddySearchService:
+    RADIUS_STEP_KM = 10.0
 
     def __init__(self) -> None:
         self.geolocation_model = UserGeolocation
@@ -41,8 +43,14 @@ class BuddySearchService:
         radius_km: float | None = 10.0,
         interest_hints: set[str] | None = None,
         target_user_ids: set[uuid.UUID] | None = None,
+        page: int = 1,
+        page_size: int | None = None,
         limit: int = 10,
     ) -> BuddySearchResult:
+        page = max(page, 1)
+        page_size = min(max(page_size or limit, 1), 100)
+        offset = (page - 1) * page_size
+
         requester_geo = await self.geolocation_model.get_by_user_id(
             session, requester_id
         )
@@ -73,36 +81,13 @@ class BuddySearchService:
         query_interest_count = len(query_interest_ids)
         hint_interest_count = len(hint_interest_ids)
 
-        excluded_user_ids: set[uuid.UUID] = set()
-        active_match_rows = await session.execute(
-            select(Match.user_id, Match.target_user_id).where(
-                Match.status == "active",
-                (
-                    (Match.user_id == requester_id)
-                    | (Match.target_user_id == requester_id)
-                ),
-            )
-        )
-        for user_id, target_user_id in active_match_rows.all():
-            excluded_user_ids.add(
-                target_user_id if user_id == requester_id else user_id
-            )
-
-        outgoing_request_rows = await session.execute(
-            select(MatchRequest.target_user_id).where(
-                MatchRequest.requester_id == requester_id,
-                MatchRequest.status.in_(("pending", "accepted")),
-            )
-        )
-        excluded_user_ids.update(outgoing_request_rows.scalars().all())
-
         targeted_user_ids = {
             uuid.UUID(str(uid)) for uid in (target_user_ids or set()) if uid
         }
 
         candidate_geo = self.geolocation_model
         distance_expr = None
-        if radius_km is not None and center is not None:
+        if center is not None:
             req_lat = float(center.lat)
             req_lon = float(center.lon)
             lat1 = func.radians(req_lat)
@@ -188,11 +173,97 @@ class BuddySearchService:
         )
 
         score_expr = prompt_value if hint_interest_ids else interest_value
+        order_by_parts = []
         if distance_expr is not None:
-            location_value = func.greatest(
-                0.0, 1.0 - (distance_expr / float(radius_km))
+            has_location_expr = candidate_geo.lat.is_not(
+                None
+            ) & candidate_geo.lon.is_not(None)
+            location_value = case(
+                (
+                    has_location_expr,
+                    func.greatest(0.0, 1.0 - (distance_expr / self.RADIUS_STEP_KM)),
+                ),
+                else_=0.0,
             )
             score_expr = (score_expr + location_value) / 2.0
+            located_rank_expr = case((has_location_expr, 0), else_=1)
+            radius_bucket_expr = case(
+                (
+                    has_location_expr,
+                    func.greatest(1.0, func.ceil(distance_expr / self.RADIUS_STEP_KM)),
+                ),
+                else_=None,
+            )
+        else:
+            radius_bucket_expr = sa.null()
+
+        shared_interest_rank_expr = case((shared_interest_count > 0, 0), else_=1)
+        if targeted_user_ids:
+            order_by_parts.append(
+                case(
+                    (self.user_model.id.in_(list(targeted_user_ids)), 0), else_=1
+                ).asc()
+            )
+
+        if distance_expr is not None:
+            order_by_parts.extend(
+                [
+                    located_rank_expr.asc(),
+                    radius_bucket_expr.asc().nulls_last(),
+                ]
+            )
+
+        order_by_parts.extend(
+            [
+                shared_interest_rank_expr.asc(),
+                score_expr.desc(),
+                interest_value.desc(),
+            ]
+        )
+        if distance_expr is not None:
+            order_by_parts.append(distance_expr.asc().nulls_last())
+        order_by_parts.append(self.user_model.created_at.desc())
+
+        active_match_exists = (
+            select(Match.id)
+            .where(
+                Match.status == "active",
+                (
+                    (
+                        (Match.user_id == requester_id)
+                        & (Match.target_user_id == self.user_model.id)
+                    )
+                    | (
+                        (Match.user_id == self.user_model.id)
+                        & (Match.target_user_id == requester_id)
+                    )
+                ),
+            )
+            .exists()
+        )
+        outgoing_request_exists = (
+            select(MatchRequest.id)
+            .where(
+                MatchRequest.requester_id == requester_id,
+                MatchRequest.target_user_id == self.user_model.id,
+                MatchRequest.status.in_(("pending", "accepted")),
+            )
+            .exists()
+        )
+        blocked_exists = (
+            select(UserBlock.id)
+            .where(
+                (
+                    (UserBlock.blocker_user_id == requester_id)
+                    & (UserBlock.blocked_user_id == self.user_model.id)
+                )
+                | (
+                    (UserBlock.blocker_user_id == self.user_model.id)
+                    & (UserBlock.blocked_user_id == requester_id)
+                )
+            )
+            .exists()
+        )
 
         base_query = (
             select(
@@ -205,54 +276,35 @@ class BuddySearchService:
                     "distance_km"
                 ),
                 score_expr.label("score"),
+                radius_bucket_expr.label("radius_bucket"),
             )
             .outerjoin(candidate_geo, candidate_geo.user_id == self.user_model.id)
             .outerjoin(
                 interest_stats_sq, interest_stats_sq.c.user_id == self.user_model.id
             )
             .where(
-                self.user_model.id != requester_id, self.user_model.is_active.is_(True)
+                self.user_model.id != requester_id,
+                self.user_model.is_active.is_(True),
+                self.user_model.is_deleted.is_(False),
+                ~active_match_exists,
+                ~outgoing_request_exists,
+                ~blocked_exists,
             )
-            .order_by(
-                (
-                    sa.case(
-                        (self.user_model.id.in_(list(targeted_user_ids)), 1),
-                        else_=0,
-                    ).desc()
-                    if targeted_user_ids
-                    else self.user_model.created_at.desc()
-                ),
-                score_expr.desc(),
-                interest_value.desc(),
-                self.user_model.created_at.desc(),
-            )
+            .order_by(*order_by_parts)
         )
-        base_query = base_query.where(func.coalesce(cand_interest_count, 0) > 0)
-        if query_interest_ids and not targeted_user_ids:
-            base_query = base_query.where(shared_interest_count > 0)
         if targeted_user_ids:
             base_query = base_query.where(
                 self.user_model.id.in_(list(targeted_user_ids))
             )
-        if excluded_user_ids:
-            base_query = base_query.where(self.user_model.id.not_in(excluded_user_ids))
-
-        if distance_expr is not None:
-            base_query = base_query.where(
-                candidate_geo.lat.is_not(None),
-                candidate_geo.lon.is_not(None),
-                distance_expr <= float(radius_km),
-            )
-
-        strict_query = base_query
-        if hint_interest_ids:
-            strict_query = strict_query.where(shared_hint_count > 0)
 
         used_reason = None
-        rows = list((await session.execute(strict_query.limit(limit))).all())
-        if hint_interest_ids and not rows:
-            used_reason = "relaxed_interest_filter"
-            rows = list((await session.execute(base_query.limit(limit))).all())
+        rows = list(
+            (
+                await session.execute(base_query.offset(offset).limit(page_size + 1))
+            ).all()
+        )
+        has_next = len(rows) > page_size
+        rows = rows[:page_size]
 
         user_ids = [r.user_id for r in rows]
         shared_by_user: dict[str, list[tuple[bool, str]]] = {}
@@ -309,5 +361,9 @@ class BuddySearchService:
             )
 
         return BuddySearchResult(
-            status="ok", matches=matches[:limit], reason=used_reason
+            status="ok",
+            matches=matches,
+            reason=used_reason,
+            has_next=has_next,
+            radius_step_km=self.RADIUS_STEP_KM,
         )

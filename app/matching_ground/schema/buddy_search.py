@@ -21,3 +21,5 @@ class BuddySearchResult:
     status: str
     matches: list[BuddyMatch]
     reason: str | None = None
+    has_next: bool = False
+    radius_step_km: float = 10.0

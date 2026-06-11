@@ -279,6 +279,8 @@ class MatchLifecycleService:
             interest_hints=set(interest_hints),
             target_user_ids=target_user_ids,
             radius_km=radius_km,
+            page=page,
+            page_size=page_size,
         )
 
         items = result.get("items", []) or []
@@ -317,8 +319,11 @@ class MatchLifecycleService:
                 interest_hints=None,
                 target_user_ids=set(),
                 radius_km=radius_km,
+                page=page,
+                page_size=page_size,
             )
             items = fallback_result.get("items", []) or []
+            result = fallback_result
 
         if not message_text:
             suggested_queries = await self._build_suggested_queries(
@@ -333,15 +338,14 @@ class MatchLifecycleService:
                 "reason": result.get("reason") or "no_relevant_matches",
             }
 
-        start = (page - 1) * page_size
-        end = start + page_size
         return {
             "status": result.get("status", "ok"),
             "reason": result.get("reason"),
             "page": page,
             "page_size": page_size,
             "total": len(items),
-            "items": items[start:end],
+            "has_next": result.get("has_next", False),
+            "items": items,
             "query": {
                 "message": message_text,
                 "radius_km": radius_km,
@@ -358,6 +362,8 @@ class MatchLifecycleService:
         interest_hints: set[str] | None = None,
         target_user_ids: set[uuid.UUID] | None = None,
         radius_km: float | None = 10.0,
+        page: int = 1,
+        page_size: int = 10,
     ) -> dict:
         buddy_search_service = BuddySearchService()
         result = await buddy_search_service.search(
@@ -366,25 +372,18 @@ class MatchLifecycleService:
             radius_km=radius_km,
             interest_hints=interest_hints,
             target_user_ids=target_user_ids,
+            page=page,
+            page_size=page_size,
         )
-        filtered_matches = []
         interest_hint_list = list(interest_hints or [])
         direct_user_ids = {str(uid) for uid in target_user_ids or set()}
-        for item in result.matches:
-            if str(item.user_id) == str(requester_id):
-                continue
-            if await UserBlock.is_blocked_between(
-                session, requester_id, uuid.UUID(item.user_id)
-            ):
-                continue
-            filtered_matches.append(item)
-        filtered_matches.sort(
-            key=lambda item: (float(item.score or 0.0), item.distance_km),
-            reverse=True,
-        )
         return {
             "status": result.status,
             "reason": result.reason,
+            "page": page,
+            "page_size": page_size,
+            "has_next": result.has_next,
+            "radius_step_km": result.radius_step_km,
             "items": [
                 {
                     "user_id": item.user_id,
@@ -392,6 +391,7 @@ class MatchLifecycleService:
                     "full_name": item.full_name,
                     "distance_km": item.distance_km,
                     "profile_pic": item.profile_pic,
+                    "bio": item.bio,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
                     "candidate_interests": item.candidate_interests,
@@ -454,7 +454,7 @@ class MatchLifecycleService:
                         shared_interests_count=len(item.shared_interests),
                     ),
                 }
-                for item in filtered_matches
+                for item in result.matches
             ],
         }
 

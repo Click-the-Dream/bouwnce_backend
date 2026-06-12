@@ -369,6 +369,21 @@ class MobileEventsService:
         try:
             async with get_async_session() as db:
                 sender = await User.get_by_id(str(sender_id), db)
+                conversation = await chat_service.get_or_create_conversation(
+                    db=db,
+                    user1_id=str(sender.id),
+                    user2_id=str(recipient_id),
+                )
+                await self._send_model_safe(
+                    websocket,
+                    ChatSendAckEvent(
+                        data=ChatSendAckData(
+                            conversation_id=conversation.id,
+                            client_id=client_id,
+                        )
+                    ),
+                    send_lock=send_lock,
+                )
                 result = await chat_service.send_message(
                     db=db,
                     redis=redis,
@@ -440,6 +455,21 @@ class MobileEventsService:
         try:
             async with get_async_session() as db:
                 sender = await User.get_by_id(str(sender_id), db)
+                conversation = await chat_service.get_or_create_conversation(
+                    db=db,
+                    user1_id=str(sender.id),
+                    user2_id=str(recipient_id),
+                )
+                await self._send_model_safe(
+                    websocket,
+                    ChatSendAckEvent(
+                        data=ChatSendAckData(
+                            conversation_id=conversation.id,
+                            client_id=client_id,
+                        )
+                    ),
+                    send_lock=send_lock,
+                )
                 result = await chat_service.send_media_message(
                     db=db,
                     redis=redis,
@@ -1041,16 +1071,6 @@ class MobileEventsService:
                             break
                         continue
 
-                    if not await self._send_model_safe(
-                        websocket,
-                        ChatSendAckEvent(
-                            data=ChatSendAckData(
-                                client_id=payload.client_id,
-                            )
-                        ),
-                        send_lock=send_lock,
-                    ):
-                        break
                     asyncio.create_task(
                         self._process_chat_send_request(
                             websocket=websocket,
@@ -1122,16 +1142,6 @@ class MobileEventsService:
                             break
                         continue
 
-                    if not await self._send_model_safe(
-                        websocket,
-                        ChatSendAckEvent(
-                            data=ChatSendAckData(
-                                client_id=payload.client_id,
-                            )
-                        ),
-                        send_lock=send_lock,
-                    ):
-                        break
                     asyncio.create_task(
                         self._process_chat_upload_media_request(
                             websocket=websocket,

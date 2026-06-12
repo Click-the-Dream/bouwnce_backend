@@ -30,6 +30,8 @@ from app.matching_ground.schema.chat import (
     ChatReadAckEvent,
     ChatReadyData,
     ChatReadyEvent,
+    ChatSendAckData,
+    ChatSendAckEvent,
     ChatSentData,
     ChatSentEvent,
     ChatTypingData,
@@ -294,6 +296,63 @@ class MobileEventsService:
                 )
         except Exception:
             return
+
+    async def _publish_chat_message_fanout(
+        self,
+        *,
+        redis,
+        sender_id: str,
+        recipient_id: str,
+        conversation_id: str,
+        payload: ChatMessageEvent,
+    ) -> None:
+        try:
+            payload_json = payload.model_dump_json()
+            await redis.publish(f"chat:conversation:{conversation_id}", payload_json)
+            await redis.publish(f"chat:user:{sender_id}", payload_json)
+            await redis.publish(f"chat:user:{recipient_id}", payload_json)
+            await redis.xadd(
+                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient_id}",
+                {"type": "chat.message", "data": payload_json},
+                maxlen=5000,
+                approximate=True,
+            )
+            await self._send_chat_message_direct(
+                redis=redis, recipient_id=recipient_id, payload=payload
+            )
+        except Exception:
+            return
+
+    async def _confirm_chat_message_sent(
+        self,
+        *,
+        websocket: WebSocket,
+        send_lock: asyncio.Lock,
+        redis,
+        sender_id: str,
+        recipient_id: str,
+        conversation_id: str,
+        payload: ChatMessageEvent,
+        client_id: str | None = None,
+    ) -> None:
+        await self._publish_chat_message_fanout(
+            redis=redis,
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            conversation_id=conversation_id,
+            payload=payload,
+        )
+        await self._send_model_safe(
+            websocket,
+            ChatSentEvent(
+                client_id=client_id,
+                data=ChatSentData(
+                    conversation_id=payload.data.conversation_id,
+                    message=payload.data,
+                ),
+            ),
+            send_lock=send_lock,
+        )
 
     async def _bootstrap_connection(
         self,
@@ -873,25 +932,30 @@ class MobileEventsService:
                                 break
                             continue
 
+                    message_data = ChatMessageData.model_validate(result["message"])
                     if not await self._send_model_safe(
                         websocket,
-                        ChatSentEvent(
-                            client_id=payload.client_id,
-                            data=ChatSentData(
+                        ChatSendAckEvent(
+                            data=ChatSendAckData(
                                 conversation_id=str(result["conversation_id"]),
-                                message=ChatMessageData.model_validate(
-                                    result["message"]
-                                ),
-                            ),
+                                message_id=str(message_data.id),
+                                client_id=payload.client_id,
+                            )
                         ),
                         send_lock=send_lock,
                     ):
                         break
-                    message_data = ChatMessageData.model_validate(result["message"])
-                    await self._send_chat_message_direct(
-                        redis=redis,
-                        recipient_id=str(payload.recipient_id),
-                        payload=ChatMessageEvent(data=message_data),
+                    asyncio.create_task(
+                        self._confirm_chat_message_sent(
+                            websocket=websocket,
+                            send_lock=send_lock,
+                            redis=redis,
+                            sender_id=str(user_id),
+                            recipient_id=str(payload.recipient_id),
+                            conversation_id=str(result["conversation_id"]),
+                            payload=ChatMessageEvent(data=message_data),
+                            client_id=payload.client_id,
+                        )
                     )
                     asyncio.create_task(
                         self._dispatch_chat_side_effects(
@@ -997,25 +1061,30 @@ class MobileEventsService:
                                 break
                             continue
 
+                    message_data = ChatMessageData.model_validate(result["message"])
                     if not await self._send_model_safe(
                         websocket,
-                        ChatSentEvent(
-                            client_id=payload.client_id,
-                            data=ChatSentData(
+                        ChatSendAckEvent(
+                            data=ChatSendAckData(
                                 conversation_id=str(result["conversation_id"]),
-                                message=ChatMessageData.model_validate(
-                                    result["message"]
-                                ),
-                            ),
+                                message_id=str(message_data.id),
+                                client_id=payload.client_id,
+                            )
                         ),
                         send_lock=send_lock,
                     ):
                         break
-                    message_data = ChatMessageData.model_validate(result["message"])
-                    await self._send_chat_message_direct(
-                        redis=redis,
-                        recipient_id=str(payload.recipient_id),
-                        payload=ChatMessageEvent(data=message_data),
+                    asyncio.create_task(
+                        self._confirm_chat_message_sent(
+                            websocket=websocket,
+                            send_lock=send_lock,
+                            redis=redis,
+                            sender_id=str(user_id),
+                            recipient_id=str(payload.recipient_id),
+                            conversation_id=result["conversation_id"],
+                            payload=ChatMessageEvent(data=message_data),
+                            client_id=payload.client_id,
+                        )
                     )
                     asyncio.create_task(
                         self._dispatch_chat_side_effects(

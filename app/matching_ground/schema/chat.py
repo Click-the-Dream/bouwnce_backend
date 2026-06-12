@@ -36,12 +36,16 @@ class SendMessagePayload(BaseModel):
 class MarkConversationReadPayload(BaseModel):
     recipient_id: Annotated[uuid.UUID, Field(..., description="Other user id (uuid)")]
     message_id: Annotated[
-        uuid.UUID, Field(..., description="Last read message id (uuid)")
+        uuid.UUID | None,
+        Field(
+            None,
+            description="Last read message id (uuid). Optional when mark_all is true.",
+        ),
     ]
     mark_all: Annotated[
         bool,
         Field(
-            False,
+            True,
             description="If true, mark all unread messages in the conversation as read",
         ),
     ]
@@ -188,7 +192,6 @@ class ChatReadUpdatedData(BaseModel):
     reader_id: uuid.UUID | None = None
     read: bool
     updated: int
-    found: bool | None = None
 
 
 class ChatReadUpdatedEvent(BaseModel):
@@ -201,7 +204,6 @@ class ChatReadAckData(BaseModel):
     reader_id: uuid.UUID | None = None
     read: bool
     updated: int
-    found: bool | None = None
 
 
 class ChatReadAckEvent(BaseModel):

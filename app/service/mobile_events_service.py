@@ -1217,7 +1217,7 @@ class MobileEventsService:
                             {
                                 "type": "error",
                                 "error": "invalid_payload",
-                                "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', message_id:'<uuid>', mark_all?:true|false}",
+                                "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', mark_all?:true|false, message_id?:'<uuid>'}",
                             },
                             send_lock=send_lock,
                         ):
@@ -1243,6 +1243,10 @@ class MobileEventsService:
                                     as_response=False,
                                 )
                             else:
+                                if payload.message_id is None:
+                                    raise BadRequestException(
+                                        "message_id is required when mark_all is false"
+                                    )
                                 result = await chat_service.mark_conversation_read_with_user_up_to_message(
                                     db=db,
                                     redis=redis,

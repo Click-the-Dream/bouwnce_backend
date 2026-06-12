@@ -47,7 +47,14 @@ async def _login_with_resend(client: httpx.AsyncClient, email: str) -> LoginResu
     )
 
 
-async def _wait_for_message(websocket, expected_type: str, timeout_seconds: float):
+async def _wait_for_message(
+    websocket,
+    expected_type: str | set[str],
+    timeout_seconds: float,
+):
+    expected_types = (
+        {expected_type} if isinstance(expected_type, str) else set(expected_type)
+    )
     deadline = time.perf_counter() + timeout_seconds
     while time.perf_counter() < deadline:
         remaining = max(0.1, deadline - time.perf_counter())
@@ -56,9 +63,10 @@ async def _wait_for_message(websocket, expected_type: str, timeout_seconds: floa
         except TimeoutError:
             continue
         message = json.loads(raw)
-        if message.get("type") == expected_type:
+        if message.get("type") in expected_types:
             return message
-    raise RuntimeError(f"Did not receive {expected_type} within {timeout_seconds}s")
+    expected_label = " or ".join(sorted(expected_types))
+    raise RuntimeError(f"Did not receive {expected_label} within {timeout_seconds}s")
 
 
 async def main() -> None:
@@ -173,11 +181,20 @@ async def main() -> None:
                 )
                 print("[chat] chat.send sent", flush=True)
 
-                sender_ack_started = time.perf_counter()
-                sender_ack = await _wait_for_message(
-                    sender_ws, "chat.sent", args.timeout
+                send_ack_started = time.perf_counter()
+                sender_first = await _wait_for_message(
+                    sender_ws, {"chat.send.ack", "chat.ack", "chat.sent"}, args.timeout
                 )
-                sender_ack_elapsed = time.perf_counter() - sender_ack_started
+                send_ack_elapsed = time.perf_counter() - send_ack_started
+
+                sender_sent = sender_first
+                sent_elapsed = 0.0
+                if sender_first.get("type") != "chat.sent":
+                    sent_started = time.perf_counter()
+                    sender_sent = await _wait_for_message(
+                        sender_ws, "chat.sent", args.timeout
+                    )
+                    sent_elapsed = time.perf_counter() - sent_started
                 total_sender_elapsed = time.perf_counter() - send_started
 
                 recipient_message_started = time.perf_counter()
@@ -190,7 +207,14 @@ async def main() -> None:
                 total_recipient_elapsed = time.perf_counter() - send_started
 
                 print(
-                    "[result] sender_ack:", json.dumps(sender_ack, indent=2), flush=True
+                    "[result] send_ack:",
+                    json.dumps(sender_first, indent=2),
+                    flush=True,
+                )
+                print(
+                    "[result] sender_sent:",
+                    json.dumps(sender_sent, indent=2),
+                    flush=True,
                 )
                 print(
                     "[result] recipient_message:",
@@ -198,12 +222,18 @@ async def main() -> None:
                     flush=True,
                 )
                 print(
-                    f"[timing] sender_ack_wait={sender_ack_elapsed:.3f}s "
+                    f"[timing] send_ack_wait={send_ack_elapsed:.3f}s "
+                    f"sent_wait={sent_elapsed:.3f}s "
                     f"total_sender={total_sender_elapsed:.3f}s "
                     f"recipient_wait={recipient_message_elapsed:.3f}s "
                     f"total_recipient={total_recipient_elapsed:.3f}s",
                     flush=True,
                 )
+                if sender_first.get("type") == "chat.sent":
+                    print(
+                        "[timing] legacy_sender_mode=true (staging still emits chat.sent as the first sender event)",
+                        flush=True,
+                    )
 
 
 if __name__ == "__main__":

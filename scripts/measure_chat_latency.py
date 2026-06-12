@@ -182,19 +182,16 @@ async def main() -> None:
                 print("[chat] chat.send sent", flush=True)
 
                 send_ack_started = time.perf_counter()
-                sender_first = await _wait_for_message(
-                    sender_ws, {"chat.send.ack", "chat.ack", "chat.sent"}, args.timeout
+                sender_ack = await _wait_for_message(
+                    sender_ws, "chat.send.ack", args.timeout
                 )
                 send_ack_elapsed = time.perf_counter() - send_ack_started
 
-                sender_sent = sender_first
-                sent_elapsed = 0.0
-                if sender_first.get("type") != "chat.sent":
-                    sent_started = time.perf_counter()
-                    sender_sent = await _wait_for_message(
-                        sender_ws, "chat.sent", args.timeout
-                    )
-                    sent_elapsed = time.perf_counter() - sent_started
+                sent_started = time.perf_counter()
+                sender_sent = await _wait_for_message(
+                    sender_ws, "chat.sent", args.timeout
+                )
+                sent_elapsed = time.perf_counter() - sent_started
                 total_sender_elapsed = time.perf_counter() - send_started
 
                 recipient_message_started = time.perf_counter()
@@ -208,7 +205,7 @@ async def main() -> None:
 
                 print(
                     "[result] send_ack:",
-                    json.dumps(sender_first, indent=2),
+                    json.dumps(sender_ack, indent=2),
                     flush=True,
                 )
                 print(
@@ -229,11 +226,6 @@ async def main() -> None:
                     f"total_recipient={total_recipient_elapsed:.3f}s",
                     flush=True,
                 )
-                if sender_first.get("type") == "chat.sent":
-                    print(
-                        "[timing] legacy_sender_mode=true (staging still emits chat.sent as the first sender event)",
-                        flush=True,
-                    )
 
 
 if __name__ == "__main__":

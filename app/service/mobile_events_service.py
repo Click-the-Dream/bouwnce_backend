@@ -379,6 +379,7 @@ class MobileEventsService:
                     ChatSendAckEvent(
                         data=ChatSendAckData(
                             conversation_id=conversation.id,
+                            sender_id=sender.id,
                             client_id=client_id,
                         )
                     ),
@@ -465,6 +466,7 @@ class MobileEventsService:
                     ChatSendAckEvent(
                         data=ChatSendAckData(
                             conversation_id=conversation.id,
+                            sender_id=sender.id,
                             client_id=client_id,
                         )
                     ),

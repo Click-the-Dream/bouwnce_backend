@@ -168,6 +168,7 @@ class ChatSentEvent(BaseModel):
 
 class ChatSendAckData(BaseModel):
     conversation_id: uuid.UUID
+    sender_id: uuid.UUID
     client_id: str | None = None
 
 

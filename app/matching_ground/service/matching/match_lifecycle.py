@@ -416,6 +416,7 @@ class MatchLifecycleService:
                     "full_name": item.full_name,
                     "distance_km": item.distance_km,
                     "profile_pic": item.profile_pic,
+                    "banner_url": item.profile_banner,
                     "bio": item.bio,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
@@ -610,6 +611,7 @@ class MatchLifecycleService:
             "requester_name": requester.full_name,
             "requester_location": "Lagos",
             "year": datetime.now().year,
+            "action_link": f"{settings.FRONTEND_URL}/app/requests?id={request.id}",
         }
         email_data = generate_email_content(
             subject="Match Request",

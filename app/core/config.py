@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_TTL: str = "30d"
     FASTAPI_ENV: str = "development"
 
+    FRONTEND_URL: str = ""
+
     SQLALCHEMY_DATABASE_URL: str = ""
     SQLALCHEMY_DATABASE_DEV_URL: str = ""
     SQLALCHEMY_DATABASE_STAG_URL: str = ""

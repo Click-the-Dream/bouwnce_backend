@@ -32,13 +32,13 @@ lint:
     - pinact@4.1.0
     - bandit@1.9.4
     - black@26.5.1
-    - checkov@3.2.533
+    - checkov@3.3.1
     - git-diff-check
     - isort@8.0.1
     - markdownlint@0.48.0
     - osv-scanner@2.3.8
     - prettier@3.8.4
-    - ruff@0.15.16
+    - ruff@0.15.17
     - taplo@0.10.0
     - trufflehog@3.95.5
     - yamllint@1.38.0

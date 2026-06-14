@@ -271,6 +271,7 @@ class BuddySearchService:
                 self.user_model.username,
                 self.user_model.full_name,
                 self.user_model.profile_pic,
+                self.user_model.profile_banner,
                 self.user_model.bio,
                 (distance_expr if distance_expr is not None else sa.null()).label(
                     "distance_km"
@@ -344,7 +345,8 @@ class BuddySearchService:
                     username=r.username,
                     full_name=full_name,
                     distance_km=distance_val,
-                    profile_pic=r.profile_pic,
+                    profile_pic=r.profile_pic.get("url"),
+                    profile_banner=r.profile_banner.get("url"),
                     bio=r.bio,
                     score=round(float(r.score or 0.0), 4),
                     shared_interests=[

@@ -770,7 +770,6 @@ class ChatService:
                     reader_id=current_user_id,
                     read=unread_remaining == 0,
                     updated=updated,
-                    found=True,
                 )
             ).model_dump_json()
             await redis.publish(f"chat:user:{conv.user_a_id}", payload)
@@ -847,7 +846,6 @@ class ChatService:
                     reader_id=current_id,
                     read=unread_remaining == 0,
                     updated=updated,
-                    found=True,
                 )
             ).model_dump_json()
             await redis.publish(f"chat:user:{conv.user_a_id}", payload)
@@ -891,7 +889,6 @@ class ChatService:
                 "message_id": str(message_id),
                 "read": False,
                 "updated": 0,
-                "found": False,
             }
             if as_response:
                 return response_builder(
@@ -916,7 +913,6 @@ class ChatService:
                 "message_id": str(message_id),
                 "read": False,
                 "updated": 0,
-                "found": True,
             }
             if as_response:
                 return response_builder(
@@ -959,7 +955,6 @@ class ChatService:
             "message_id": str(target.id),
             "read": unread_remaining == 0,
             "updated": updated,
-            "found": True,
         }
 
         if redis is not None and updated > 0:
@@ -970,7 +965,6 @@ class ChatService:
                     reader_id=current_id,
                     read=unread_remaining == 0,
                     updated=updated,
-                    found=True,
                 )
             ).model_dump_json()
             await redis.publish(f"chat:user:{conv.user_a_id}", payload)

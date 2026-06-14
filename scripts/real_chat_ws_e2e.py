@@ -192,6 +192,7 @@ async def main(base_url: str | None = None) -> None:
 
                     sender_messages: list[dict] = []
                     sender_deadline = time.monotonic() + 20
+                    sender_ack_event = None
                     sender_ack = None
                     while time.monotonic() < sender_deadline:
                         try:
@@ -201,10 +202,14 @@ async def main(base_url: str | None = None) -> None:
                         message = json.loads(raw)
                         sender_messages.append(message)
                         print(f"[sender] {message}", flush=True)
+                        if message.get("type") == "chat.send.ack":
+                            sender_ack_event = message
                         if message.get("type") == "chat.sent":
                             sender_ack = message
                             break
 
+                    if sender_ack_event is None:
+                        raise RuntimeError("Sender did not receive chat.send.ack")
                     if sender_ack is None:
                         raise RuntimeError("Sender did not receive chat.sent")
 

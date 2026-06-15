@@ -5,7 +5,7 @@ permissions:
 
 on:
   push:
-    branches: [staging, main]
+    branches: [main]
   pull_request:
     branches: [staging, main]
   workflow_call:

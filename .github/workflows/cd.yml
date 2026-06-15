@@ -62,13 +62,13 @@ jobs:
                 pm2 delete all || true
                 pm2 kill || true
                 rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                pm2 start ecosystem.config.js --only staging,flower-staging --update-env
+                pm2 start ecosystem.config.js --only staging --update-env
                 pm2 save
             elif command -v npx >/dev/null 2>&1; then
                 npx --yes pm2 delete all || true
                 npx --yes pm2 kill || true
                 rm -f /home/ubuntu/.pm2/dump.pm2 || true
-                npx --yes pm2 start ecosystem.config.js --only staging,flower-staging --update-env
+                npx --yes pm2 start ecosystem.config.js --only staging --update-env
                 npx --yes pm2 save
             else
                 echo "❌ pm2 and npx are not available on the server."

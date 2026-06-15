@@ -917,47 +917,6 @@ class MobileEventsService:
         except Exception:
             return
 
-    async def _forward_stream(
-        self,
-        *,
-        websocket: WebSocket,
-        redis,
-        user_id: str,
-        send_lock: asyncio.Lock | None = None,
-    ) -> None:
-        last_id = "$"
-        try:
-            while True:
-                streams = await redis.xread(
-                    streams={MOBILE_EVENTS_STREAM_KEY: last_id}, count=50, block=25000
-                )
-                for _stream_name, messages in streams or []:
-                    for msg_id, fields in messages:
-                        last_id = msg_id
-                        event_name = fields.get("event_name")
-                        payload_raw = fields.get("payload")
-                        if not event_name or not payload_raw:
-                            continue
-                        payload_obj = None
-                        with contextlib.suppress(Exception):
-                            payload_obj = json.loads(payload_raw)
-                        if payload_obj is None:
-                            continue
-                        if str(payload_obj.get("user_id") or "") != str(user_id):
-                            continue
-                        if not await self._send_json_safe(
-                            websocket,
-                            {
-                                "type": "event",
-                                "event_name": event_name,
-                                "payload": payload_obj,
-                            },
-                            send_lock=send_lock,
-                        ):
-                            return
-        except Exception:
-            return
-
     async def handle_ws(self, websocket: WebSocket) -> None:
         token = websocket.query_params.get("token")
         if not token:
@@ -974,9 +933,18 @@ class MobileEventsService:
             await websocket.close(code=1008)
             return
 
-        redis = await get_redis_client()
-        pubsub = redis.pubsub()
-        await pubsub.subscribe(f"chat:user:{user_id}")
+        pubsub = None
+        try:
+            redis = await get_redis_client()
+            pubsub = redis.pubsub()
+            await pubsub.subscribe(f"chat:user:{user_id}")
+        except Exception:
+            if pubsub is not None:
+                with contextlib.suppress(Exception):
+                    await pubsub.aclose()
+            with contextlib.suppress(Exception):
+                await websocket.close(code=1013)
+            return
 
         await websocket.accept()
         send_lock = asyncio.Lock()
@@ -1012,14 +980,6 @@ class MobileEventsService:
                 redis=redis,
                 user_id=str(user_id),
                 ready_event=chat_stream_ready,
-                send_lock=send_lock,
-            )
-        )
-        stream_task = asyncio.create_task(
-            self._forward_stream(
-                websocket=websocket,
-                redis=redis,
-                user_id=str(user_id),
                 send_lock=send_lock,
             )
         )
@@ -1353,20 +1313,20 @@ class MobileEventsService:
             bootstrap_task.cancel()
             pubsub_task.cancel()
             chat_stream_task.cancel()
-            stream_task.cancel()
             chat_queue_task.cancel()
             presence_task.cancel()
+            with contextlib.suppress(Exception):
+                await pubsub.unsubscribe(f"chat:user:{user_id}")
+            with contextlib.suppress(Exception):
+                await pubsub.aclose()
             await asyncio.gather(
                 bootstrap_task,
                 pubsub_task,
                 chat_stream_task,
-                stream_task,
                 chat_queue_task,
                 presence_task,
                 return_exceptions=True,
             )
-            await pubsub.unsubscribe(f"chat:user:{user_id}")
-            await pubsub.close()
             with contextlib.suppress(Exception):
                 await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
                 await self._publish_presence(

@@ -36,6 +36,21 @@ class BuddySearchService:
 
         return cleaned
 
+    @classmethod
+    def _extract_media_url(cls, value: object) -> str | None:
+        if not value:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            url = value.get("url")
+            if isinstance(url, str):
+                return url
+            if isinstance(url, dict):
+                nested_url = url.get("url")
+                return nested_url if isinstance(nested_url, str) else None
+        return None
+
     async def search(
         self,
         session: AsyncSession,
@@ -345,8 +360,8 @@ class BuddySearchService:
                     username=r.username,
                     full_name=full_name,
                     distance_km=distance_val,
-                    profile_pic=r.profile_pic.get("url"),
-                    profile_banner=r.profile_banner.get("url"),
+                    profile_pic=self._extract_media_url(r.profile_pic),
+                    profile_banner=self._extract_media_url(r.profile_banner),
                     bio=r.bio,
                     score=round(float(r.score or 0.0), 4),
                     shared_interests=[

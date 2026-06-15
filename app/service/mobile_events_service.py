@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import time
 import uuid
 from typing import Any
 
@@ -66,6 +67,11 @@ ACTIVE_CHAT_CONNECTIONS: dict[
     dict[str, tuple[WebSocket, asyncio.Lock, asyncio.Queue[ChatMessageEvent]]],
 ] = {}
 CHAT_DELIVERED_KEY_PREFIX = "chat:delivered:"
+CHAT_DELIVERY_WAIT_SECONDS = 30.0
+CHAT_DELIVERY_POLL_SECONDS = 0.5
+CHAT_LOCAL_DELIVERY_TTL_SECONDS = 300.0
+ACTIVE_CHAT_DELIVERY_EVENTS: dict[str, asyncio.Event] = {}
+ACTIVE_CHAT_LOCAL_DELIVERIES: dict[str, float] = {}
 
 
 class MobileEventsService:
@@ -156,14 +162,38 @@ class MobileEventsService:
         if not message_id:
             return False
         delivered_key = f"chat:delivered:{user_id}:{message_id}"
-        return bool(
-            await redis.set(
-                delivered_key,
-                "1",
-                ex=PRESENCE_TTL_SECONDS * 48,
-                nx=True,
+        if not self._claim_local_chat_delivery(delivered_key):
+            return False
+        with contextlib.suppress(Exception):
+            return bool(
+                await redis.set(
+                    delivered_key,
+                    "1",
+                    ex=PRESENCE_TTL_SECONDS * 48,
+                    nx=True,
+                )
             )
+        return True
+
+    @staticmethod
+    def _claim_local_chat_delivery(delivered_key: str) -> bool:
+        now = time.monotonic()
+        if len(ACTIVE_CHAT_LOCAL_DELIVERIES) > 10000:
+            expired_keys = [
+                key
+                for key, expires_at in ACTIVE_CHAT_LOCAL_DELIVERIES.items()
+                if expires_at <= now
+            ]
+            for key in expired_keys:
+                ACTIVE_CHAT_LOCAL_DELIVERIES.pop(key, None)
+
+        expires_at = ACTIVE_CHAT_LOCAL_DELIVERIES.get(delivered_key)
+        if expires_at is not None and expires_at > now:
+            return False
+        ACTIVE_CHAT_LOCAL_DELIVERIES[delivered_key] = (
+            now + CHAT_LOCAL_DELIVERY_TTL_SECONDS
         )
+        return True
 
     async def _send_chat_message_direct(
         self,
@@ -186,11 +216,15 @@ class MobileEventsService:
     async def _mark_chat_message_delivered(
         *, redis, recipient_id: str, message_id: str
     ) -> None:
-        await redis.set(
-            f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{message_id}",
-            "1",
-            ex=PRESENCE_TTL_SECONDS * 48,
-        )
+        delivery_key = f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{message_id}"
+        if delivery_event := ACTIVE_CHAT_DELIVERY_EVENTS.get(delivery_key):
+            delivery_event.set()
+        with contextlib.suppress(Exception):
+            await redis.set(
+                delivery_key,
+                "1",
+                ex=PRESENCE_TTL_SECONDS * 48,
+            )
 
     async def _wait_for_chat_message_delivery(
         self,
@@ -198,12 +232,25 @@ class MobileEventsService:
         redis,
         recipient_id: str,
         message_id: str,
-    ) -> None:
+        delivery_event: asyncio.Event,
+    ) -> bool:
         delivered_key = f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{message_id}"
-        while True:
-            if await redis.exists(delivered_key):
-                return
-            await asyncio.sleep(0.05)
+        deadline = asyncio.get_running_loop().time() + CHAT_DELIVERY_WAIT_SECONDS
+        while asyncio.get_running_loop().time() < deadline:
+            if delivery_event.is_set():
+                return True
+            try:
+                await asyncio.wait_for(
+                    delivery_event.wait(), timeout=CHAT_DELIVERY_POLL_SECONDS
+                )
+                return True
+            except TimeoutError:
+                pass
+            with contextlib.suppress(Exception):
+                if await redis.exists(delivered_key):
+                    delivery_event.set()
+                    return True
+        return False
 
     async def _drain_chat_queue(
         self,
@@ -335,22 +382,23 @@ class MobileEventsService:
         conversation_id: str,
         payload: ChatMessageEvent,
     ) -> None:
-        try:
-            payload_json = payload.model_dump_json()
+        payload_json = payload.model_dump_json()
+        await self._send_chat_message_direct(
+            redis=redis, recipient_id=recipient_id, payload=payload
+        )
+        with contextlib.suppress(Exception):
             await redis.publish(f"chat:conversation:{conversation_id}", payload_json)
+        with contextlib.suppress(Exception):
             await redis.publish(f"chat:user:{sender_id}", payload_json)
+        with contextlib.suppress(Exception):
             await redis.publish(f"chat:user:{recipient_id}", payload_json)
+        with contextlib.suppress(Exception):
             await redis.xadd(
                 f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient_id}",
                 {"type": "chat.message", "data": payload_json},
                 maxlen=5000,
                 approximate=True,
             )
-            await self._send_chat_message_direct(
-                redis=redis, recipient_id=recipient_id, payload=payload
-            )
-        except Exception:
-            return
 
     async def _confirm_chat_message_sent(
         self,
@@ -364,18 +412,29 @@ class MobileEventsService:
         payload: ChatMessageEvent,
         client_id: str | None = None,
     ) -> None:
-        await self._publish_chat_message_fanout(
-            redis=redis,
-            sender_id=sender_id,
-            recipient_id=recipient_id,
-            conversation_id=conversation_id,
-            payload=payload,
+        delivery_key = f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{payload.data.id}"
+        delivery_event = ACTIVE_CHAT_DELIVERY_EVENTS.setdefault(
+            delivery_key, asyncio.Event()
         )
-        await self._wait_for_chat_message_delivery(
-            redis=redis,
-            recipient_id=recipient_id,
-            message_id=str(payload.data.id),
-        )
+        try:
+            await self._publish_chat_message_fanout(
+                redis=redis,
+                sender_id=sender_id,
+                recipient_id=recipient_id,
+                conversation_id=conversation_id,
+                payload=payload,
+            )
+            delivered = await self._wait_for_chat_message_delivery(
+                redis=redis,
+                recipient_id=recipient_id,
+                message_id=str(payload.data.id),
+                delivery_event=delivery_event,
+            )
+        finally:
+            if ACTIVE_CHAT_DELIVERY_EVENTS.get(delivery_key) is delivery_event:
+                ACTIVE_CHAT_DELIVERY_EVENTS.pop(delivery_key, None)
+        if not delivered:
+            return
         await self._send_model_safe(
             websocket,
             ChatSentEvent(

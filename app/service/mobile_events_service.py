@@ -769,20 +769,33 @@ class MobileEventsService:
             )
             me = await User.get_by_id(str(user_id), db)
 
-        payload = json.dumps(
-            {
-                "type": "user.online",
-                "data": {
-                    "user": {
-                        "id": str(me.id),
-                        "username": me.username,
-                        "full_name": me.full_name,
-                        "profile_pic": chat_service._serialize_profile_pic(me),
-                    },
-                    "online": online,
+        payload_obj = {
+            "type": "user.online",
+            "data": {
+                "user": {
+                    "id": str(me.id),
+                    "username": me.username,
+                    "full_name": me.full_name,
+                    "profile_pic": chat_service._serialize_profile_pic(me),
                 },
-            }
-        )
+                "online": online,
+            },
+        }
+        payload = json.dumps(payload_obj)
+
+        # Deliver immediately to any active local websocket connections in this process.
+        for pid in {*partner_ids, str(user_id)}:
+            connections = ACTIVE_CHAT_CONNECTIONS.get(str(pid)) or {}
+            for _connection_id, (
+                websocket,
+                send_lock,
+                _chat_queue,
+            ) in connections.items():
+                with contextlib.suppress(Exception):
+                    await self._send_json_safe(
+                        websocket, payload_obj, send_lock=send_lock
+                    )
+
         for pid in partner_ids:
             await redis.publish(f"chat:user:{pid}", payload)
         await redis.publish(f"chat:user:{user_id}", payload)
@@ -1015,15 +1028,6 @@ class MobileEventsService:
             chat_queue,
         )
         chat_stream_ready = asyncio.Event()
-        bootstrap_task = asyncio.create_task(
-            self._bootstrap_connection(
-                websocket=websocket,
-                redis=redis,
-                user_id=str(user_id),
-                send_lock=send_lock,
-            )
-        )
-
         pubsub_task = asyncio.create_task(
             self._forward_pubsub(
                 websocket=websocket,
@@ -1039,6 +1043,14 @@ class MobileEventsService:
                 redis=redis,
                 user_id=str(user_id),
                 ready_event=chat_stream_ready,
+                send_lock=send_lock,
+            )
+        )
+        bootstrap_task = asyncio.create_task(
+            self._bootstrap_connection(
+                websocket=websocket,
+                redis=redis,
+                user_id=str(user_id),
                 send_lock=send_lock,
             )
         )

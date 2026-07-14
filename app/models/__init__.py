@@ -1,3 +1,4 @@
+from app.event_broadcast.models.events import OutingEvent
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.notification import Notification
@@ -57,4 +58,5 @@ __all__ = [
     "Message",
     "DeviceToken",
     "Notification",
+    "OutingEvent",
 ]

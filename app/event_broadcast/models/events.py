@@ -4,15 +4,25 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from typing import TYPE_CHECKING, Self
 
-from sqlalchemy import UUID, DateTime, Enum, Float, String, Table, select
+from sqlalchemy import (
+    UUID,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    String,
+    Table,
+    select,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.matching_ground.model.interest import Interest
 from app.models.basemodel import BaseModel
 
 if TYPE_CHECKING:
+    from app.matching_ground.model.interest import Interest
     from app.models.user import User
 
 
@@ -24,8 +34,8 @@ class EventState(PyEnum):
 user_outing_events = Table(
     "user_outing_events",
     BaseModel.metadata,
-    mapped_column("user_id", UUID, primary_key=True),
-    mapped_column("outing_event_id", UUID, primary_key=True),
+    Column("user_id", UUID, ForeignKey("users.id"), primary_key=True),
+    Column("outing_event_id", UUID, ForeignKey("outing_events.id"), primary_key=True),
 )
 
 

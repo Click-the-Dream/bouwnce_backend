@@ -43,6 +43,7 @@ class Wallet(BaseModel):
         wallet = result.scalar_one_or_none()
 
         return wallet
+    
 
 
 class UserWallet(BaseModel):

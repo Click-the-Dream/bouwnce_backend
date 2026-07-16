@@ -22,6 +22,7 @@ from app.api.v1 import (
     waitlist_router,
 )
 from app.core.rate_limiter import rate_limiter
+from app.event_broadcast.api.v1 import event_router
 from app.matching_ground.api.rest import chat, interest, location, match
 from app.utils.responses import (
     BadRequestResponse,
@@ -62,6 +63,7 @@ waitlist = APIRouter(prefix="/waitlist")
 
 waitlist.include_router(waitlist_router.router)
 
+
 api_router = APIRouter()
 
 api_router.include_router(
@@ -90,3 +92,4 @@ api_router.include_router(uploads.router)
 api_router.include_router(chat.router)
 api_router.include_router(admin_bouwnce.router)
 api_router.include_router(notifications.router)
+api_router.include_router(event_router)

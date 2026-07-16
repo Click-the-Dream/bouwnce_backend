@@ -16,7 +16,7 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.dialects.postgresql import JSON, insert
+from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,7 +54,7 @@ class OutingEvent(BaseModel):
     price: Mapped[float] = mapped_column(Float, nullable=False)
     location: Mapped[str] = mapped_column(String, nullable=False)
     location_type: Mapped[LocationType] = mapped_column(
-        Enum(LocationType, name="location_type"), nullable=False
+        Enum(LocationType, name="location_type_enum"), nullable=False
     )
     link: Mapped[str] = mapped_column(String, nullable=False)
     banner_url: Mapped[str] = mapped_column(String, nullable=False)
@@ -62,9 +62,9 @@ class OutingEvent(BaseModel):
         Enum(EventState, name="event_state"), nullable=False
     )
     ticket_info: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        JSON, nullable=True
+        JSONB, nullable=True
     )
-    interests: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    interests: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
     creator_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("users.id"), nullable=False

@@ -38,6 +38,13 @@ user_outing_events = Table(
     Column("outing_event_id", UUID, ForeignKey("outing_events.id"), primary_key=True),
 )
 
+outing_event_interests = Table(
+    "outing_event_interests",
+    BaseModel.metadata,
+    Column("outing_event_id", UUID, ForeignKey("outing_events.id"), primary_key=True),
+    Column("interest_id", UUID, ForeignKey("interests.id"), primary_key=True),
+)
+
 
 class OutingEvent(BaseModel):
     __tablename__ = "outing_events"
@@ -61,7 +68,7 @@ class OutingEvent(BaseModel):
     )
 
     @classmethod
-    async def create_event(cls, db: AsyncSession, event_data: dict) -> True:
+    async def create_event(cls, db: AsyncSession, event_data: dict) -> bool:
 
         query = (
             insert(cls)
@@ -131,9 +138,3 @@ class OutingEvent(BaseModel):
         result = await db.execute(stmt)
 
         return list(result.scalars().all())
-
-    async def delete(self, db: AsyncSession) -> bool:
-        await db.delete(self)
-        await db.commit()
-
-        return True

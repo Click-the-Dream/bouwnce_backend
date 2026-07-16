@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum as PyEnum
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from sqlalchemy import (
     UUID,
@@ -13,16 +13,16 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Table,
+    func,
     select,
 )
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import JSON, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.basemodel import BaseModel
 
 if TYPE_CHECKING:
-    from app.matching_ground.model.interest import Interest
     from app.models.user import User
 
 
@@ -31,18 +31,17 @@ class EventState(PyEnum):
     LIVE = "live"
 
 
+class LocationType(PyEnum):
+    PHYSICAL = "physical"
+    VIRTUAL = "virtual"
+    HYBRID = "hybrid"
+
+
 user_outing_events = Table(
     "user_outing_events",
     BaseModel.metadata,
     Column("user_id", UUID, ForeignKey("users.id"), primary_key=True),
     Column("outing_event_id", UUID, ForeignKey("outing_events.id"), primary_key=True),
-)
-
-outing_event_interests = Table(
-    "outing_event_interests",
-    BaseModel.metadata,
-    Column("outing_event_id", UUID, ForeignKey("outing_events.id"), primary_key=True),
-    Column("interest_id", UUID, ForeignKey("interests.id"), primary_key=True),
 )
 
 
@@ -54,87 +53,187 @@ class OutingEvent(BaseModel):
     date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     location: Mapped[str] = mapped_column(String, nullable=False)
+    location_type: Mapped[LocationType] = mapped_column(
+        Enum(LocationType, name="location_type"), nullable=False
+    )
     link: Mapped[str] = mapped_column(String, nullable=False)
     banner_url: Mapped[str] = mapped_column(String, nullable=False)
     state: Mapped[EventState] = mapped_column(
         Enum(EventState, name="event_state"), nullable=False
     )
-
-    event_interests: Mapped[list[Interest]] = relationship(
-        back_populates="outing_event", secondary="outing_event_interests"
+    ticket_info: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True
     )
-    users: Mapped[list[User]] = relationship(
-        back_populates="outing_events", secondary="user_outing_events", viewonly=True
+    interests: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+
+    creator_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False
+    )
+
+    creator: Mapped[User] = relationship(
+        back_populates="outing_events", foreign_keys=[creator_id]
+    )
+
+    attendees: Mapped[list[User]] = relationship(
+        secondary="user_outing_events", viewonly=True
     )
 
     @classmethod
-    async def create_event(cls, db: AsyncSession, event_data: dict) -> bool:
+    async def create_event(cls, db: AsyncSession, event_data: dict) -> Self:
+        new_event = cls(**event_data)
+        db.add(new_event)
+        await db.flush()
+        await db.refresh(new_event)
+        return new_event
 
-        query = (
-            insert(cls)
-            .values(event_data)
-            .on_conflict_do_nothing(index_elements=["name"])
+    @classmethod
+    async def get_events_by_creator(
+        cls,
+        db: AsyncSession,
+        creator_id: str,
+        page: int,
+        page_size: int,
+        status: str | None = None,
+        name: str | None = None,
+    ) -> dict:
+        query = select(cls).where(
+            cls.creator_id == creator_id, cls.is_deleted == False  # noqa: E712
         )
-        await db.execute(query)
-        await db.commit()
 
-        return True
+        if status:
+            query = query.where(cls.state == status)
 
-    @classmethod
-    async def paginate_events(
-        cls, db: AsyncSession, page: int, page_size: int
-    ) -> list[Self]:
+        if name:
+            query = query.where(cls.name.ilike(f"%{name}%"))
+
+        query = query.order_by(cls.created_at.desc())
+
+        count_query = (
+            select(func.count())
+            .select_from(cls)
+            .where(cls.creator_id == creator_id, cls.is_deleted == False)  # noqa: E712
+        )
+        if status:
+            count_query = count_query.where(cls.state == status)
+        if name:
+            count_query = count_query.where(cls.name.ilike(f"%{name}%"))
+
+        count_result = await db.execute(count_query)
+        total = count_result.scalar() or 0
+
         offset = (page - 1) * page_size
-        stmt = select(cls).offset(offset).limit(page_size)
-        result = await db.execute(stmt)
+        query = query.offset(offset).limit(page_size)
 
-        return list(result.scalars().all())
+        result = await db.execute(query)
+        events = list(result.scalars().all())
+
+        total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+
+        return {
+            "events": events,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
 
     @classmethod
     async def get_event_by_id(cls, db: AsyncSession, event_id: str) -> Self | None:
-        stmt = select(cls).where(cls.id == event_id)
+        stmt = select(cls).where(
+            cls.id == event_id, cls.is_deleted == False
+        )  # noqa: E712
         result = await db.execute(stmt)
-
         return result.scalar_one_or_none()
+
+    @classmethod
+    async def update_event(
+        cls, db: AsyncSession, event_id: str, update_data: dict
+    ) -> Self:
+        stmt = select(cls).where(
+            cls.id == event_id, cls.is_deleted == False
+        )  # noqa: E712
+        result = await db.execute(stmt)
+        event = result.scalar_one_or_none()
+
+        if not event:
+            return None
+
+        for key, value in update_data.items():
+            if hasattr(event, key) and key not in ("id", "created_at", "creator_id"):
+                setattr(event, key, value)
+
+        await db.flush()
+        await db.refresh(event)
+        return event
+
+    @classmethod
+    async def update_event_status(
+        cls, db: AsyncSession, event_id: str, state: EventState
+    ) -> Self | None:
+        stmt = select(cls).where(
+            cls.id == event_id, cls.is_deleted == False
+        )  # noqa: E712
+        result = await db.execute(stmt)
+        event = result.scalar_one_or_none()
+
+        if not event:
+            return None
+
+        event.state = state
+        await db.flush()
+        await db.refresh(event)
+        return event
+
+    @classmethod
+    async def delete_event(cls, db: AsyncSession, event_id: str) -> Self | None:
+        stmt = select(cls).where(
+            cls.id == event_id, cls.is_deleted == False
+        )  # noqa: E712
+        result = await db.execute(stmt)
+        event = result.scalar_one_or_none()
+
+        if not event:
+            return None
+
+        event.is_deleted = True
+        event.deleted_at = datetime.now(UTC)
+        await db.flush()
+        await db.refresh(event)
+        return event
 
     @classmethod
     async def add_user_to_event(
         cls, db: AsyncSession, user_id: str, event_id: str
     ) -> bool:
-
         stmt = (
             insert(user_outing_events)
             .values(user_id=user_id, outing_event_id=event_id)
             .on_conflict_do_nothing()
         )
-
         await db.execute(stmt)
         await db.commit()
-
         return True
 
     @classmethod
     async def remove_user_from_event(
         cls, db: AsyncSession, user_id: str, event_id: str
     ) -> bool:
-
         stmt = user_outing_events.delete().where(
             user_outing_events.c.user_id == user_id,
             user_outing_events.c.outing_event_id == event_id,
         )
-
         await db.execute(stmt)
         await db.commit()
-
         return True
 
     @staticmethod
     async def get_users_for_event(db: AsyncSession, event_id: str) -> list[User]:
+        from app.models.user import User
+
         stmt = (
             select(User)
             .join(user_outing_events)
             .where(user_outing_events.c.outing_event_id == event_id)
         )
         result = await db.execute(stmt)
-
         return list(result.scalars().all())

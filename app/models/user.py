@@ -12,6 +12,7 @@ from app.models import BaseModel
 from app.models.wallet import UserWallet
 
 if TYPE_CHECKING:
+    from app.event_broadcast.models.events import OutingEvent
     from app.matching_ground.model.interest import Interest
     from app.matching_ground.model.user_geolocation import UserGeolocation
     from app.matching_ground.model.user_interest import UserInterest
@@ -88,6 +89,13 @@ class User(BaseModel):
         viewonly=True,
     )
     geolocation: Mapped[UserGeolocation] = relationship(back_populates="user")
+
+    outing_events: Mapped[list["OutingEvent"]] = relationship(
+        back_populates="creator",
+        cascade="all, delete-orphan",
+        foreign_keys="[OutingEvent.creator_id]",
+        lazy="selectin",
+    )
 
     def to_dict(self):
         data_dict = super().to_dict()

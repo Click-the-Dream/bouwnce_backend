@@ -47,7 +47,7 @@ class EventService:
         except (ValueError, TypeError):
             raise BadRequestException(
                 "Invalid date format. Use ISO format (e.g. 2026-12-31T20:00:00)"
-            )
+            ) from None
 
         if event_data.get("price") is None or event_data["price"] < 0:
             raise BadRequestException("Price must be a non-negative number")
@@ -199,7 +199,7 @@ class EventService:
             except (ValueError, TypeError):
                 raise BadRequestException(
                     "Invalid date format. Use ISO format (e.g. 2026-12-31T20:00:00)"
-                )
+                ) from None
 
         if "price" in clean_data and (
             clean_data["price"] is None or clean_data["price"] < 0
@@ -209,11 +209,13 @@ class EventService:
         if "location" in clean_data and not clean_data["location"].strip():
             raise BadRequestException("Event location cannot be empty")
 
-        if "location_type" in clean_data:
-            if clean_data["location_type"] not in VALID_LOCATION_TYPES:
-                raise BadRequestException(
-                    f"Invalid location_type. Must be one of: {', '.join(sorted(VALID_LOCATION_TYPES))}"
-                )
+        if (
+            "location_type" in clean_data
+            and clean_data["location_type"] not in VALID_LOCATION_TYPES
+        ):
+            raise BadRequestException(
+                f"Invalid location_type. Must be one of: {', '.join(sorted(VALID_LOCATION_TYPES))}"
+            )
 
         if "link" in clean_data and not clean_data["link"].strip():
             raise BadRequestException("Event link cannot be empty")

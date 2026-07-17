@@ -140,7 +140,7 @@ class OutingEvent(BaseModel):
     @classmethod
     async def get_event_by_id(cls, db: AsyncSession, event_id: str) -> Self | None:
         stmt = select(cls).where(
-            cls.id == event_id, cls.is_deleted == False
+            cls.id == event_id, cls.is_deleted.is_(False)
         )  # noqa: E712
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
@@ -150,7 +150,7 @@ class OutingEvent(BaseModel):
         cls, db: AsyncSession, event_id: str, update_data: dict
     ) -> Self:
         stmt = select(cls).where(
-            cls.id == event_id, cls.is_deleted == False
+            cls.id == event_id, cls.is_deleted.is_(False)
         )  # noqa: E712
         result = await db.execute(stmt)
         event = result.scalar_one_or_none()
@@ -171,7 +171,7 @@ class OutingEvent(BaseModel):
         cls, db: AsyncSession, event_id: str, state: EventState
     ) -> Self | None:
         stmt = select(cls).where(
-            cls.id == event_id, cls.is_deleted == False
+            cls.id == event_id, cls.is_deleted.is_(False)
         )  # noqa: E712
         result = await db.execute(stmt)
         event = result.scalar_one_or_none()
@@ -187,7 +187,7 @@ class OutingEvent(BaseModel):
     @classmethod
     async def delete_event(cls, db: AsyncSession, event_id: str) -> Self | None:
         stmt = select(cls).where(
-            cls.id == event_id, cls.is_deleted == False
+            cls.id == event_id, cls.is_deleted.is_(False)
         )  # noqa: E712
         result = await db.execute(stmt)
         event = result.scalar_one_or_none()

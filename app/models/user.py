@@ -90,7 +90,7 @@ class User(BaseModel):
     )
     geolocation: Mapped[UserGeolocation] = relationship(back_populates="user")
 
-    outing_events: Mapped[list["OutingEvent"]] = relationship(
+    outing_events: Mapped[list[OutingEvent]] = relationship(
         back_populates="creator",
         cascade="all, delete-orphan",
         foreign_keys="[OutingEvent.creator_id]",

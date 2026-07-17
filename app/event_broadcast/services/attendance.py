@@ -77,7 +77,7 @@ class AttendanceService:
             except ValueError:
                 raise BadRequestException(
                     "Invalid date format. Use ISO format (YYYY-MM-DD)"
-                )
+                ) from None
 
         if location:
             base_query = base_query.where(OutingEvent.location.ilike(f"%{location}%"))
@@ -214,7 +214,7 @@ class AttendanceService:
             except ValueError:
                 raise BadRequestException(
                     "Invalid date_from format. Use ISO format (YYYY-MM-DD)"
-                )
+                ) from None
 
         if date_to:
             try:
@@ -222,7 +222,7 @@ class AttendanceService:
             except ValueError:
                 raise BadRequestException(
                     "Invalid date_to format. Use ISO format (YYYY-MM-DD)"
-                )
+                ) from None
 
         result = await UserEventAttendance.get_user_attendance(
             db=db,

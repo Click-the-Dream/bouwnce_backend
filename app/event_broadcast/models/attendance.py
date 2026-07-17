@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Self
 
-from sqlalchemy import UUID, DateTime, Float, ForeignKey, Integer, String, func, select
+from sqlalchemy import UUID, Float, ForeignKey, Integer, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship

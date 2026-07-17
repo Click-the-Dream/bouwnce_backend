@@ -307,5 +307,33 @@ class AttendanceService:
         response["total_attendees"] = result["total"]
         return response
 
+    async def cancel_attendance(
+        self,
+        db: AsyncSession,
+        current_user: User,
+        event_id: str,
+    ) -> dict[str, Any]:
+        if not is_valid_uuid(event_id):
+            raise BadRequestException("Invalid event ID format")
+
+        event = await OutingEvent.get_event_by_id(db, event_id)
+        if not event:
+            raise NotFoundException("Event not found")
+
+        attendance = await UserEventAttendance.cancel_attendance(
+            db, str(current_user.id), event_id
+        )
+
+        if not attendance:
+            raise NotFoundException("Attendance record not found")
+
+        await db.commit()
+
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            message="Attendance cancelled successfully",
+            data=_serialize_attendance(attendance),
+        )
+
 
 attendance_service = AttendanceService()

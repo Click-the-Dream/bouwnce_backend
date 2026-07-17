@@ -115,3 +115,20 @@ async def get_event_attendees(
         username=username,
         interest=interest,
     )
+
+
+@router.post(
+    "/{event_id}/cancel",
+    status_code=status.HTTP_200_OK,
+    summary="Cancel attendance for an event",
+)
+async def cancel_attendance(
+    event_id: str,
+    db: dbSessionDep,
+    current_user: CurrentUser,
+):
+    return await attendance_service.cancel_attendance(
+        db=db,
+        current_user=current_user,
+        event_id=event_id,
+    )

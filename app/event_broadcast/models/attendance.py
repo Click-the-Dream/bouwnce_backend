@@ -190,3 +190,26 @@ class UserEventAttendance(BaseModel):
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
+
+    @classmethod
+    async def cancel_attendance(
+        cls, db: AsyncSession, user_id: str, event_id: str
+    ) -> Self | None:
+        from datetime import UTC, datetime
+
+        stmt = select(cls).where(
+            cls.user_id == user_id,
+            cls.event_id == event_id,
+            cls.is_deleted == False,  # noqa: E712
+        )
+        result = await db.execute(stmt)
+        attendance = result.scalar_one_or_none()
+
+        if not attendance:
+            return None
+
+        attendance.is_deleted = True
+        attendance.deleted_at = datetime.now(UTC)
+        await db.flush()
+        await db.refresh(attendance)
+        return attendance

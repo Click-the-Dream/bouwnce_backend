@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 
+from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
@@ -43,7 +45,8 @@ async def get_async_session():
             await session.commit()
         except Exception as e:
             await session.rollback()
-            print(f"Error during session: {e}")
+            if not isinstance(e, (HTTPException, RequestValidationError)):
+                print(f"Error during session: {e}")
             raise
         finally:
             await session.close()

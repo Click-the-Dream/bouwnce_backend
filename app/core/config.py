@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Redis keys / streams
 MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
+CHAT_EVENTS_STREAM_KEY_PREFIX = "chat:events:stream:"
+CHAT_EVENTS_LAST_ID_KEY_PREFIX = "chat:events:last:"
 PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
 
 
@@ -22,6 +24,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_TTL: str = "15m"
     REFRESH_TOKEN_TTL: str = "30d"
     FASTAPI_ENV: str = "development"
+
+    FRONTEND_URL: str = ""
 
     SQLALCHEMY_DATABASE_URL: str = ""
     SQLALCHEMY_DATABASE_DEV_URL: str = ""

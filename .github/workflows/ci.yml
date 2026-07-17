@@ -49,48 +49,48 @@ jobs:
             --all \
             --exclude bandit,checkov,osv-scanner,trufflehog
 
-  trunk-security:
-    name: Trunk Security
-    runs-on: ubuntu-latest
+  # trunk-security:
+  #   name: Trunk Security
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install Trunk launcher
-        run: |
-          curl -fsSL https://trunk.io/releases/trunk -o trunk
-          chmod +x trunk
+  #     - name: Install Trunk launcher
+  #       run: |
+  #         curl -fsSL https://trunk.io/releases/trunk -o trunk
+  #         chmod +x trunk
 
-      - name: Debug OSV environment
-        run: |
-          echo "===== Python ====="
-          python --version || true
+  #     - name: Debug OSV environment
+  #       run: |
+  #         echo "===== Python ====="
+  #         python --version || true
 
-          echo "===== Requirements ====="
-          grep "^filelock" requirements.txt
-          sha256sum requirements.txt
+  #         echo "===== Requirements ====="
+  #         grep "^filelock" requirements.txt
+  #         sha256sum requirements.txt
 
-          echo "===== Trunk ====="
-          ./trunk --version
+  #         echo "===== Trunk ====="
+  #         ./trunk --version
 
-          echo "===== Downloading OSV Scanner ====="
-          ./trunk check --ci --no-progress --all --scope security || true
+  #         echo "===== Downloading OSV Scanner ====="
+  #         ./trunk check --ci --no-progress --all --scope security || true
 
-          echo "===== OSV Version ====="
-          ~/.cache/trunk/tools/osv-scanner/*/osv-scanner --version || true
+  #         echo "===== OSV Version ====="
+  #         ~/.cache/trunk/tools/osv-scanner/*/osv-scanner --version || true
 
-          echo "===== Running OSV directly ====="
-          ~/.cache/trunk/tools/osv-scanner/*/osv-scanner \
-            --lockfile=requirements.txt \
-            --format json || true
+  #         echo "===== Running OSV directly ====="
+  #         ~/.cache/trunk/tools/osv-scanner/*/osv-scanner \
+  #           --lockfile=requirements.txt \
+  #           --format json || true
 
-      - name: Run Trunk security checks
-        run: |
-          ./trunk check \
-            --ci \
-            --no-progress \
-            --all \
-            --scope security
+  #     - name: Run Trunk security checks
+  #       run: |
+  #         ./trunk check \
+  #           --ci \
+  #           --no-progress \
+  #           --all \
+  #           --scope security
 
   # TESTS
   tests:

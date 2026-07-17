@@ -43,7 +43,7 @@ class EventService:
             raise BadRequestException("Event date is required")
 
         try:
-            datetime.fromisoformat(event_data["date"])
+            event_data["date"] = datetime.fromisoformat(event_data["date"])
         except (ValueError, TypeError):
             raise BadRequestException(
                 "Invalid date format. Use ISO format (e.g. 2026-12-31T20:00:00)"
@@ -60,7 +60,8 @@ class EventService:
             raise BadRequestException(
                 f"Invalid location_type. Must be one of: {', '.join(sorted(VALID_LOCATION_TYPES))}"
             )
-        event_data["location_type"] = location_type
+
+        event_data["location_type"] = LocationType(location_type)
 
         if not event_data.get("link") or not event_data["link"].strip():
             raise BadRequestException("Event link is required")
@@ -73,7 +74,7 @@ class EventService:
             raise BadRequestException(
                 f"Invalid state. Must be one of: {', '.join(sorted(VALID_STATES))}"
             )
-        event_data["state"] = state
+        event_data["state"] = EventState(state)
 
         ticket_info = event_data.get("ticket_info")
         if ticket_info is not None:

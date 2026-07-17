@@ -56,7 +56,7 @@ class AttendanceService:
         user_interest_names = [interest.name for interest in user_interests]
 
         base_query = select(OutingEvent).where(
-            OutingEvent.state == EventState.LIVE.value,
+            OutingEvent.state == EventState.LIVE,
             OutingEvent.is_deleted == False,  # noqa: E712
         )
 

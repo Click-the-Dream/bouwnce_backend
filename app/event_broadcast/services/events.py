@@ -63,8 +63,12 @@ class EventService:
 
         event_data["location_type"] = LocationType(location_type)
 
-        if not event_data.get("link") or not event_data["link"].strip():
-            raise BadRequestException("Event link is required")
+        if location_type in {"hybrid", "virtual"} and (
+            not event_data.get("link") or not event_data["link"].strip()
+        ):
+            raise BadRequestException(
+                "Event link is required for Hybrid or Virtual event"
+            )
 
         if not event_data.get("banner_url") or not event_data["banner_url"].strip():
             raise BadRequestException("Banner URL is required")

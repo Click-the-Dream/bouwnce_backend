@@ -4,15 +4,14 @@ from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import CurrentUser, dbSessionDep
+from app.event_broadcast.schemas.attendance import (
+    AttendanceResponse,
+    ClaimAttendanceSchema,
+    PaginatedEventListResponse,
+)
 from app.event_broadcast.services.attendance import attendance_service
 
 router = APIRouter(prefix="/events")
-
-
-class ClaimAttendanceSchema(BaseModel):
-    ticket_info: list[dict[str, Any]] = Field(
-        ..., description="List of tickets purchased"
-    )
 
 
 @router.get(
@@ -45,6 +44,7 @@ async def explore_events(
 @router.post(
     "/{event_id}/attend",
     status_code=status.HTTP_201_CREATED,
+    response_model=AttendanceResponse,
     summary="Claim attendance for an event",
 )
 async def claim_attendance(
@@ -64,6 +64,7 @@ async def claim_attendance(
 @router.get(
     "/my-attendance",
     status_code=status.HTTP_200_OK,
+    response_model=PaginatedEventListResponse,
     summary="Get user's event attendance",
 )
 async def get_my_attendance(

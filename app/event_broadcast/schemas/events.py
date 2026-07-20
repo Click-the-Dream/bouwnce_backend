@@ -22,7 +22,7 @@ class CreateEventSchema(BaseModel):
     location_type: Annotated[
         str, Field(description="Location type: physical, virtual, or hybrid")
     ]
-    link: Annotated[str, Field(description="Link to the event")]
+    link: Annotated[str | None, Field(description="Link to the event")] = None
     banner_url: Annotated[str, Field(description="Banner URL of the event")]
     state: Annotated[str, Field(description="State of the event (draft/live)")]
     ticket_info: Annotated[

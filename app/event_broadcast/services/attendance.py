@@ -7,9 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.event_broadcast.models.attendance import UserEventAttendance
 from app.event_broadcast.models.events import EventState, OutingEvent
+from app.event_broadcast.schemas.attendance import AttendanceSchema
 from app.matching_ground.model.user_interest import UserInterest
 from app.models.user import User
-from app.utils.exception import BadRequestException, NotFoundException
+from app.utils.exception import (
+    BadRequestException,
+    ConflictException,
+    NotFoundException,
+)
 from app.utils.helper import is_valid_uuid
 from app.utils.responses import response_builder
 
@@ -120,7 +125,7 @@ class AttendanceService:
         db: AsyncSession,
         current_user: User,
         event_id: str,
-        ticket_info: list[dict[str, Any]],
+        ticket_info: list[AttendanceSchema],
     ) -> dict[str, Any]:
         if not is_valid_uuid(event_id):
             raise BadRequestException("Invalid event ID format")
@@ -129,7 +134,7 @@ class AttendanceService:
         if not event:
             raise NotFoundException("Event not found")
 
-        if event.state != EventState.LIVE.value:
+        if event.state != EventState.LIVE:
             raise BadRequestException("Can only claim attendance for live events")
 
         if not ticket_info or not isinstance(ticket_info, list):
@@ -138,28 +143,31 @@ class AttendanceService:
         total_amount = 0.0
         total_tickets = 0
 
-        for i, ticket in enumerate(ticket_info):
-            if not isinstance(ticket, dict):
-                raise BadRequestException(f"Ticket at index {i} must be an object")
+        event_ticket = event.ticket_info
+        if not event_ticket and ticket_info:
+            raise ConflictException("Event Does not have Ticket information provided")
 
-            ticket_name = ticket.get("ticket_name")
+        event_ticket = {ticket["ticket_name"]: ticket for ticket in event_ticket}
+        user_select_tickets = []
+
+        for i, ticket in enumerate(ticket_info):
+
+            ticket_name = ticket.ticket_name.strip()
             if not ticket_name:
                 raise BadRequestException(f"Ticket at index {i} requires a ticket_name")
 
-            price = ticket.get("price")
-            if price is None or price < 0:
-                raise BadRequestException(
-                    f"Ticket at index {i} must have a non-negative price"
-                )
-
-            quantity = ticket.get("quantity", 1)
+            quantity = ticket.quantity
             if quantity < 1:
                 raise BadRequestException(
                     f"Ticket at index {i} must have quantity >= 1"
                 )
+            event_ticket_data = event_ticket.get(ticket_name)
+            if not event_ticket_data:
+                raise BadRequestException(f"Event does not have Ticket: {ticket_name}")
 
-            ticket["quantity"] = quantity
-            total_amount += price * quantity
+            user_select_tickets.append(event_ticket_data)
+
+            total_amount += event_ticket_data["price"] * quantity
             total_tickets += quantity
 
         existing = await UserEventAttendance.check_existing_attendance(
@@ -173,7 +181,7 @@ class AttendanceService:
         attendance_data = {
             "user_id": str(current_user.id),
             "event_id": event_id,
-            "ticket_info": ticket_info,
+            "ticket_info": user_select_tickets,
             "total_amount": total_amount,
             "total_tickets": total_tickets,
             "payment_status": "pending",
@@ -238,8 +246,6 @@ class AttendanceService:
         serialized = []
         for attendance in result["attendances"]:
             attendance_dict = _serialize_attendance(attendance)
-            if attendance.event:
-                attendance_dict["event"] = _serialize_event(attendance.event)
             serialized.append(attendance_dict)
 
         response = response_builder(

@@ -6,9 +6,11 @@ from pydantic import BaseModel, Field
 from app.api.dependencies import CurrentUser, dbSessionDep
 from app.event_broadcast.schemas.attendance import (
     AttendanceResponse,
+    BaseResponse,
     ClaimAttendanceSchema,
-    PaginatedEventListResponse,
+    PaginatedAttendanceListResponse,
 )
+from app.event_broadcast.schemas.events import PaginatedEventListResponse
 from app.event_broadcast.services.attendance import attendance_service
 
 router = APIRouter(prefix="/events")
@@ -17,6 +19,7 @@ router = APIRouter(prefix="/events")
 @router.get(
     "/explore",
     status_code=status.HTTP_200_OK,
+    response_model=PaginatedEventListResponse,
     summary="Explore live events",
 )
 async def explore_events(
@@ -64,7 +67,7 @@ async def claim_attendance(
 @router.get(
     "/my-attendance",
     status_code=status.HTTP_200_OK,
-    response_model=PaginatedEventListResponse,
+    response_model=PaginatedAttendanceListResponse,
     summary="Get user's event attendance",
 )
 async def get_my_attendance(
@@ -121,6 +124,7 @@ async def get_event_attendees(
 @router.post(
     "/{event_id}/cancel",
     status_code=status.HTTP_200_OK,
+    response_model=AttendanceResponse,
     summary="Cancel attendance for an event",
 )
 async def cancel_attendance(

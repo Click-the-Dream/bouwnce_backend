@@ -41,7 +41,7 @@ class AttendanceResponse(BaseResponse):
     data: Annotated[AttendanceResponseSchema, Field(description="Attendance Data")]
 
 
-class PaginatedEventListResponse(BaseResponse):
+class PaginatedAttendanceListResponse(BaseResponse):
     data: Annotated[
         list[AttendanceResponseSchema], Field(description="Paginated list of events")
     ]

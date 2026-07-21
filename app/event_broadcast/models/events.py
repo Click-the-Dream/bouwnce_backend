@@ -56,7 +56,7 @@ class OutingEvent(BaseModel):
     location_type: Mapped[LocationType] = mapped_column(
         Enum(LocationType, name="location_type_enum"), nullable=False
     )
-    link: Mapped[str] = mapped_column(String, nullable=False)
+    link: Mapped[str | None] = mapped_column(String, nullable=True)
     banner_url: Mapped[str] = mapped_column(String, nullable=False)
     state: Mapped[EventState] = mapped_column(
         Enum(EventState, name="event_state"), nullable=False

@@ -79,7 +79,7 @@ class EventResponseData(BaseModel):
     price: float
     location: str
     location_type: str
-    link: str
+    link: str | None
     banner_url: str
     state: str
     ticket_info: list[dict[str, Any]] | None = None

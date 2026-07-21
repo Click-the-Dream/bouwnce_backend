@@ -51,7 +51,7 @@ class OutingEvent(BaseModel):
     name: Mapped[str] = mapped_column(String, nullable=False)
     desc: Mapped[str] = mapped_column(String, nullable=False)
     date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    price: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     location: Mapped[str] = mapped_column(String, nullable=False)
     location_type: Mapped[LocationType] = mapped_column(
         Enum(LocationType, name="location_type_enum"), nullable=False

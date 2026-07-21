@@ -238,9 +238,11 @@ class EventService:
                 "Event link is required for Hybrid or Virtual event"
             )
 
-        if location_type in {"hybrid", "virtual"}:
-            clean_data["link"] = link
-        elif "link" in clean_data:
+        if (
+            location_type in {"hybrid", "virtual"}
+            or "link" in clean_data
+            or "link" in clean_data
+        ) or "link" in clean_data:
             clean_data["link"] = link
 
         if "banner_url" in clean_data and not clean_data["banner_url"].strip():

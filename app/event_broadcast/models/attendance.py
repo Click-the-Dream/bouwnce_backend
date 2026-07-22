@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Self
 from sqlalchemy import UUID, Float, ForeignKey, Integer, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
 from app.models.basemodel import BaseModel
 
@@ -138,6 +138,7 @@ class UserEventAttendance(BaseModel):
             select(cls)
             .join(User, cls.user_id == User.id)
             .where(cls.event_id == event_id, cls.is_deleted == False)  # noqa: E712
+            .options(selectinload(cls.user))
         )
 
         if username:

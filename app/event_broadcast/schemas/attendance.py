@@ -49,3 +49,27 @@ class PaginatedAttendanceListResponse(BaseResponse):
     page_size: Annotated[int, Field(description="Number of events per page")]
     total_pages: Annotated[int, Field(description="Total number of pages")]
     total_attendances: Annotated[int, Field(description="Total number of events")]
+
+
+class UserSchema(BaseModel):
+    id: Annotated[str, Field(description="User Id")]
+    username: Annotated[str, Field(description="User username")]
+    full_name: Annotated[str, Field(description="User full name")]
+    email: Annotated[str, Field(description="User email address")]
+
+
+class UserAttendanceResponseSchema(AttendanceResponseSchema):
+    user: Annotated[UserSchema, Field(description="User data")]
+
+
+class PaginatedUserAttendanceListResponse(BaseResponse):
+    data: Annotated[
+        list[UserAttendanceResponseSchema],
+        Field(description="Paginated list of user attendees"),
+    ]
+    page: Annotated[int, Field(description="Current page number")]
+    page_size: Annotated[int, Field(description="Number of events per page")]
+    total_pages: Annotated[int, Field(description="Total number of pages")]
+    total_attendees: Annotated[
+        int, Field(description="Total number of user attending event")
+    ]

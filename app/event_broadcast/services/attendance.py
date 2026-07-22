@@ -57,7 +57,7 @@ class AttendanceService:
         if page_size < 1 or page_size > 100:
             raise BadRequestException("Page size must be between 1 and 100")
 
-        user_interests = await UserInterest.get_user_interests(db, str(current_user.id))
+        user_interests = await UserInterest.get_user_interests(db, current_user.id)
         user_interest_names = [interest.name for interest in user_interests]
 
         base_query = select(OutingEvent).where(
@@ -171,7 +171,7 @@ class AttendanceService:
             total_tickets += quantity
 
         existing = await UserEventAttendance.check_existing_attendance(
-            db, str(current_user.id), event_id
+            db, current_user.id, event_id
         )
         if existing:
             raise BadRequestException(
@@ -179,7 +179,7 @@ class AttendanceService:
             )
 
         attendance_data = {
-            "user_id": str(current_user.id),
+            "user_id": current_user.id,
             "event_id": event_id,
             "ticket_info": user_select_tickets,
             "total_amount": total_amount,
@@ -234,7 +234,7 @@ class AttendanceService:
 
         result = await UserEventAttendance.get_user_attendance(
             db=db,
-            user_id=str(current_user.id),
+            user_id=current_user.id,
             page=page,
             page_size=page_size,
             name=name,
@@ -293,6 +293,7 @@ class AttendanceService:
         serialized = []
         for attendance in result["attendances"]:
             attendance_dict = _serialize_attendance(attendance)
+            print(attendance.user)
             if attendance.user:
                 attendance_dict["user"] = {
                     "id": str(attendance.user.id),
@@ -327,7 +328,7 @@ class AttendanceService:
             raise NotFoundException("Event not found")
 
         attendance = await UserEventAttendance.cancel_attendance(
-            db, str(current_user.id), event_id
+            db, current_user.id, event_id
         )
 
         if not attendance:

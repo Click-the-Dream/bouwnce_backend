@@ -19,10 +19,10 @@ class UserEventAttendance(BaseModel):
     __tablename__ = "user_event_attendance"
 
     user_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     event_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("outing_events.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("outing_events.id"), nullable=False
     )
     ticket_info: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     total_amount: Mapped[float] = mapped_column(Float, nullable=False)
@@ -34,8 +34,16 @@ class UserEventAttendance(BaseModel):
         String, nullable=False, default="confirmed"
     )
 
-    user: Mapped[User] = relationship(foreign_keys=[user_id])
-    event: Mapped[OutingEvent] = relationship(foreign_keys=[event_id])
+    user: Mapped["User"] = relationship(
+        "User",
+        foreign_keys=[user_id],
+        primaryjoin="UserEventAttendance.user_id == User.id",
+    )
+    event: Mapped["OutingEvent"] = relationship(
+        "OutingEvent",
+        foreign_keys=[event_id],
+        primaryjoin="UserEventAttendance.event_id == OutingEvent.id",
+    )
 
     @classmethod
     async def create_attendance(cls, db: AsyncSession, attendance_data: dict) -> Self:
@@ -49,7 +57,7 @@ class UserEventAttendance(BaseModel):
     async def get_user_attendance(
         cls,
         db: AsyncSession,
-        user_id: str,
+        user_id,
         page: int,
         page_size: int,
         name: str | None = None,
@@ -126,7 +134,7 @@ class UserEventAttendance(BaseModel):
     async def get_event_attendees(
         cls,
         db: AsyncSession,
-        event_id: str,
+        event_id,
         page: int,
         page_size: int,
         username: str | None = None,
@@ -182,7 +190,7 @@ class UserEventAttendance(BaseModel):
 
     @classmethod
     async def check_existing_attendance(
-        cls, db: AsyncSession, user_id: str, event_id: str
+        cls, db: AsyncSession, user_id, event_id
     ) -> Self | None:
         stmt = select(cls).where(
             cls.user_id == user_id,
@@ -194,7 +202,7 @@ class UserEventAttendance(BaseModel):
 
     @classmethod
     async def cancel_attendance(
-        cls, db: AsyncSession, user_id: str, event_id: str
+        cls, db: AsyncSession, user_id, event_id
     ) -> Self | None:
         from datetime import UTC, datetime
 

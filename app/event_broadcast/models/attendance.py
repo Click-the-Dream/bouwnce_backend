@@ -34,7 +34,7 @@ class UserEventAttendance(BaseModel):
         String, nullable=False, default="confirmed"
     )
 
-    user: Mapped["User"] = relationship(
+    user: Mapped[User] = relationship(
         "User",
         foreign_keys=[user_id],
         primaryjoin="UserEventAttendance.user_id == User.id",

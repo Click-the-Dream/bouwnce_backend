@@ -1,7 +1,4 @@
-from typing import Any
-
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, Field
 
 from app.api.dependencies import CurrentUser, dbSessionDep
 from app.event_broadcast.schemas.attendance import (

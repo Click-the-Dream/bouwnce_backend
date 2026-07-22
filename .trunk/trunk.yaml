@@ -20,6 +20,9 @@ lint:
     - linters: [ALL]
       paths:
         - Alembic/versions/**
+    - linters: [osv-scanner]
+      paths:
+        - requirements.txt
     - linters: [bandit]
       paths:
         - app/email_templates/compile.py

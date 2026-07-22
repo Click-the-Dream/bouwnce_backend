@@ -17,7 +17,6 @@ class CreateEventSchema(BaseModel):
     name: Annotated[str, Field(description="Name of the event")]
     desc: Annotated[str, Field(description="Description of the event")]
     date: Annotated[str, Field(description="Date of the event in ISO format")]
-    price: Annotated[float, Field(description="Price of the event")]
     location: Annotated[str, Field(description="Location of the event")]
     location_type: Annotated[
         str, Field(description="Location type: physical, virtual, or hybrid")
@@ -42,9 +41,6 @@ class UpdateEventSchema(BaseModel):
     ]
     date: Annotated[
         str | None, Field(default=None, description="Date of the event in ISO format")
-    ]
-    price: Annotated[
-        float | None, Field(default=None, description="Price of the event")
     ]
     location: Annotated[
         str | None, Field(default=None, description="Location of the event")
@@ -76,10 +72,9 @@ class EventResponseData(BaseModel):
     name: str
     desc: str
     date: str
-    price: float
     location: str
     location_type: str
-    link: str
+    link: str | None
     banner_url: str
     state: str
     ticket_info: list[dict[str, Any]] | None = None

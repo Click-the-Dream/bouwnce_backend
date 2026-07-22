@@ -14,6 +14,12 @@ VALID_LOCATION_TYPES = {lt.value for lt in LocationType}
 VALID_STATES = {es.value for es in EventState}
 
 
+def _normalized_link(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 def _serialize_event(event: OutingEvent) -> dict[str, Any]:
     event_dict = event.to_dict()
     event_dict["state"] = (
@@ -49,9 +55,6 @@ class EventService:
                 "Invalid date format. Use ISO format (e.g. 2026-12-31T20:00:00)"
             ) from None
 
-        if event_data.get("price") is None or event_data["price"] < 0:
-            raise BadRequestException("Price must be a non-negative number")
-
         if not event_data.get("location") or not event_data["location"].strip():
             raise BadRequestException("Event location is required")
 
@@ -63,12 +66,14 @@ class EventService:
 
         event_data["location_type"] = LocationType(location_type)
 
-        if location_type in {"hybrid", "virtual"} and (
-            not event_data.get("link") or not event_data["link"].strip()
-        ):
+        link = _normalized_link(event_data.get("link"))
+
+        if location_type in {"hybrid", "virtual"} and not link:
             raise BadRequestException(
                 "Event link is required for Hybrid or Virtual event"
             )
+
+        event_data["link"] = link or None
 
         if not event_data.get("banner_url") or not event_data["banner_url"].strip():
             raise BadRequestException("Banner URL is required")
@@ -206,24 +211,39 @@ class EventService:
                     "Invalid date format. Use ISO format (e.g. 2026-12-31T20:00:00)"
                 ) from None
 
-        if "price" in clean_data and (
-            clean_data["price"] is None or clean_data["price"] < 0
-        ):
-            raise BadRequestException("Price must be a non-negative number")
-
         if "location" in clean_data and not clean_data["location"].strip():
             raise BadRequestException("Event location cannot be empty")
 
-        if (
-            "location_type" in clean_data
-            and clean_data["location_type"] not in VALID_LOCATION_TYPES
-        ):
-            raise BadRequestException(
-                f"Invalid location_type. Must be one of: {', '.join(sorted(VALID_LOCATION_TYPES))}"
+        if "location_type" in clean_data:
+            location_type = clean_data["location_type"]
+            if location_type not in VALID_LOCATION_TYPES:
+                raise BadRequestException(
+                    f"Invalid location_type. Must be one of: {', '.join(sorted(VALID_LOCATION_TYPES))}"
+                )
+            clean_data["location_type"] = LocationType(location_type)
+        else:
+            location_type = (
+                event.location_type.value
+                if hasattr(event.location_type, "value")
+                else event.location_type
             )
 
-        if "link" in clean_data and not clean_data["link"].strip():
-            raise BadRequestException("Event link cannot be empty")
+        if "link" in clean_data:
+            link = _normalized_link(clean_data["link"])
+        else:
+            link = _normalized_link(event.link)
+
+        if location_type in {"hybrid", "virtual"} and not link:
+            raise BadRequestException(
+                "Event link is required for Hybrid or Virtual event"
+            )
+
+        if (
+            location_type in {"hybrid", "virtual"}
+            or "link" in clean_data
+            or "link" in clean_data
+        ) or "link" in clean_data:
+            clean_data["link"] = link
 
         if "banner_url" in clean_data and not clean_data["banner_url"].strip():
             raise BadRequestException("Banner URL cannot be empty")

@@ -39,7 +39,7 @@ class UserEventAttendance(BaseModel):
         foreign_keys=[user_id],
         primaryjoin="UserEventAttendance.user_id == User.id",
     )
-    event: Mapped["OutingEvent"] = relationship(
+    event: Mapped[OutingEvent] = relationship(
         "OutingEvent",
         foreign_keys=[event_id],
         primaryjoin="UserEventAttendance.event_id == OutingEvent.id",

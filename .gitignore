@@ -10,3 +10,4 @@ wheels/
 .env
 /venv
 tests/test_search_parser.py
+/.qwen

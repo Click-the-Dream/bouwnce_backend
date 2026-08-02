@@ -173,21 +173,15 @@ class BuddySearchFallbackParser(QueryParser):
         if not message.strip():
             return None
 
-        import uuid
-
         from sqlalchemy import select
         from sqlalchemy.ext.asyncio import AsyncSession
 
-        from app.matching_ground.core.interest_normalization import (
-            normalize_interest_name,
-        )
         from app.matching_ground.service.matching.match_lifecycle import (
             MatchLifecycleService,
         )
         from app.models.user import User
 
         db: AsyncSession = session  # type: ignore[assignment]
-        uid: uuid.UUID = requester_id  # type: ignore[assignment]
         text = message.strip()
 
         lifecycle = MatchLifecycleService()

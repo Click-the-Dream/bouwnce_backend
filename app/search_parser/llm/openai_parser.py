@@ -60,9 +60,8 @@ class OpenAIQueryParser(QueryParser):
             print(
                 f"parse response: finish_reason={response.choices[0].finish_reason if response.choices else None}"
             )
-        except Exception as exc:
-            InternalServerErrorException
-            return None
+        except Exception as err:
+            raise InternalServerErrorException("An error occured") from err
 
         content = response.choices[0].message.content
         if not content:

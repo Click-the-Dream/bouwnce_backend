@@ -17,7 +17,9 @@ from app.utils.exception import InternalServerErrorException
 
 
 def _message_hash(message: str, domain_name: str) -> str:
-    return hashlib.md5(f"{domain_name}:{message.strip().lower()}".encode()).hexdigest()
+    return hashlib.md5(
+        f"{domain_name}:{message.strip().lower()}".encode(), usedforsecurity=False
+    ).hexdigest()
 
 
 async def _get_redis():
@@ -30,16 +32,16 @@ async def _redis_get(key: str) -> str | None:
     try:
         redis = await _get_redis()
         return await redis.get(key)
-    except Exception:
-        raise InternalServerErrorException("Redis GET failed for")
+    except Exception as err:
+        raise InternalServerErrorException("Redis GET failed for") from err
 
 
 async def _redis_set(key: str, value: str, ttl: int) -> None:
     try:
         redis = await _get_redis()
         await redis.set(key, value, ex=ttl)
-    except Exception:
-        raise InternalServerErrorException("Redis SET failed for")
+    except Exception as err:
+        raise InternalServerErrorException("Redis SET failed for") from err
 
 
 def _catalog_key(domain_name: str) -> str:
@@ -67,10 +69,8 @@ async def _get_cached_catalog(domain_name: str) -> list[str] | None:
                 settings.SEARCH_CACHE_CATALOG_TTL,
             )
             return doc.items
-    except Exception:
-        raise InternalServerErrorException("Mongo catalog read failed for")
-
-    return None
+    except Exception as err:
+        raise InternalServerErrorException("Mongo catalog read failed for") from err
 
 
 async def _set_cached_catalog(domain_name: str, items: list[str]) -> None:
@@ -92,8 +92,8 @@ async def _set_cached_catalog(domain_name: str, items: list[str]) -> None:
         else:
             doc = SearchCatalogCache(domain=domain_name, items=items)
             await doc.insert()
-    except Exception:
-        raise InternalServerErrorException("Mongo catalog write failed for")
+    except Exception as err:
+        raise InternalServerErrorException("Mongo catalog write failed for") from err
 
 
 def _parse_redis_key(domain_name: str, msg_hash: str) -> str:
@@ -129,10 +129,8 @@ async def _get_cached_parse(message: str, domain_name: str) -> ParsedQuery | Non
             )
             await _set_cached_parse(message, domain_name, parsed)
             return parsed
-    except Exception:
-        raise InternalServerErrorException("Mongo parse read failed for")
-
-    return None
+    except Exception as err:
+        raise InternalServerErrorException("Mongo parse read failed for") from err
 
 
 async def _set_cached_parse(
@@ -172,8 +170,8 @@ async def _set_cached_parse(
                 source=parsed.source,
             )
             await doc.insert()
-    except Exception:
-        raise InternalServerErrorException("Mongo parse write failed for")
+    except Exception as err:
+        raise InternalServerErrorException("Mongo parse write failed for") from err
 
 
 class CompositeQueryParser(QueryParser):
@@ -197,7 +195,6 @@ class CompositeQueryParser(QueryParser):
         if cached is not None:
             return cached
 
-        from sqlalchemy import select
         from sqlalchemy.ext.asyncio import AsyncSession
 
         db: AsyncSession = session

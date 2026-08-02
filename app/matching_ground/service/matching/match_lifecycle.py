@@ -306,7 +306,6 @@ class MatchLifecycleService:
         radius_km: float | None = None
 
         if message_text and settings.SEARCH_PARSER_LLM_ENABLED:
-            from app.search_parser.schemas.schema import BUDDY_SEARCH_DOMAIN
             from app.search_parser.search_parser import CompositeQueryParser
             from app.search_parser.service.buddy_param_mapper import (
                 map_parsed_query_to_buddy_params,

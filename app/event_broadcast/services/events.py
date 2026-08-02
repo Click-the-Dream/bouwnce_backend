@@ -112,7 +112,7 @@ class EventService:
                 raise BadRequestException("interests must be a list of strings")
             event_data["interests"] = [str(i) for i in interests]
 
-        event_data["creator_id"] = str(current_user.id)
+        event_data["creator_id"] = current_user.id
 
         event = await OutingEvent.create_event(db, event_data)
         await db.commit()
@@ -144,7 +144,7 @@ class EventService:
 
         result = await OutingEvent.get_events_by_creator(
             db=db,
-            creator_id=str(current_user.id),
+            creator_id=current_user.id,
             page=page,
             page_size=page_size,
             status=status_filter,
@@ -192,7 +192,7 @@ class EventService:
         if not event:
             raise NotFoundException("Event not found")
 
-        if str(event.creator_id) != str(current_user.id):
+        if event.creator_id != current_user.id:
             raise BadRequestException("You are not authorized to update this event")
 
         clean_data = {k: v for k, v in update_data.items() if v is not None}
@@ -301,7 +301,7 @@ class EventService:
         if not event:
             raise NotFoundException("Event not found")
 
-        if str(event.creator_id) != str(current_user.id):
+        if event.creator_id != current_user.id:
             raise BadRequestException("You are not authorized to update this event")
 
         state_enum = EventState(new_state)
@@ -324,7 +324,7 @@ class EventService:
         if not event:
             raise NotFoundException("Event not found")
 
-        if str(event.creator_id) != str(current_user.id):
+        if event.creator_id != current_user.id:
             raise BadRequestException("You are not authorized to delete this event")
 
         await OutingEvent.delete_event(db, event_id)

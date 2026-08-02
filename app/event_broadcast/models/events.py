@@ -67,7 +67,7 @@ class OutingEvent(BaseModel):
     interests: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
 
     creator_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("users.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
 
     creator: Mapped[User] = relationship(
@@ -90,7 +90,7 @@ class OutingEvent(BaseModel):
     async def get_events_by_creator(
         cls,
         db: AsyncSession,
-        creator_id: str,
+        creator_id,
         page: int,
         page_size: int,
         status: str | None = None,
@@ -138,7 +138,7 @@ class OutingEvent(BaseModel):
         }
 
     @classmethod
-    async def get_event_by_id(cls, db: AsyncSession, event_id: str) -> Self | None:
+    async def get_event_by_id(cls, db: AsyncSession, event_id) -> Self | None:
         stmt = select(cls).where(
             cls.id == event_id, cls.is_deleted.is_(False)
         )  # noqa: E712
@@ -146,9 +146,7 @@ class OutingEvent(BaseModel):
         return result.scalar_one_or_none()
 
     @classmethod
-    async def update_event(
-        cls, db: AsyncSession, event_id: str, update_data: dict
-    ) -> Self:
+    async def update_event(cls, db: AsyncSession, event_id, update_data: dict) -> Self:
         stmt = select(cls).where(
             cls.id == event_id, cls.is_deleted.is_(False)
         )  # noqa: E712
@@ -168,7 +166,7 @@ class OutingEvent(BaseModel):
 
     @classmethod
     async def update_event_status(
-        cls, db: AsyncSession, event_id: str, state: EventState
+        cls, db: AsyncSession, event_id, state: EventState
     ) -> Self | None:
         stmt = select(cls).where(
             cls.id == event_id, cls.is_deleted.is_(False)
@@ -185,7 +183,7 @@ class OutingEvent(BaseModel):
         return event
 
     @classmethod
-    async def delete_event(cls, db: AsyncSession, event_id: str) -> Self | None:
+    async def delete_event(cls, db: AsyncSession, event_id) -> Self | None:
         stmt = select(cls).where(
             cls.id == event_id, cls.is_deleted.is_(False)
         )  # noqa: E712
@@ -202,9 +200,7 @@ class OutingEvent(BaseModel):
         return event
 
     @classmethod
-    async def add_user_to_event(
-        cls, db: AsyncSession, user_id: str, event_id: str
-    ) -> bool:
+    async def add_user_to_event(cls, db: AsyncSession, user_id, event_id) -> bool:
         stmt = (
             insert(user_outing_events)
             .values(user_id=user_id, outing_event_id=event_id)
@@ -215,9 +211,7 @@ class OutingEvent(BaseModel):
         return True
 
     @classmethod
-    async def remove_user_from_event(
-        cls, db: AsyncSession, user_id: str, event_id: str
-    ) -> bool:
+    async def remove_user_from_event(cls, db: AsyncSession, user_id, event_id) -> bool:
         stmt = user_outing_events.delete().where(
             user_outing_events.c.user_id == user_id,
             user_outing_events.c.outing_event_id == event_id,
@@ -227,7 +221,7 @@ class OutingEvent(BaseModel):
         return True
 
     @staticmethod
-    async def get_users_for_event(db: AsyncSession, event_id: str) -> list[User]:
+    async def get_users_for_event(db: AsyncSession, event_id) -> list[User]:
         from app.models.user import User
 
         stmt = (

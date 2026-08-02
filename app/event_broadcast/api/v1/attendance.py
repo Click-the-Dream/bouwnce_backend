@@ -5,6 +5,7 @@ from app.event_broadcast.schemas.attendance import (
     AttendanceResponse,
     ClaimAttendanceSchema,
     PaginatedAttendanceListResponse,
+    PaginatedUserAttendanceListResponse,
 )
 from app.event_broadcast.schemas.events import PaginatedEventListResponse
 from app.event_broadcast.services.attendance import attendance_service
@@ -95,6 +96,7 @@ async def get_my_attendance(
 @router.get(
     "/{event_id}/attendees",
     status_code=status.HTTP_200_OK,
+    response_model=PaginatedUserAttendanceListResponse,
     summary="Get list of attendees for an event",
 )
 async def get_event_attendees(

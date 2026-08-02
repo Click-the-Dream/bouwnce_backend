@@ -24,6 +24,7 @@ from app.api.v1 import (
 from app.core.rate_limiter import rate_limiter
 from app.event_broadcast.api.v1 import event_router
 from app.matching_ground.api.rest import chat, interest, location, match
+from app.search_parser.api.rest import search
 from app.utils.responses import (
     BadRequestResponse,
     ForbiddenResponse,
@@ -93,3 +94,4 @@ api_router.include_router(chat.router)
 api_router.include_router(admin_bouwnce.router)
 api_router.include_router(notifications.router)
 api_router.include_router(event_router)
+api_router.include_router(search.router)

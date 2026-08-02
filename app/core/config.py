@@ -129,6 +129,17 @@ class Settings(BaseSettings):
     SEARCH_MATCH_USER_SCORE: float = 0.92
 
     # =========================
+    # Search parser (LLM)
+    # =========================
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""
+    SEARCH_PARSER_LLM_ENABLED: bool = True
+    SEARCH_PARSER_LLM_MODEL: str = ""
+    SEARCH_PARSER_LLM_TIMEOUT: float = 10.0
+    SEARCH_CACHE_CATALOG_TTL: int = 300
+    SEARCH_CACHE_PARSE_TTL: int = 600
+
+    # =========================
     # QStash
     # =========================
     QSTASH_API_KEY: str = ""

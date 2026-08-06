@@ -4,7 +4,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -82,7 +91,10 @@ class Message(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     recipient_id: Mapped[UUID_Type] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     body: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -103,3 +115,14 @@ class Message(BaseModel):
     )
 
     conversation: Mapped[Conversation] = relationship(lazy="joined")
+
+    __table_args__ = (
+        # Speeds up `ORDER BY created_at DESC` per-conversation message pages.
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+        # Speeds up unread counts / mark-as-read on unread rows for a user.
+        Index(
+            "ix_messages_recipient_unread",
+            "recipient_id",
+            postgresql_where=text("read_at IS NULL"),
+        ),
+    )

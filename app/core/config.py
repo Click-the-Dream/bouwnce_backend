@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     SQLALCHEMY_DATABASE_DEV_URL: str = ""
     SQLALCHEMY_DATABASE_STAG_URL: str = ""
     SQLALCHEMY_DATABASE_PROD_URL: str = ""
-    SQLALCHEMY_POOL_SIZE: int = 10
-    SQLALCHEMY_MAX_OVERFLOW: int = 20
+    SQLALCHEMY_POOL_SIZE: int = 30
+    SQLALCHEMY_MAX_OVERFLOW: int = 40
     SQLALCHEMY_FUTURE: bool = True
     SQLALCHEMY_ECHO: bool = False
 

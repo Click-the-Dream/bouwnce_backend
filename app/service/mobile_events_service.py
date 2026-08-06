@@ -67,11 +67,13 @@ ACTIVE_CHAT_CONNECTIONS: dict[
     dict[str, tuple[WebSocket, asyncio.Lock, asyncio.Queue[ChatMessageEvent]]],
 ] = {}
 CHAT_DELIVERED_KEY_PREFIX = "chat:delivered:"
-CHAT_DELIVERY_WAIT_SECONDS = 30.0
-CHAT_DELIVERY_POLL_SECONDS = 0.5
 CHAT_LOCAL_DELIVERY_TTL_SECONDS = 300.0
-ACTIVE_CHAT_DELIVERY_EVENTS: dict[str, asyncio.Event] = {}
 ACTIVE_CHAT_LOCAL_DELIVERIES: dict[str, float] = {}
+
+# Small TTL caches so frequent `chat.typing` events don't hit Postgres each time.
+TYPING_CACHE_TTL_SECONDS = 120.0
+_TYPING_CONV_CACHE: dict[str, tuple[str | None, float]] = {}
+_TYPING_USER_CACHE: dict[str, tuple[ChatUserLite, float]] = {}
 
 
 class MobileEventsService:
@@ -161,7 +163,7 @@ class MobileEventsService:
             return False
         if not message_id:
             return False
-        delivered_key = f"chat:delivered:{user_id}:{message_id}"
+        delivered_key = f"{CHAT_DELIVERED_KEY_PREFIX}{user_id}:{message_id}"
         if not self._claim_local_chat_delivery(delivered_key):
             return False
         with contextlib.suppress(Exception):
@@ -213,44 +215,47 @@ class MobileEventsService:
         return delivered
 
     @staticmethod
-    async def _mark_chat_message_delivered(
-        *, redis, recipient_id: str, message_id: str
-    ) -> None:
-        delivery_key = f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{message_id}"
-        if delivery_event := ACTIVE_CHAT_DELIVERY_EVENTS.get(delivery_key):
-            delivery_event.set()
-        with contextlib.suppress(Exception):
-            await redis.set(
-                delivery_key,
-                "1",
-                ex=PRESENCE_TTL_SECONDS * 48,
-            )
+    def _prune_typing_caches() -> None:
+        now = time.monotonic()
+        for cache in (_TYPING_CONV_CACHE, _TYPING_USER_CACHE):
+            if len(cache) > 10000:
+                expired = [
+                    key
+                    for key, (_value, expires_at) in cache.items()
+                    if expires_at <= now
+                ]
+                for key in expired:
+                    cache.pop(key, None)
 
-    async def _wait_for_chat_message_delivery(
-        self,
-        *,
-        redis,
-        recipient_id: str,
-        message_id: str,
-        delivery_event: asyncio.Event,
-    ) -> bool:
-        delivered_key = f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{message_id}"
-        deadline = asyncio.get_running_loop().time() + CHAT_DELIVERY_WAIT_SECONDS
-        while asyncio.get_running_loop().time() < deadline:
-            if delivery_event.is_set():
-                return True
-            try:
-                await asyncio.wait_for(
-                    delivery_event.wait(), timeout=CHAT_DELIVERY_POLL_SECONDS
-                )
-                return True
-            except TimeoutError:
-                pass
-            with contextlib.suppress(Exception):
-                if await redis.exists(delivered_key):
-                    delivery_event.set()
-                    return True
-        return False
+    async def _get_cached_conversation_id(
+        self, *, db, user1_id: str, user2_id: str
+    ) -> str | None:
+        key = f"{min(user1_id, user2_id)}:{max(user1_id, user2_id)}"
+        now = time.monotonic()
+        cached = _TYPING_CONV_CACHE.get(key)
+        if cached is not None and cached[1] > now:
+            return cached[0]
+        conv = await Conversation.get_between(
+            db, uuid.UUID(str(user1_id)), uuid.UUID(str(user2_id))
+        )
+        conv_id = str(conv.id) if conv is not None else None
+        _TYPING_CONV_CACHE[key] = (conv_id, now + TYPING_CACHE_TTL_SECONDS)
+        return conv_id
+
+    async def _get_cached_user_lite(self, *, db, user_id: str) -> ChatUserLite:
+        now = time.monotonic()
+        cached = _TYPING_USER_CACHE.get(user_id)
+        if cached is not None and cached[1] > now:
+            return cached[0]
+        user = await User.get_by_id(str(user_id), db)
+        lite = ChatUserLite(
+            id=user.id,
+            username=user.username,
+            full_name=user.full_name,
+            profile_pic=chat_service._serialize_profile_pic(user),
+        )
+        _TYPING_USER_CACHE[user_id] = (lite, now + TYPING_CACHE_TTL_SECONDS)
+        return lite
 
     async def _drain_chat_queue(
         self,
@@ -272,11 +277,6 @@ class MobileEventsService:
                     websocket, payload, send_lock=send_lock
                 ):
                     return
-                await self._mark_chat_message_delivered(
-                    redis=redis,
-                    recipient_id=str(user_id),
-                    message_id=str(payload.data.id),
-                )
         except Exception:
             return
 
@@ -386,19 +386,19 @@ class MobileEventsService:
         await self._send_chat_message_direct(
             redis=redis, recipient_id=recipient_id, payload=payload
         )
+        # Single round-trip: batch all fanout writes into one Redis pipeline.
         with contextlib.suppress(Exception):
-            await redis.publish(f"chat:conversation:{conversation_id}", payload_json)
-        with contextlib.suppress(Exception):
-            await redis.publish(f"chat:user:{sender_id}", payload_json)
-        with contextlib.suppress(Exception):
-            await redis.publish(f"chat:user:{recipient_id}", payload_json)
-        with contextlib.suppress(Exception):
-            await redis.xadd(
-                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient_id}",
-                {"type": "chat.message", "data": payload_json},
-                maxlen=5000,
-                approximate=True,
-            )
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:conversation:{conversation_id}", payload_json)
+                pipe.publish(f"chat:user:{sender_id}", payload_json)
+                pipe.publish(f"chat:user:{recipient_id}", payload_json)
+                pipe.xadd(
+                    f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient_id}",
+                    {"type": "chat.message", "data": payload_json},
+                    maxlen=5000,
+                    approximate=True,
+                )
+                await pipe.execute()
 
     async def _confirm_chat_message_sent(
         self,
@@ -412,29 +412,21 @@ class MobileEventsService:
         payload: ChatMessageEvent,
         client_id: str | None = None,
     ) -> None:
-        delivery_key = f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{payload.data.id}"
-        delivery_event = ACTIVE_CHAT_DELIVERY_EVENTS.setdefault(
-            delivery_key, asyncio.Event()
+        """Send `chat.sent` as soon as the message is persisted and published.
+
+        We deliberately do NOT block on the recipient actually receiving the
+        message (that could take up to ~30s when the recipient is offline or on
+        another API process). Receiving-side delivery is still de-duplicated via
+        the `chat:delivered:` SET NX keys, but the sender is no longer coupled to
+        recipient delivery, so sends complete in ms instead of up to 30s.
+        """
+        await self._publish_chat_message_fanout(
+            redis=redis,
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            conversation_id=conversation_id,
+            payload=payload,
         )
-        try:
-            await self._publish_chat_message_fanout(
-                redis=redis,
-                sender_id=sender_id,
-                recipient_id=recipient_id,
-                conversation_id=conversation_id,
-                payload=payload,
-            )
-            delivered = await self._wait_for_chat_message_delivery(
-                redis=redis,
-                recipient_id=recipient_id,
-                message_id=str(payload.data.id),
-                delivery_event=delivery_event,
-            )
-        finally:
-            if ACTIVE_CHAT_DELIVERY_EVENTS.get(delivery_key) is delivery_event:
-                ACTIVE_CHAT_DELIVERY_EVENTS.pop(delivery_key, None)
-        if not delivered:
-            return
         await self._send_model_safe(
             websocket,
             ChatSentEvent(
@@ -796,9 +788,14 @@ class MobileEventsService:
                         websocket, payload_obj, send_lock=send_lock
                     )
 
-        for pid in partner_ids:
-            await redis.publish(f"chat:user:{pid}", payload)
-        await redis.publish(f"chat:user:{user_id}", payload)
+        try:
+            async with redis.pipeline() as pipe:
+                for pid in partner_ids:
+                    pipe.publish(f"chat:user:{pid}", payload)
+                pipe.publish(f"chat:user:{user_id}", payload)
+                await pipe.execute()
+        except Exception:
+            pass
 
     async def _presence_heartbeat(self, *, redis, user_id: str) -> None:
         try:
@@ -885,10 +882,6 @@ class MobileEventsService:
                 ) == "chat.message" and not await self._should_deliver_chat_message(
                     redis=redis, user_id=user_id, payload=parsed_data
                 ):
-                    print(
-                        f"[mobile_events] pubsub chat.message skipped -> {user_id}",
-                        flush=True,
-                    )
                     continue
                 if not await self._send_json_safe(
                     websocket, parsed_data, send_lock=send_lock
@@ -897,19 +890,6 @@ class MobileEventsService:
                         f"[mobile_events] pubsub send failed -> {user_id}", flush=True
                     )
                     return
-                if payload_id := (
-                    parsed_data.get("data", {}).get("id")
-                    if isinstance(parsed_data.get("data"), dict)
-                    else None
-                ):
-                    await self._mark_chat_message_delivered(
-                        redis=redis,
-                        recipient_id=str(user_id),
-                        message_id=str(payload_id),
-                    )
-                print(
-                    f"[mobile_events] pubsub chat.message sent -> {user_id}", flush=True
-                )
         except Exception:
             return
 
@@ -963,10 +943,6 @@ class MobileEventsService:
                         if not await self._should_deliver_chat_message(
                             redis=redis, user_id=user_id, payload=payload_obj
                         ):
-                            print(
-                                f"[mobile_events] stream chat.message skipped -> {user_id}",
-                                flush=True,
-                            )
                             continue
                         if not await self._send_json_safe(
                             websocket, payload_obj, send_lock=send_lock
@@ -976,16 +952,6 @@ class MobileEventsService:
                                 flush=True,
                             )
                             return
-                        if payload_obj.get("data", {}).get("id"):
-                            await self._mark_chat_message_delivered(
-                                redis=redis,
-                                recipient_id=str(user_id),
-                                message_id=str(payload_obj["data"]["id"]),
-                            )
-                        print(
-                            f"[mobile_events] stream chat.message sent -> {user_id}",
-                            flush=True,
-                        )
         except Exception:
             return
 
@@ -1067,6 +1033,9 @@ class MobileEventsService:
             self._presence_heartbeat(redis=redis, user_id=str(user_id))
         )
 
+        # Keep the original ordering guarantee for clients: bootstrap payloads
+        # (`bouwnce.system`, presence snapshot) arrive before `chat.ready`, and
+        # the stream forwarder has initialized its read position.
         with contextlib.suppress(Exception):
             await bootstrap_task
         with contextlib.suppress(Exception):
@@ -1313,6 +1282,7 @@ class MobileEventsService:
                     continue
 
                 if msg_type == "chat.typing":
+                    self._prune_typing_caches()
                     try:
                         payload = TypingPayload.model_validate(incoming)
                     except Exception:
@@ -1330,16 +1300,18 @@ class MobileEventsService:
 
                     async with get_async_session() as db:
                         try:
-                            conv = await Conversation.get_between(
+                            conv_id = await self._get_cached_conversation_id(
                                 db,
-                                uuid.UUID(str(user_id)),
-                                uuid.UUID(str(payload.user_id)),
+                                user1_id=str(user_id),
+                                user2_id=str(payload.user_id),
                             )
-                            if conv is None:
+                            if conv_id is None:
                                 raise NotFoundException("Conversation not found")
 
-                            sender = await User.get_by_id(str(user_id), db)
-                            targets = {str(conv.user_a_id), str(conv.user_b_id)}
+                            sender_lite = await self._get_cached_user_lite(
+                                db, user_id=str(user_id)
+                            )
+                            targets = {str(user_id), str(payload.user_id)}
                         except (
                             NotFoundException,
                             ForbiddenException,
@@ -1359,20 +1331,21 @@ class MobileEventsService:
 
                     event_payload = ChatTypingEvent(
                         data=ChatTypingData(
-                            conversation_id=str(conv.id),
-                            user=ChatUserLite(
-                                id=sender.id,
-                                username=sender.username,
-                                full_name=sender.full_name,
-                                profile_pic=chat_service._serialize_profile_pic(sender),
-                            ),
+                            conversation_id=uuid.UUID(str(conv_id)),
+                            user=sender_lite,
                             is_typing=bool(payload.is_typing),
                         )
                     )
-                    for target_id in targets:
-                        await redis.publish(
-                            f"chat:user:{target_id}", event_payload.model_dump_json()
-                        )
+                    try:
+                        async with redis.pipeline() as pipe:
+                            for target_id in targets:
+                                pipe.publish(
+                                    f"chat:user:{target_id}",
+                                    event_payload.model_dump_json(),
+                                )
+                            await pipe.execute()
+                    except Exception:
+                        pass
 
                     continue
         finally:

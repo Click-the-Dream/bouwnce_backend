@@ -220,18 +220,17 @@ class ChatService:
                 reply_obj=reply_obj,
             )
             payload = chat_message_event.model_dump_json()
-            await redis.publish(
-                f"chat:conversation:{conversation.id}",
-                payload,
-            )
-            await redis.publish(f"chat:user:{sender.id}", payload)
-            await redis.publish(f"chat:user:{recipient.id}", payload)
-            await redis.xadd(
-                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
-                {"type": "chat.message", "data": payload},
-                maxlen=5000,
-                approximate=True,
-            )
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:conversation:{conversation.id}", payload)
+                pipe.publish(f"chat:user:{sender.id}", payload)
+                pipe.publish(f"chat:user:{recipient.id}", payload)
+                pipe.xadd(
+                    f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
+                    {"type": "chat.message", "data": payload},
+                    maxlen=5000,
+                    approximate=True,
+                )
+                await pipe.execute()
 
         if notify_side_effects:
             await dispatch_event(
@@ -399,15 +398,17 @@ class ChatService:
                 reply_obj=reply_obj,
             )
             payload = chat_message_event.model_dump_json()
-            await redis.publish(f"chat:conversation:{conversation.id}", payload)
-            await redis.publish(f"chat:user:{sender.id}", payload)
-            await redis.publish(f"chat:user:{recipient.id}", payload)
-            await redis.xadd(
-                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
-                {"type": "chat.message", "data": payload},
-                maxlen=5000,
-                approximate=True,
-            )
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:conversation:{conversation.id}", payload)
+                pipe.publish(f"chat:user:{sender.id}", payload)
+                pipe.publish(f"chat:user:{recipient.id}", payload)
+                pipe.xadd(
+                    f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
+                    {"type": "chat.message", "data": payload},
+                    maxlen=5000,
+                    approximate=True,
+                )
+                await pipe.execute()
 
         if notify_side_effects:
             await dispatch_event(
@@ -772,8 +773,10 @@ class ChatService:
                     updated=updated,
                 )
             ).model_dump_json()
-            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
-            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:user:{conv.user_a_id}", payload)
+                pipe.publish(f"chat:user:{conv.user_b_id}", payload)
+                await pipe.execute()
         if commit:
             await db.commit()
         if as_response:
@@ -848,8 +851,10 @@ class ChatService:
                     updated=updated,
                 )
             ).model_dump_json()
-            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
-            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:user:{conv.user_a_id}", payload)
+                pipe.publish(f"chat:user:{conv.user_b_id}", payload)
+                await pipe.execute()
 
         if commit:
             await db.commit()
@@ -967,8 +972,10 @@ class ChatService:
                     updated=updated,
                 )
             ).model_dump_json()
-            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
-            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:user:{conv.user_a_id}", payload)
+                pipe.publish(f"chat:user:{conv.user_b_id}", payload)
+                await pipe.execute()
 
         if commit:
             await db.commit()

@@ -35,6 +35,7 @@ dependencies = [
   "bandit>=1.9.4",
   "qstash>=3.4.0",
   "pytest>=9.0.3",
+  "pywebpush>=2.4.0",
 ]
 
 

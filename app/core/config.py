@@ -137,6 +137,16 @@ class Settings(BaseSettings):
     QSTASH_CURRENT_SIGNING_KEY: str = ""
     QSTASH_NEXT_SIGNING_KEY: str = ""
 
+    # =========================
+    # Web Push (browser push notifications)
+    # =========================
+    VAPID_PRIVATE_KEY: str = (
+        ""  # PEM-encoded VAPID private key (generate via scripts/generate_vapid_keys.py)
+    )
+    VAPID_SUBJECT: str = (
+        ""  # e.g. "mailto:support@bouwnce.com" — contact URI sent in VAPID claims
+    )
+
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":
         if self.SQLALCHEMY_DATABASE_URL.strip():

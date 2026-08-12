@@ -14,7 +14,9 @@ from app.models.products import product_domain
 from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.models.wallet import UserWallet
+from app.service.web_push_service import web_push_service
 from app.worker.tasks.email import send_email_using_worker
+from app.worker.tasks.web_push import send_web_push
 
 
 class EventNames:
@@ -254,6 +256,15 @@ async def dispatch_event(
         await _publish_mobile_stream_event(
             redis, event_name=EventNames.PUSH_NOTIFICATION, payload=payload_dict
         )
+        # Browser push (Web Push) — dispatched via Celery; skipped when VAPID
+        # keys are not configured on the server.
+        if web_push_service.enabled:
+            send_web_push.delay(
+                user_id=payload.user_id,
+                title=payload.title,
+                body=payload.body,
+                data=payload.data,
+            )
         return
 
     if event_name == EventNames.BUYER_WALLET_CREDIT:

@@ -59,6 +59,6 @@ __all__ = [
     "Message",
     "DeviceToken",
     "Notification",
-    "OutingEvent",
     "WebPushSubscription",
+    "OutingEvent",
 ]

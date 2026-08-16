@@ -224,88 +224,6 @@ uv install
 
 ---
 
-### Web Push Notifications
-
-Browser push notifications (W3C Push API) are delivered from this backend using self-hosted Web Push (`pywebpush` + VAPID). Every existing `EventNames.PUSH_NOTIFICATION` dispatch is automatically fanned out to the recipient's browser subscriptions by the `send_web_push` Celery task — no changes are needed at call sites (chat, orders, wallet, matches).
-
-**Backend setup**
-
-1. Generate a VAPID key pair:
-   ```bash
-   .venv/bin/python scripts/generate_vapid_keys.py
-   ```
-2. Set the env vars:
-   - `VAPID_PRIVATE_KEY` — the printed PEM private key
-   - `VAPID_SUBJECT` — e.g. `mailto:support@bouwnce.com`
-3. Run the migration: `uv run alembic upgrade head`
-4. Restart the API and the Celery worker.
-
-Web push is a no-op until both env vars are set (the `send_web_push` task returns immediately without enqueuing work).
-
-**API**
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| GET | `/api/v1/web-push/public-key` | — | VAPID application server key (base64url) for `PushManager.subscribe()` |
-| POST | `/api/v1/web-push/subscriptions` | Bearer | Register a `PushSubscription` `{ endpoint, keys: { p256dh, auth }, expirationTime? }` |
-| DELETE | `/api/v1/web-push/subscriptions` | Bearer | Remove a subscription `{ endpoint }` |
-
-**Frontend contract**
-
-The service worker must be served from the web app's origin (e.g. `https://www.bouwnce.com/sw.js`). Reference service worker (`sw.js`):
-
-```javascript
-self.addEventListener("push", (event) => {
-  const { title, body, data } = event.data
-    ? event.data.json()
-    : { title: "Bouwnce", body: "", data: {} };
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      data,
-    })
-  );
-});
-
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const url = event.notification.data?.url || "/";
-  event.waitUntil(clients.openWindow(url));
-});
-```
-
-Reference client snippet:
-
-```javascript
-// 1. Register the service worker
-const reg = await navigator.serviceWorker.register("/sw.js");
-
-// 2. Get the application server key from the backend
-const { public_key: applicationServerKey } = await fetch(
-  `${API_BASE}/api/v1/web-push/public-key`
-).then((r) => r.json());
-
-// 3. Subscribe and register with the backend
-const subscription = await reg.pushManager.subscribe({
-  userVisibleOnly: true,
-  applicationServerKey,
-});
-await fetch(`${API_BASE}/api/v1/web-push/subscriptions`, {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify(subscription),
-});
-```
-
-Payloads delivered to the service worker are `{ title, body, data }`, where `data` carries the same payload used by the existing mobile push pipeline (e.g. `{ type, conversation_id, ... }`).
-
----
-
 ### Pre-commit Hooks
 
 - **Setup**
@@ -342,6 +260,94 @@ Ensures **code formatting, linting, and other checks** before commits.
 - Logging and security utilities are centralized in `app/core`.
 
 - Unit tests are placed under `app/test`.
+
+---
+
+### Web Push Notifications
+
+The backend supports standard **Web Push** (VAPID + encrypted payloads) so browsers can
+receive notifications even when the app is closed.
+
+**Setup**
+
+1. Generate VAPID keys (one-time, per environment):
+
+   ```bash
+   .venv/bin/python - <<'EOF'
+   import base64
+   from py_vapid import Vapid01
+   v = Vapid01(); v.generate_keys()
+   def b64url(d): return base64.urlsafe_b64encode(d).rstrip(b'=').decode()
+   nums = v.public_key.public_numbers()
+   pub = b64url(b'\x04' + nums.x.to_bytes(32, 'big') + nums.y.to_bytes(32, 'big'))
+   priv = b64url(v.private_key.private_numbers().private_value.to_bytes(32, 'big'))
+   print('VAPID_PUBLIC_KEY=' + pub)
+   print('VAPID_PRIVATE_KEY=' + priv)
+   EOF
+   ```
+
+2. Set in `.env`:
+
+   ```
+   VAPID_PUBLIC_KEY="..."
+   VAPID_PRIVATE_KEY="..."
+   VAPID_SUBJECT="mailto:ops@bouwnce.com"
+   ```
+
+**API endpoints**
+
+| Method | Path                            | Auth | Purpose                            |
+| ------ | ------------------------------- | ---- | ---------------------------------- |
+| GET    | `/api/v1/push/vapid-public-key` | No   | VAPID public key for `subscribe()` |
+| POST   | `/api/v1/push/subscribe`        | Yes  | Store a browser subscription       |
+| DELETE | `/api/v1/push/subscribe`        | Yes  | Remove a browser subscription      |
+| POST   | `/api/v1/push/test`             | Yes  | Send a test push (dev only)        |
+
+Subscribe request body (the browser `PushSubscription`):
+
+```json
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/...",
+  "keys": { "p256dh": "...", "auth": "..." },
+  "expirationTime": null
+}
+```
+
+**Delivery pipeline**
+
+- Events emitted with `PushNotificationEvent` (chat, matches, orders, payments) are
+  persisted and pushed onto the Redis list `notifications:push:queue`.
+- A **Celery beat** task (`app.worker.tasks.web_push.drain_push_queue`) drains that queue
+  every 5 seconds and sends encrypted pushes to the user's web subscriptions.
+- Expired subscriptions (HTTP 404/410 from the push service) are removed automatically.
+
+Run the worker **and** beat to deliver pushes:
+
+```bash
+./bin/start-celery-worker.sh
+./bin/start-celery-beat.sh
+```
+
+**Client side (frontend)**
+
+For localhost development a demo page is served by the backend at `/push-demo`
+(`/static/push-demo.html`), including `sw.js` and `manifest.json`. In production the
+**frontend origin must host its own service worker** and call:
+
+```js
+const sub = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+});
+fetch("/api/v1/push/subscribe", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify(sub.toJSON()),
+});
+```
 
 ---
 

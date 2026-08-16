@@ -26,6 +26,7 @@ lint:
     - linters: [bandit]
       paths:
         - app/email_templates/compile.py
+        - tests/**
     - linters: [markdownlint]
       paths:
         - README.md

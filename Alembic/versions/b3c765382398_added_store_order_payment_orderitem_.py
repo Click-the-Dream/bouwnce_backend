@@ -107,29 +107,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["suborder_id"], ["suborders.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    with op.batch_alter_table("business_info", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("store_id", sa.UUID(), nullable=False))
-        batch_op.drop_constraint(
-            batch_op.f("business_info_user_id_fkey"), type_="foreignkey"
-        )
-        batch_op.create_foreign_key(
-            None, "stores", ["store_id"], ["id"], ondelete="CASCADE"
-        )
-        batch_op.drop_column("user_id")
-
     with op.batch_alter_table("contact_info", schema=None) as batch_op:
         batch_op.add_column(sa.Column("store_id", sa.UUID(), nullable=False))
         batch_op.drop_constraint(
             batch_op.f("contact_info_user_id_fkey"), type_="foreignkey"
         )
-        batch_op.create_foreign_key(
-            None, "stores", ["store_id"], ["id"], ondelete="CASCADE"
-        )
-        batch_op.drop_column("user_id")
-
-    with op.batch_alter_table("payouts", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("store_id", sa.UUID(), nullable=False))
-        batch_op.drop_constraint(batch_op.f("payouts_user_id_fkey"), type_="foreignkey")
         batch_op.create_foreign_key(
             None, "stores", ["store_id"], ["id"], ondelete="CASCADE"
         )
@@ -189,20 +171,6 @@ def downgrade() -> None:
         )
         batch_op.drop_column("store_id")
 
-    with op.batch_alter_table("payouts", schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column("user_id", sa.UUID(), autoincrement=False, nullable=False)
-        )
-        batch_op.drop_constraint(None, type_="foreignkey")
-        batch_op.create_foreign_key(
-            batch_op.f("payouts_user_id_fkey"),
-            "users",
-            ["user_id"],
-            ["id"],
-            ondelete="CASCADE",
-        )
-        batch_op.drop_column("store_id")
-
     with op.batch_alter_table("contact_info", schema=None) as batch_op:
         batch_op.add_column(
             sa.Column("user_id", sa.UUID(), autoincrement=False, nullable=False)
@@ -210,20 +178,6 @@ def downgrade() -> None:
         batch_op.drop_constraint(None, type_="foreignkey")
         batch_op.create_foreign_key(
             batch_op.f("contact_info_user_id_fkey"),
-            "users",
-            ["user_id"],
-            ["id"],
-            ondelete="CASCADE",
-        )
-        batch_op.drop_column("store_id")
-
-    with op.batch_alter_table("business_info", schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column("user_id", sa.UUID(), autoincrement=False, nullable=False)
-        )
-        batch_op.drop_constraint(None, type_="foreignkey")
-        batch_op.create_foreign_key(
-            batch_op.f("business_info_user_id_fkey"),
             "users",
             ["user_id"],
             ["id"],

@@ -149,14 +149,13 @@ class Settings(BaseSettings):
     QSTASH_NEXT_SIGNING_KEY: str = ""
 
     # =========================
-    # Web Push (browser push notifications)
+    # Web Push (VAPID)
     # =========================
-    VAPID_PRIVATE_KEY: str = (
-        ""  # PEM-encoded VAPID private key (generate via scripts/generate_vapid_keys.py)
-    )
-    VAPID_SUBJECT: str = (
-        ""  # e.g. "mailto:support@bouwnce.com" — contact URI sent in VAPID claims
-    )
+    # Generate keys with: python -m pywebpush generate-vapid-keys
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    # mailto: contact (or https URL) shown to push service operators
+    VAPID_SUBJECT: str = ""
 
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":

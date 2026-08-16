@@ -1,166 +1,86 @@
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
+from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlparse
 
-from cryptography.hazmat.primitives import serialization
 from pywebpush import WebPushException, webpush
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.logger import log_internal_error
 from app.models.web_push_subscription import WebPushSubscription
-from app.schemas.web_push import WebPushSubscriptionIn
-from app.utils.exception import BadRequestException
 
-# Push services reply 404/410 when a subscription is stale (uninstalled,
-# permission revoked, or expired). These subscriptions must be pruned.
-_STALE_PUSH_STATUS_CODES = {404, 410}
-_PUSH_TIMEOUT_SECONDS = 10.0
+PUSH_TTL_SECONDS = 3600
 
 
-def _application_server_key(private_key_pem: str) -> str | None:
-    """Derive the base64url application server key from the VAPID private key.
+def get_vapid_public_key() -> str:
+    return settings.VAPID_PUBLIC_KEY
 
-    This is the format `PushManager.subscribe()` expects for
-    `applicationServerKey` (65-byte uncompressed EC point, base64url).
+
+def _vapid_claims() -> dict[str, str]:
+    subject = (settings.VAPID_SUBJECT or "").strip()
+    if not subject:
+        subject = f"mailto:{settings.BOUWNCE_SYSTEM_EMAIL}"
+    return {"sub": subject}
+
+
+def subscription_is_expired(subscription: WebPushSubscription) -> bool:
+    """True when the browser-declared expiration time is in the past."""
+    from datetime import UTC, datetime
+
+    if subscription.expiration_time is None:
+        return False
+    return subscription.expiration_time <= datetime.now(UTC)
+
+
+@dataclass
+class DeliveryOutcome:
+    """Result of delivering one notification to one subscription."""
+
+    delivered: bool = False
+    expired: bool = False  # 404/410 -> subscription no longer valid, remove it
+    retry: bool = False  # 429/5xx -> requeue for a later attempt
+    error: str | None = None
+
+
+def send_web_push(
+    subscription: WebPushSubscription,
+    *,
+    title: str,
+    body: str,
+    data: dict[str, Any] | None = None,
+    ttl: int = PUSH_TTL_SECONDS,
+) -> DeliveryOutcome:
+    """Send an encrypted Web Push message to one browser subscription.
+
+    Uses AES-128-GCM payload encryption + VAPID signing (handled by pywebpush).
     """
+    payload = json.dumps(
+        {"title": title or "Notification", "body": body or "", "data": data or {}}
+    )
+    subscription_info = {
+        "endpoint": subscription.endpoint,
+        "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth},
+    }
     try:
-        private_key = serialization.load_pem_private_key(
-            private_key_pem.encode(), password=None
+        webpush(
+            subscription_info=subscription_info,
+            data=payload,
+            vapid_private_key=settings.VAPID_PRIVATE_KEY,
+            vapid_claims=_vapid_claims(),
+            ttl=ttl,
+            timeout=10,
         )
-        public_bytes = private_key.public_key().public_bytes(
-            serialization.Encoding.X962,
-            serialization.PublicFormat.UncompressedPoint,
-        )
-    except Exception:
-        return None
-    return base64.urlsafe_b64encode(public_bytes).rstrip(b"=").decode()
-
-
-class WebPushService:
-    @property
-    def enabled(self) -> bool:
-        """Web push is usable only when a VAPID private key and subject are set."""
-        return bool(settings.VAPID_PRIVATE_KEY and settings.VAPID_SUBJECT)
-
-    def public_key(self) -> str | None:
-        """Application server key for the frontend, or None when disabled/misconfigured."""
-        if not settings.VAPID_PRIVATE_KEY:
-            return None
-        return _application_server_key(settings.VAPID_PRIVATE_KEY)
-
-    def _vapid_claims(self) -> dict[str, str]:
-        return {"sub": settings.VAPID_SUBJECT}
-
-    async def subscribe(
-        self,
-        db: AsyncSession,
-        *,
-        user_id: str,
-        subscription: WebPushSubscriptionIn,
-        user_agent: str | None = None,
-    ) -> WebPushSubscription:
-        self._validate_endpoint(subscription.endpoint)
-        return await WebPushSubscription.upsert(
-            db=db,
-            user_id=user_id,
-            endpoint=subscription.endpoint,
-            p256dh=subscription.keys.p256dh,
-            auth=subscription.keys.auth,
-            expiration_time=subscription.expiration_time,
-            user_agent=user_agent,
-        )
-
-    async def unsubscribe(
-        self, db: AsyncSession, *, user_id: str, endpoint: str
-    ) -> bool:
-        return await WebPushSubscription.delete_for_user(
-            db=db, user_id=user_id, endpoint=endpoint
-        )
-
-    @staticmethod
-    def _validate_endpoint(endpoint: str) -> None:
-        """Reject endpoints that are not https URLs.
-
-        The Celery worker later POSTs push payloads to the stored endpoint, so an
-        unvalidated endpoint would let an authenticated user weaponize the worker
-        as an SSRF proxy against internal http:// hosts. Real browser push
-        endpoints are always https.
-        """
-        parsed = urlparse(endpoint)
-        if parsed.scheme != "https" or not parsed.netloc:
-            raise BadRequestException("Invalid push endpoint: must be an https:// URL")
-
-    async def send_to_user(
-        self,
-        db: AsyncSession,
-        *,
-        user_id: str,
-        title: str,
-        body: str,
-        data: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Send a web push to every browser subscription of a user.
-
-        Returns ``{"sent", "removed", "skipped"}``. Subscriptions that the push
-        service reports as stale (404/410) are deleted. Any other failure is
-        treated as transient and leaves the subscription in place for the next
-        attempt.
-        """
-        if not self.enabled:
-            return {"sent": 0, "removed": 0, "skipped": True}
-
-        subscriptions = await WebPushSubscription.list_for_user(db=db, user_id=user_id)
-        if not subscriptions:
-            return {"sent": 0, "removed": 0, "skipped": False}
-
-        payload = json.dumps({"title": title, "body": body, "data": data})
-        sent = 0
-        removed = 0
-        for subscription in subscriptions:
-            try:
-                await asyncio.to_thread(
-                    webpush,
-                    subscription_info={
-                        "endpoint": subscription.endpoint,
-                        "keys": {
-                            "p256dh": subscription.p256dh,
-                            "auth": subscription.auth,
-                        },
-                    },
-                    data=payload,
-                    vapid_private_key=settings.VAPID_PRIVATE_KEY,
-                    vapid_claims=self._vapid_claims(),
-                    timeout=_PUSH_TIMEOUT_SECONDS,
-                )
-                sent += 1
-            except WebPushException as exc:
-                status_code = (
-                    getattr(exc.response, "status_code", None)
-                    if exc.response is not None
-                    else None
-                )
-                if status_code in _STALE_PUSH_STATUS_CODES:
-                    await db.delete(subscription)
-                    removed += 1
-            except Exception as exc:
-                # A failure on one subscription must never break the fan-out for
-                # the user's other subscriptions, but unexpected errors must not
-                # disappear silently either.
-                log_internal_error(
-                    exc=exc,
-                    message="Unexpected error sending web push",
-                    context={
-                        "user_id": user_id,
-                        "endpoint": subscription.endpoint,
-                    },
-                )
-                continue
-        return {"sent": sent, "removed": removed, "skipped": False}
-
-
-web_push_service = WebPushService()
+        return DeliveryOutcome(delivered=True)
+    except WebPushException as exc:
+        status_code = exc.response.status_code if exc.response is not None else None
+        if status_code in (404, 410):
+            # Push service says this subscription is gone (user unsubscribed,
+            # revoked permission, or the endpoint expired).
+            return DeliveryOutcome(delivered=False, expired=True, error=str(exc))
+        if status_code in (429, 500, 502, 503, 504):
+            # Transient: push service is rate-limiting or having issues.
+            return DeliveryOutcome(delivered=False, retry=True, error=str(exc))
+        return DeliveryOutcome(delivered=False, error=str(exc))
+    except Exception as exc:  # noqa: BLE001 - capture any send failure
+        # e.g. malformed keys, network errors, VAPID config missing
+        return DeliveryOutcome(delivered=False, error=str(exc))

@@ -20,6 +20,7 @@ from app.api.v1 import (
     vendor_dashboard,
     verification_router,
     waitlist_router,
+    web_push,
 )
 from app.core.rate_limiter import rate_limiter
 from app.event_broadcast.api.v1 import event_router
@@ -94,4 +95,5 @@ api_router.include_router(chat.router)
 api_router.include_router(admin_bouwnce.router)
 api_router.include_router(notifications.router)
 api_router.include_router(event_router)
+api_router.include_router(web_push.router)
 api_router.include_router(search.router)

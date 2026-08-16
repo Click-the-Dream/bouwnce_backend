@@ -224,6 +224,88 @@ uv install
 
 ---
 
+### Web Push Notifications
+
+Browser push notifications (W3C Push API) are delivered from this backend using self-hosted Web Push (`pywebpush` + VAPID). Every existing `EventNames.PUSH_NOTIFICATION` dispatch is automatically fanned out to the recipient's browser subscriptions by the `send_web_push` Celery task — no changes are needed at call sites (chat, orders, wallet, matches).
+
+**Backend setup**
+
+1. Generate a VAPID key pair:
+   ```bash
+   .venv/bin/python scripts/generate_vapid_keys.py
+   ```
+2. Set the env vars:
+   - `VAPID_PRIVATE_KEY` — the printed PEM private key
+   - `VAPID_SUBJECT` — e.g. `mailto:support@bouwnce.com`
+3. Run the migration: `uv run alembic upgrade head`
+4. Restart the API and the Celery worker.
+
+Web push is a no-op until both env vars are set (the `send_web_push` task returns immediately without enqueuing work).
+
+**API**
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/v1/web-push/public-key` | — | VAPID application server key (base64url) for `PushManager.subscribe()` |
+| POST | `/api/v1/web-push/subscriptions` | Bearer | Register a `PushSubscription` `{ endpoint, keys: { p256dh, auth }, expirationTime? }` |
+| DELETE | `/api/v1/web-push/subscriptions` | Bearer | Remove a subscription `{ endpoint }` |
+
+**Frontend contract**
+
+The service worker must be served from the web app's origin (e.g. `https://www.bouwnce.com/sw.js`). Reference service worker (`sw.js`):
+
+```javascript
+self.addEventListener("push", (event) => {
+  const { title, body, data } = event.data
+    ? event.data.json()
+    : { title: "Bouwnce", body: "", data: {} };
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      data,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/";
+  event.waitUntil(clients.openWindow(url));
+});
+```
+
+Reference client snippet:
+
+```javascript
+// 1. Register the service worker
+const reg = await navigator.serviceWorker.register("/sw.js");
+
+// 2. Get the application server key from the backend
+const { public_key: applicationServerKey } = await fetch(
+  `${API_BASE}/api/v1/web-push/public-key`
+).then((r) => r.json());
+
+// 3. Subscribe and register with the backend
+const subscription = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey,
+});
+await fetch(`${API_BASE}/api/v1/web-push/subscriptions`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(subscription),
+});
+```
+
+Payloads delivered to the service worker are `{ title, body, data }`, where `data` carries the same payload used by the existing mobile push pipeline (e.g. `{ type, conversation_id, ... }`).
+
+---
+
 ### Pre-commit Hooks
 
 - **Setup**

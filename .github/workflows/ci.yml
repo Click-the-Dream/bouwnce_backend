@@ -136,7 +136,7 @@ jobs:
 
       - name: Run tests
         env:
-          NAME: ci-test
+          PROJECT_NAME: ci-test
           SQLALCHEMY_DATABASE_URL: postgresql+asyncpg://postgres@localhost:5433/test_db
           SQLALCHEMY_DATABASE_DEV_URL: postgresql+asyncpg://postgres@localhost:5433/test_db
           FASTAPI_ENV: development

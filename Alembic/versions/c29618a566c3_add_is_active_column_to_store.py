@@ -1,7 +1,7 @@
 """add is_active column to store
 
 Revision ID: c29618a566c3
-Revises: 51428e91da4f
+Revises: 4ce3cfcf2a9c
 Create Date: 2025-10-06 14:05:56.824042
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c29618a566c3"
-down_revision: Union[str, Sequence[str], None] = "51428e91da4f"
+down_revision: Union[str, Sequence[str], None] = "4ce3cfcf2a9c"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -148,6 +148,15 @@ class Settings(BaseSettings):
     QSTASH_CURRENT_SIGNING_KEY: str = ""
     QSTASH_NEXT_SIGNING_KEY: str = ""
 
+    # =========================
+    # Web Push (VAPID)
+    # =========================
+    # Generate keys with: python -m pywebpush generate-vapid-keys
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    # mailto: contact (or https URL) shown to push service operators
+    VAPID_SUBJECT: str = ""
+
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":
         if self.SQLALCHEMY_DATABASE_URL.strip():

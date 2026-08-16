@@ -13,6 +13,7 @@ from app.api.v1 import (
     payment,
     payout_info_crud,
     product_router,
+    push,
     shipments_info_crud,
     store_crud,
     uploads,
@@ -93,5 +94,6 @@ api_router.include_router(uploads.router)
 api_router.include_router(chat.router)
 api_router.include_router(admin_bouwnce.router)
 api_router.include_router(notifications.router)
+api_router.include_router(push.router)
 api_router.include_router(event_router)
 api_router.include_router(search.router)

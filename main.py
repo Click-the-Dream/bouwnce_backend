@@ -1,12 +1,14 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, Request, status
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
@@ -167,6 +169,16 @@ async def health_check():
 
 
 app.include_router(api_router, prefix=settings.API_STR)
+
+# Web Push dev assets: service worker + demo page (localhost / backend origin).
+# Production frontends must host their own service worker on the app origin.
+STATIC_DIR = Path(__file__).parent / "app" / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/push-demo", tags=["Static"])
+async def push_demo_page() -> RedirectResponse:
+    return RedirectResponse("/static/push-demo.html")
 
 
 if __name__ == "__main__":

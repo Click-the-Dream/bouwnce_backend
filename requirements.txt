@@ -94,6 +94,7 @@ python-discovery==1.4.4
 python-dotenv==1.2.2
 python-multipart==0.0.31
 pytokens==0.4.1
+pywebpush==2.4.0
 PyYAML==6.0.3
 qstash==3.4.0
 redis==8.0.0

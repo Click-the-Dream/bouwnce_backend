@@ -63,6 +63,7 @@ mongoengine-migrate==0.0.3
 motor==3.7.1
 msgpack==1.2.1
 mypy_extensions==1.1.0
+openai==1.93.0
 packageurl-python==0.17.6
 packaging==26.2
 passlib==1.7.4

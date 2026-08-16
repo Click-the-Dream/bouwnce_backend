@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "ab80112bf8cf"
@@ -58,7 +57,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["wallet_id"], ["wallets.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.drop_table("business_info")
     with op.batch_alter_table("payouts_info", schema=None) as batch_op:
         batch_op.add_column(sa.Column("security_question", sa.String(), nullable=False))
         batch_op.add_column(sa.Column("security_answer", sa.String(), nullable=False))
@@ -109,42 +107,6 @@ def downgrade() -> None:
         batch_op.drop_column("security_answer")
         batch_op.drop_column("security_question")
 
-    op.create_table(
-        "business_info",
-        sa.Column("name", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("address", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("phone_number", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("email", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("btype", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("id", sa.UUID(), autoincrement=False, nullable=False),
-        sa.Column(
-            "created_at",
-            postgresql.TIMESTAMP(timezone=True),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            postgresql.TIMESTAMP(timezone=True),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column(
-            "deleted_at",
-            postgresql.TIMESTAMP(timezone=True),
-            autoincrement=False,
-            nullable=True,
-        ),
-        sa.Column("is_deleted", sa.BOOLEAN(), autoincrement=False, nullable=False),
-        sa.Column("store_id", sa.UUID(), autoincrement=False, nullable=False),
-        sa.ForeignKeyConstraint(
-            ["store_id"],
-            ["stores.id"],
-            name=op.f("business_info_store_id_fkey"),
-            ondelete="CASCADE",
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("business_info_pkey")),
-    )
     op.drop_table("wallet_transactions")
     op.drop_table("wallets")
     # ### end Alembic commands ###

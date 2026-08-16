@@ -300,9 +300,34 @@ class MatchLifecycleService:
         page_size: int = 10,
     ) -> dict:
         message_text = (message or "").strip()
-        radius_km = self._parse_radius_km(message_text)
-        interest_hints = await self._extract_interest_hints(session, message_text)
-        target_user_ids = await self._extract_user_hints(session, message_text)
+
+        interest_hints: list[str] = []
+        target_user_ids: set[uuid.UUID] = set()
+        radius_km: float | None = None
+
+        if message_text and settings.SEARCH_PARSER_LLM_ENABLED:
+            from app.search_parser.search_parser import CompositeQueryParser
+            from app.search_parser.service.buddy_param_mapper import (
+                map_parsed_query_to_buddy_params,
+            )
+
+            parser = CompositeQueryParser()
+            parsed = await parser.parse_with_session(
+                session=session,
+                message=message_text,
+                domain_name="buddy",
+                requester_id=requester_id,
+            )
+            if parsed is not None:
+                params = await map_parsed_query_to_buddy_params(parsed, session)
+                interest_hints = list(params.interest_hints)
+                target_user_ids = params.target_user_ids
+                radius_km = params.radius_km
+
+        if not interest_hints and message_text:
+            radius_km = self._parse_radius_km(message_text)
+            interest_hints = await self._extract_interest_hints(session, message_text)
+            target_user_ids = await self._extract_user_hints(session, message_text)
         result = await self.suggest_candidates(
             session=session,
             requester_id=requester_id,

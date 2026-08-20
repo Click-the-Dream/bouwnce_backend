@@ -26,6 +26,7 @@ from app.models.verification import Verification
 from app.models.waitlist import Waitlist
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
+from app.models.web_push_subscription import WebPushSubscription
 
 __all__ = [
     "BaseModel",
@@ -58,5 +59,6 @@ __all__ = [
     "Message",
     "DeviceToken",
     "Notification",
+    "WebPushSubscription",
     "OutingEvent",
 ]

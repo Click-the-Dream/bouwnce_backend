@@ -461,9 +461,11 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 if conv_id is None:
                     raise NotFoundException("Conversation not found")
 
-                sender_lite = await self._get_cached_user_lite(db, user_id=str(user_id))
-                # Pre-warm Redis cache for recipient
-                await User.get_chat_users_by_ids([str(payload.user_id)], db)
+                    sender_lite = await self._get_cached_user_lite(
+                        db=db, user_id=str(user_id)
+                    )
+                    # Pre-warm Redis cache for recipient
+                    await User.get_chat_users_by_ids([str(payload.user_id)], db)
                 targets = {str(user_id), str(payload.user_id)}
             except (
                 NotFoundException,

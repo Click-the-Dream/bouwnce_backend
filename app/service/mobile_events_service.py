@@ -602,8 +602,13 @@ class MobileEventsService:
         user_id: str,
         send_lock: asyncio.Lock,
     ) -> None:
+        # --- Single DB session for all bootstrap queries ---
+        system_user: User | None = None
+        partner_ids: set[str] = set()
+        me_user: User | None = None
         with contextlib.suppress(Exception):
             async with get_async_session() as db:
+                # 1. System user (lightweight, load_only already applied)
                 system_user = await bouwnce_dm_service.get_system_user(db=db)
                 if system_user is not None:
                     await self._send_json_safe(
@@ -625,22 +630,118 @@ class MobileEventsService:
                         send_lock=send_lock,
                     )
 
-        with contextlib.suppress(Exception):
-            async with get_async_session() as db:
+                # 2. Welcome conversation (reuse system_user, no extra query)
                 await bouwnce_dm_service.ensure_welcome_conversation(
-                    db=db, redis=redis, user_id=str(user_id), commit=True
+                    db=db,
+                    redis=redis,
+                    user_id=str(user_id),
+                    commit=True,
+                    system_user=system_user,
                 )
 
-        await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
-        await self._publish_presence(redis=redis, user_id=str(user_id), online=True)
+                # 3. Partner IDs + current user for presence (1 query each)
+                partner_ids = await chat_service.get_conversation_partner_ids(
+                    db=db, user_id=str(user_id)
+                )
+                users = await User.get_chat_users_by_ids([str(user_id)], db)
+                me_user = users[0] if users else None
 
-        with contextlib.suppress(Exception):
-            await self._send_presence_snapshot(
-                websocket=websocket,
+        # 4. Redis presence set
+        await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
+
+        # 5. Publish presence + send snapshot concurrently
+        publish_task = asyncio.create_task(
+            self._publish_presence_from_data(
                 redis=redis,
                 user_id=str(user_id),
+                me_user=me_user,
+                partner_ids=partner_ids,
+                online=True,
+            )
+        )
+        with contextlib.suppress(Exception):
+            await self._send_presence_snapshot_from_data(
+                websocket=websocket,
+                redis=redis,
+                partner_ids=partner_ids,
                 send_lock=send_lock,
             )
+        await publish_task
+
+    async def _publish_presence_from_data(
+        self,
+        *,
+        redis,
+        me_user: User | None,
+        partner_ids: set[str],
+        online: bool,
+    ) -> None:
+        """Publish presence using pre-fetched data (no DB session)."""
+        if me_user is None:
+            return
+
+        payload_obj = {
+            "type": "user.online",
+            "data": {
+                "user": {
+                    "id": str(me_user.id),
+                    "username": me_user.username,
+                    "full_name": me_user.full_name,
+                    "profile_pic": chat_service._serialize_profile_pic(me_user),
+                },
+                "online": online,
+            },
+        }
+        payload = json.dumps(payload_obj)
+
+        if not partner_ids:
+            return
+
+        async with redis.pipeline() as pipe:
+            for pid in partner_ids:
+                pipe.publish(f"chat:user:{pid}", payload)
+            await pipe.execute()
+
+    async def _send_presence_snapshot_from_data(
+        self,
+        *,
+        websocket: WebSocket,
+        redis,
+        partner_ids: set[str],
+        send_lock: asyncio.Lock | None = None,
+    ) -> None:
+        """Send presence snapshot using pre-fetched partner IDs (no DB session)."""
+        partner_id_list = sorted(partner_ids)
+        users_by_id: dict[str, User] = {}
+        if partner_id_list:
+            async with get_async_session() as db:
+                users = await User.get_chat_users_by_ids(partner_id_list, db)
+                users_by_id = {str(u.id): u for u in users}
+
+        keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_id_list]
+        values = await redis.mget(*keys) if keys else []
+        items: list[dict] = []
+        for pid, val in zip(partner_id_list, values, strict=False):
+            u = users_by_id.get(pid)
+            if u is None:
+                continue
+            items.append(
+                {
+                    "user": {
+                        "id": str(u.id),
+                        "username": u.username,
+                        "full_name": u.full_name,
+                        "profile_pic": chat_service._serialize_profile_pic(u),
+                    },
+                    "online": bool(val),
+                }
+            )
+        if not await self._send_json_safe(
+            websocket,
+            {"type": "user.online.snapshot", "data": {"items": items}},
+            send_lock=send_lock,
+        ):
+            return
 
     async def read_mobile_events(
         self,

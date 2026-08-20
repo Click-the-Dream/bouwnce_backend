@@ -273,15 +273,51 @@ class MobileEventsService:
         try:
             while True:
                 payload = await chat_queue.get()
+                q_time = time.monotonic()
                 if not await self._should_deliver_chat_message(
                     redis=redis, user_id=user_id, payload=payload
                 ):
+                    dedup_time = time.monotonic()
+                    msg_id = (
+                        getattr(payload, "id", "?")
+                        if hasattr(payload, "data")
+                        else (
+                            payload.get("data", {}).get("id", "?")
+                            if isinstance(payload, dict)
+                            else "?"
+                        )
+                    )
+                    print(
+                        f"[drain] dedup SKIPPED msg={msg_id} dedup={dedup_time - q_time:.3f}s",
+                        flush=True,
+                    )
                     continue
+                dedup_time = time.monotonic()
+                msg_id = (
+                    getattr(payload, "id", "?")
+                    if hasattr(payload, "data")
+                    else (
+                        payload.get("data", {}).get("id", "?")
+                        if isinstance(payload, dict)
+                        else "?"
+                    )
+                )
+                print(
+                    f"[drain] dedup PASSED msg={msg_id} dedup={dedup_time - q_time:.3f}s, sending...",
+                    flush=True,
+                )
+                send_time = time.monotonic()
                 if not await self._send_model_safe(
                     websocket, payload, send_lock=send_lock
                 ):
+                    print(f"[drain] send FAILED", flush=True)
                     return
-        except Exception:
+                print(
+                    f"[drain] send OK send={time.monotonic() - send_time:.3f}s total={time.monotonic() - q_time:.3f}s",
+                    flush=True,
+                )
+        except Exception as e:
+            print(f"[drain] EXCEPTION: {type(e).__name__}: {e}", flush=True)
             return
 
     async def _dispatch_chat_side_effects(
@@ -1001,12 +1037,16 @@ class MobileEventsService:
                     ):
                         return
                     continue
-                if str(
-                    parsed_data.get("type") or ""
-                ) == "chat.message" and not await self._should_deliver_chat_message(
-                    redis=redis, user_id=user_id, payload=parsed_data
-                ):
-                    continue
+                recv_time = time.monotonic()
+                evt_type = parsed_data.get("type", "")
+                if evt_type == "chat.message":
+                    if not await self._should_deliver_chat_message(
+                        redis=redis, user_id=user_id, payload=parsed_data
+                    ):
+                        print(f"[pubsub] dedup SKIPPED chat.message", flush=True)
+                        continue
+                    print(f"[pubsub] chat.message dedup PASSED, sending...", flush=True)
+                send_time = time.monotonic()
                 if not await self._send_json_safe(
                     websocket, parsed_data, send_lock=send_lock
                 ):
@@ -1014,6 +1054,10 @@ class MobileEventsService:
                         f"[mobile_events] pubsub send failed -> {user_id}", flush=True
                     )
                     return
+                print(
+                    f"[pubsub] sent {evt_type} dedup={send_time - recv_time:.3f}s send={time.monotonic() - send_time:.3f}s",
+                    flush=True,
+                )
         except Exception:
             return
 
@@ -1064,10 +1108,13 @@ class MobileEventsService:
                         await redis.set(
                             last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8
                         )
+                        stream_recv = time.monotonic()
                         if not await self._should_deliver_chat_message(
                             redis=redis, user_id=user_id, payload=payload_obj
                         ):
+                            print(f"[stream] dedup SKIPPED chat.message", flush=True)
                             continue
+                        dedup_done = time.monotonic()
                         if not await self._send_json_safe(
                             websocket, payload_obj, send_lock=send_lock
                         ):
@@ -1076,6 +1123,10 @@ class MobileEventsService:
                                 flush=True,
                             )
                             return
+                        print(
+                            f"[stream] sent chat.message dedup={dedup_done - stream_recv:.3f}s send={time.monotonic() - dedup_done:.3f}s",
+                            flush=True,
+                        )
         except Exception:
             return
 
@@ -1425,7 +1476,7 @@ class MobileEventsService:
                     async with get_async_session() as db:
                         try:
                             conv_id = await self._get_cached_conversation_id(
-                                db,
+                                db=db,
                                 user1_id=str(user_id),
                                 user2_id=str(payload.user_id),
                             )

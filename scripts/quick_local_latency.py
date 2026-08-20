@@ -116,26 +116,26 @@ async def main():
                     }
                 )
             )
-            print(f"[chat] sent at t=0")
+            print("[chat] sent at t=0")
 
             t1 = time.perf_counter()
-            ack = await wait_for(sws, "chat.send.ack", 30)
+            await wait_for(sws, "chat.send.ack", 30)
             print(f"[timing] send_ack={t1-t0:.3f}s")
 
             t2 = time.perf_counter()
-            sent = await wait_for(sws, "chat.sent", 30)
+            await wait_for(sws, "chat.sent", 30)
             print(f"[timing] chat.sent={t2-t1:.3f}s  total_sender={t2-t0:.3f}s")
 
             t3 = time.perf_counter()
-            msg = await wait_for(rws, "chat.message", 30)
+            await wait_for(rws, "chat.message", 30)
             print(f"[timing] recipient_delivery={t3-t2:.3f}s  total_e2e={t3-t0:.3f}s")
 
-            print(f"\n[SUMMARY]")
+            print("\n[SUMMARY]")
             print(f"  send → ack:       {t1-t0:.3f}s")
             print(f"  ack → sent:       {t2-t1:.3f}s")
             print(f"  sent → recipient: {t3-t2:.3f}s")
             print(f"  total e2e:        {t3-t0:.3f}s")
-            print(f"  ✅ Done!")
+            print("  ✅ Done!")
 
 
 if __name__ == "__main__":

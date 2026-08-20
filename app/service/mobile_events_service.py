@@ -606,7 +606,7 @@ class MobileEventsService:
         system_user: User | None = None
         partner_ids: set[str] = set()
         me_user: User | None = None
-        with contextlib.suppress(Exception):
+        try:
             async with get_async_session() as db:
                 # 1. System user (lightweight, load_only already applied)
                 system_user = await bouwnce_dm_service.get_system_user(db=db)
@@ -645,11 +645,13 @@ class MobileEventsService:
                 )
                 users = await User.get_chat_users_by_ids([str(user_id)], db)
                 me_user = users[0] if users else None
+        except Exception as e:
+            print(f"[bootstrap] DB phase failed: {type(e).__name__}: {e}", flush=True)
 
         # 4. Redis presence set
         await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
 
-        # 5. Publish presence + send snapshot concurrently
+        # 5. Publish presence using pre-fetched data (no DB session needed)
         publish_task = asyncio.create_task(
             self._publish_presence_from_data(
                 redis=redis,
@@ -659,14 +661,17 @@ class MobileEventsService:
                 online=True,
             )
         )
+
+        # 6. Send presence snapshot
         with contextlib.suppress(Exception):
-            await self._send_presence_snapshot_from_data(
+            await self._send_presence_snapshot(
                 websocket=websocket,
                 redis=redis,
-                partner_ids=partner_ids,
+                user_id=str(user_id),
                 send_lock=send_lock,
             )
-        await publish_task
+        with contextlib.suppress(Exception):
+            await publish_task
 
     async def _publish_presence_from_data(
         self,
@@ -710,7 +715,7 @@ class MobileEventsService:
         partner_ids: set[str],
         send_lock: asyncio.Lock | None = None,
     ) -> None:
-        """Send presence snapshot using pre-fetched partner IDs (no DB session)."""
+        """Send presence snapshot using pre-fetched partner IDs."""
         partner_id_list = sorted(partner_ids)
         users_by_id: dict[str, User] = {}
         if partner_id_list:

@@ -119,6 +119,7 @@ class User(BaseModel):
             .options(
                 load_only(
                     cls.id,
+                    cls.email,
                     cls.username,
                     cls.full_name,
                     cls.profile_pic,

@@ -51,6 +51,7 @@ from app.models.user import User
 from app.utils.exception import (
     BadRequestException,
     ForbiddenException,
+    InternalServerErrorException,
     NotFoundException,
 )
 from app.worker.event_system import (
@@ -814,7 +815,7 @@ class MobileEventsService:
                 pipe.publish(f"chat:user:{user_id}", payload)
                 await pipe.execute()
         except Exception:
-            pass
+            return
 
     async def _presence_heartbeat(self, *, redis, user_id: str) -> None:
         try:
@@ -1361,8 +1362,10 @@ class MobileEventsService:
                                     event_payload.model_dump_json(),
                                 )
                             await pipe.execute()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        raise InternalServerErrorException(
+                            "Failed to publish typing event"
+                        ) from e
 
                     continue
         finally:

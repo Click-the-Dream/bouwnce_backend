@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
@@ -10,6 +11,28 @@ from sqlalchemy.orm import Mapped, load_only, mapped_column, relationship
 from app.core.security import genrate_verification_code
 from app.models import BaseModel
 from app.models.wallet import UserWallet
+from app.utils.user_cache import (
+    get_cached_user,
+    invalidate_cached_user,
+    set_cached_user,
+)
+
+
+@dataclass
+class ChatUser:
+    """Lightweight user object for chat — no SQLAlchemy state.
+
+    Used for Redis-cached user data. Has the same attributes that the
+    chat system reads from User (id, email, username, full_name, profile_pic)
+    but without the ORM overhead.
+    """
+
+    id: str = ""
+    email: str = ""
+    username: str | None = None
+    full_name: str | None = None
+    profile_pic: dict | None = None
+
 
 if TYPE_CHECKING:
     from app.event_broadcast.models.events import OutingEvent
@@ -106,28 +129,59 @@ class User(BaseModel):
     async def get_chat_users_by_ids(
         cls, ids: list[str], db: AsyncSession
     ) -> list[User]:
-        """Fetch users with only chat-relevant columns (no relationships).
+        """Fetch users for chat — Redis cache first, DB fallback.
 
-        This avoids loading stores, orders, carts, payments, etc. that the
-        default eager-loading strategy would pull in.
+        User chat data (id, email, username, full_name, profile_pic) changes
+        rarely. Caching in Redis eliminates the DB round-trip on the hot path.
         """
         if not ids:
             return []
-        stmt = (
-            select(cls)
-            .where(cls.id.in_(ids))
-            .options(
-                load_only(
-                    cls.id,
-                    cls.email,
-                    cls.username,
-                    cls.full_name,
-                    cls.profile_pic,
+
+        unique_ids = list(set(str(uid) for uid in ids))
+        users: list[User] = []
+        uncached_ids: list[str] = []
+
+        # 1. Check Redis cache
+        for uid in unique_ids:
+            cached = await get_cached_user(uid)
+            if cached is not None:
+                users.append(ChatUser(**cached))
+            else:
+                uncached_ids.append(uid)
+
+        # 2. Fetch uncached users from DB
+        if uncached_ids:
+            stmt = (
+                select(cls)
+                .where(cls.id.in_(uncached_ids))
+                .options(
+                    load_only(
+                        cls.id,
+                        cls.email,
+                        cls.username,
+                        cls.full_name,
+                        cls.profile_pic,
+                    )
                 )
             )
-        )
-        result = await db.execute(stmt)
-        return list(result.scalars().all())
+            result = await db.execute(stmt)
+            db_users = list(result.scalars().all())
+
+            # 3. Populate cache for DB results
+            for u in db_users:
+                users.append(u)
+                await set_cached_user(
+                    str(u.id),
+                    {
+                        "id": str(u.id),
+                        "email": u.email or "",
+                        "username": u.username,
+                        "full_name": u.full_name,
+                        "profile_pic": u.profile_pic,
+                    },
+                )
+
+        return users
 
     @classmethod
     async def get_by_email(cls, email: str, db: AsyncSession) -> Self | None:

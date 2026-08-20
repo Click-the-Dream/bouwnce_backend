@@ -15,6 +15,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,15 +68,23 @@ class Conversation(BaseModel):
     async def get_or_create_between(
         cls, db: AsyncSession, user1_id: UUID_Type, user2_id: UUID_Type
     ) -> Self:
-        existing = await cls.get_between(db, user1_id, user2_id)
-        if existing is not None:
-            return existing
+        """Single-query upsert: INSERT ... ON CONFLICT DO UPDATE RETURNING *.
+
+        Reduces 3 roundtrips (SELECT + INSERT + REFRESH) to 1.
+        """
         a_id, b_id = cls.normalize_user_pair(user1_id, user2_id)
-        row = cls(user_a_id=a_id, user_b_id=b_id)
-        db.add(row)
-        await db.flush()
-        await db.refresh(row)
-        return row
+        now = func.now()
+        stmt = (
+            pg_insert(cls)
+            .values(user_a_id=a_id, user_b_id=b_id)
+            .on_conflict_do_update(
+                constraint="uix_conversation_users",
+                set_={"last_message_at": now},
+            )
+            .returning(cls)
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one()
 
 
 class Message(BaseModel):

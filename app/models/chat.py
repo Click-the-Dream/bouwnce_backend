@@ -38,8 +38,8 @@ class Conversation(BaseModel):
         DateTime(timezone=True), default=func.now(), nullable=False
     )
 
-    user_a: Mapped[User] = relationship(foreign_keys=[user_a_id], lazy="joined")
-    user_b: Mapped[User] = relationship(foreign_keys=[user_b_id], lazy="joined")
+    user_a: Mapped[User] = relationship(foreign_keys=[user_a_id], lazy="noload")
+    user_b: Mapped[User] = relationship(foreign_keys=[user_b_id], lazy="noload")
 
     __table_args__ = (
         UniqueConstraint("user_a_id", "user_b_id", name="uix_conversation_users"),
@@ -114,7 +114,7 @@ class Message(BaseModel):
         nullable=True,
     )
 
-    conversation: Mapped[Conversation] = relationship(lazy="joined")
+    conversation: Mapped[Conversation] = relationship(lazy="noload")
 
     __table_args__ = (
         # Speeds up `ORDER BY created_at DESC` per-conversation message pages.

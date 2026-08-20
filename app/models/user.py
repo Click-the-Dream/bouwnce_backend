@@ -4,8 +4,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
 from sqlalchemy import JSON, Boolean, DateTime, Enum, String, or_, select, text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Load, Mapped, load_only, mapped_column, relationship
 
 from app.core.security import genrate_verification_code
 from app.models import BaseModel
@@ -101,6 +102,32 @@ class User(BaseModel):
         data_dict = super().to_dict()
 
         return data_dict
+
+    @classmethod
+    async def get_chat_users_by_ids(
+        cls, ids: list[str], db: AsyncSession
+    ) -> "list[User]":
+        """Fetch users with only chat-relevant columns (no relationships).
+
+        This avoids loading stores, orders, carts, payments, etc. that the
+        default eager-loading strategy would pull in.
+        """
+        if not ids:
+            return []
+        stmt = (
+            select(cls)
+            .where(cls.id.in_(ids))
+            .options(
+                load_only(
+                    cls.id,
+                    cls.username,
+                    cls.full_name,
+                    cls.profile_pic,
+                )
+            )
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
     @classmethod
     async def get_by_email(cls, email: str, db: AsyncSession) -> Self | None:

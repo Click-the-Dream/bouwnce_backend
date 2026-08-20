@@ -247,7 +247,10 @@ class MobileEventsService:
         cached = _TYPING_USER_CACHE.get(user_id)
         if cached is not None and cached[1] > now:
             return cached[0]
-        user = await User.get_by_id(str(user_id), db)
+        users = await User.get_chat_users_by_ids([str(user_id)], db)
+        if not users:
+            return ChatUserLite(id=uuid.UUID(str(user_id)))
+        user = users[0]
         lite = ChatUserLite(
             id=user.id,
             username=user.username,
@@ -453,7 +456,10 @@ class MobileEventsService:
     ) -> None:
         try:
             async with get_async_session() as db:
-                sender = await User.get_by_id(str(sender_id), db)
+                sender_users = await User.get_chat_users_by_ids([str(sender_id)], db)
+                if not sender_users:
+                    raise NotFoundException("Sender not found")
+                sender = sender_users[0]
                 result = await chat_service.send_message(
                     db=db,
                     redis=redis,
@@ -524,7 +530,10 @@ class MobileEventsService:
     ) -> None:
         try:
             async with get_async_session() as db:
-                sender = await User.get_by_id(str(sender_id), db)
+                sender_users = await User.get_chat_users_by_ids([str(sender_id)], db)
+                if not sender_users:
+                    raise NotFoundException("Sender not found")
+                sender = sender_users[0]
                 result = await chat_service.send_media_message(
                     db=db,
                     redis=redis,
@@ -733,10 +742,17 @@ class MobileEventsService:
         )
         notif_rows = list((await db.execute(notif_list_stmt)).scalars().all())
 
+        # Batch-load lightweight users for all conversations.
+        users_by_id: dict[str, User] = {}
+        if conversations:
+            users_by_id = await chat_service._load_users_for_conversations(
+                db, conversations
+            )
+
         conv_items: list[dict] = []
         for conv in conversations:
             conv_data = chat_service._serialize_conversation(
-                conv, current_user_id=user_id
+                conv, current_user_id=user_id, users_by_id=users_by_id
             )
             last = last_by_conversation_id.get(str(conv.id))
             conv_data["last_message"] = last.to_dict() if last is not None else False
@@ -759,7 +775,10 @@ class MobileEventsService:
             partner_ids = await chat_service.get_conversation_partner_ids(
                 db=db, user_id=str(user_id)
             )
-            me = await User.get_by_id(str(user_id), db)
+            users = await User.get_chat_users_by_ids([str(user_id)], db)
+            me = users[0] if users else None
+            if me is None:
+                return
 
         payload_obj = {
             "type": "user.online",
@@ -821,10 +840,8 @@ class MobileEventsService:
             partner_id_list = sorted({str(pid) for pid in partner_ids})
             users_by_id: dict[str, User] = {}
             if partner_id_list:
-                users_result = await db.execute(
-                    select(User).where(User.id.in_(partner_id_list))
-                )
-                users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+                users = await User.get_chat_users_by_ids(partner_id_list, db)
+                users_by_id = {str(u.id): u for u in users}
 
         keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_id_list]
         values = await redis.mget(*keys) if keys else []

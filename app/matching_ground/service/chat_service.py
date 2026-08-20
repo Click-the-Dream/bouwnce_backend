@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import status
-from sqlalchemy import desc, func, select, update
+from sqlalchemy import desc, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CHAT_EVENTS_STREAM_KEY_PREFIX, settings
@@ -61,9 +61,17 @@ class ChatService:
         }
 
     @staticmethod
-    def _serialize_conversation(conv: Conversation, *, current_user_id: str) -> dict:
+    def _serialize_conversation(
+        conv: Conversation,
+        *,
+        current_user_id: str,
+        users_by_id: dict | None = None,
+    ) -> dict:
         """
         API-safe conversation dict including the other participant's identity.
+
+        ``users_by_id`` is an optional pre-fetched lookup so we avoid the
+        expensive ``lazy="joined"`` cascade that User's relationships cause.
         """
         base = {
             "id": str(conv.id),
@@ -79,7 +87,15 @@ class ChatService:
         }
 
         current_id = str(current_user_id)
-        other = conv.user_b if current_id == str(conv.user_a_id) else conv.user_a
+        other_id = (
+            str(conv.user_b_id)
+            if current_id == str(conv.user_a_id)
+            else str(conv.user_a_id)
+        )
+        if users_by_id is not None:
+            other = users_by_id.get(other_id)
+        else:
+            other = conv.user_b if current_id == str(conv.user_a_id) else conv.user_a
         base["user"] = {
             "id": str(other.id),
             "username": other.username,
@@ -87,6 +103,32 @@ class ChatService:
             "profile_pic": ChatService._serialize_profile_pic(other),
         }
         return base
+
+    @staticmethod
+    async def _load_users_for_conversations(
+        db: AsyncSession, conversations: list[Conversation]
+    ) -> dict[str, User]:
+        """Batch-load lightweight users referenced by *conversations*.
+
+        Returns a ``{user_id_str: User}`` lookup dict.
+        """
+        user_ids: set[str] = set()
+        for conv in conversations:
+            user_ids.add(str(conv.user_a_id))
+            user_ids.add(str(conv.user_b_id))
+        if not user_ids:
+            return {}
+        users = await User.get_chat_users_by_ids(list(user_ids), db)
+        return {str(u.id): u for u in users}
+
+    @staticmethod
+    async def _load_two_conversation_users(
+        db: AsyncSession, conv: Conversation
+    ) -> dict[str, User]:
+        """Load only the two participants for a single conversation."""
+        user_ids = [str(conv.user_a_id), str(conv.user_b_id)]
+        users = await User.get_chat_users_by_ids(user_ids, db)
+        return {str(u.id): u for u in users}
 
     def _build_chat_message_data(
         self,
@@ -200,11 +242,19 @@ class ChatService:
                 )
             ).scalar_one_or_none()
             if reply_row is not None:
-                reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
-                reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
+                reply_user_ids = [
+                    str(reply_row.sender_id),
+                    str(reply_row.recipient_id),
+                ]
+                reply_users = await User.get_chat_users_by_ids(reply_user_ids, db)
+                reply_users_map = {str(u.id): u for u in reply_users}
                 reply_payload = reply_row.to_dict()
-                reply_payload["sender"] = self._serialize_user(reply_sender)
-                reply_payload["recipient"] = self._serialize_user(reply_recipient)
+                reply_payload["sender"] = self._serialize_user(
+                    reply_users_map[str(reply_row.sender_id)]
+                )
+                reply_payload["recipient"] = self._serialize_user(
+                    reply_users_map[str(reply_row.recipient_id)]
+                )
                 reply_payload.pop("reply_to_message_id", None)
                 reply_payload.pop("reply_to_message", None)
                 reply_obj = reply_payload
@@ -378,11 +428,19 @@ class ChatService:
                 )
             ).scalar_one_or_none()
             if reply_row is not None:
-                reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
-                reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
+                reply_user_ids = [
+                    str(reply_row.sender_id),
+                    str(reply_row.recipient_id),
+                ]
+                reply_users = await User.get_chat_users_by_ids(reply_user_ids, db)
+                reply_users_map = {str(u.id): u for u in reply_users}
                 reply_payload = reply_row.to_dict()
-                reply_payload["sender"] = self._serialize_user(reply_sender)
-                reply_payload["recipient"] = self._serialize_user(reply_recipient)
+                reply_payload["sender"] = self._serialize_user(
+                    reply_users_map[str(reply_row.sender_id)]
+                )
+                reply_payload["recipient"] = self._serialize_user(
+                    reply_users_map[str(reply_row.recipient_id)]
+                )
                 reply_payload.pop("reply_to_message_id", None)
                 reply_payload.pop("reply_to_message", None)
                 reply_obj = reply_payload
@@ -506,6 +564,10 @@ class ChatService:
                 str(conv_id): int(count or 0) for conv_id, count in unread_result.all()
             }
 
+        # Batch-load lightweight users for all conversations (avoids N+1
+        # and the expensive eager-loading cascade on the User model).
+        users_by_id = await self._load_users_for_conversations(db, rows)
+
         data = {
             "items": [],
             "page": page,
@@ -514,7 +576,9 @@ class ChatService:
         }
 
         for conv in rows:
-            conv_data = self._serialize_conversation(conv, current_user_id=user_id)
+            conv_data = self._serialize_conversation(
+                conv, current_user_id=user_id, users_by_id=users_by_id
+            )
             last = last_by_conversation_id.get(str(conv.id))
             conv_data["last_message"] = last.to_dict() if last is not None else False
             conv_data["unread_count"] = unread_by_conversation_id.get(str(conv.id), 0)
@@ -604,10 +668,8 @@ class ChatService:
 
         users_by_id: dict[str, User] = {}
         if user_ids:
-            users_result = await db.execute(
-                select(User).where(User.id.in_(list(user_ids)))
-            )
-            users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+            users = await User.get_chat_users_by_ids(list(user_ids), db)
+            users_by_id = {str(u.id): u for u in users}
 
         items: list[dict] = []
         for m in msgs:
@@ -655,9 +717,10 @@ class ChatService:
         current_id = str(current_user_id)
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise NotFoundException("Conversation not found")
+        users_by_id = await self._load_two_conversation_users(db, conv)
         data: dict = {
             "conversation": self._serialize_conversation(
-                conv, current_user_id=current_user_id
+                conv, current_user_id=current_user_id, users_by_id=users_by_id
             )
         }
         if include_messages:
@@ -693,9 +756,10 @@ class ChatService:
         conv = await self.get_or_create_conversation(
             db=db, user1_id=str(current_user_id), user2_id=str(user_id)
         )
+        users_by_id = await self._load_two_conversation_users(db, conv)
         data: dict = {
             "conversation": self._serialize_conversation(
-                conv, current_user_id=current_user_id
+                conv, current_user_id=current_user_id, users_by_id=users_by_id
             )
         }
         if include_messages:
@@ -734,6 +798,9 @@ class ChatService:
             raise ForbiddenException("You cannot access this conversation")
 
         read_at = datetime.now(UTC)
+        # Single query: UPDATE all unread messages and return the count of
+        # updated rows.  After the UPDATE there are no remaining unread rows
+        # in the filtered set, so ``read`` is always True when updated > 0.
         stmt = (
             update(Message)
             .where(
@@ -742,25 +809,15 @@ class ChatService:
                 Message.read_at.is_(None),
             )
             .values(read_at=read_at)
+            .returning(text("1"))
         )
         result = await db.execute(stmt)
-        updated = int(result.rowcount or 0)
-
-        unread_stmt = (
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_user_id,
-                Message.read_at.is_(None),
-            )
-        )
-        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
+        updated = len(result.all())
 
         data = {
             "conversation_id": str(conv.id),
             "reader_id": str(current_user_id),
-            "read": unread_remaining == 0,
+            "read": True,
             "updated": updated,
         }
 
@@ -769,7 +826,7 @@ class ChatService:
                 data=ChatReadUpdatedData(
                     conversation_id=str(conv.id),
                     reader_id=current_user_id,
-                    read=unread_remaining == 0,
+                    read=True,
                     updated=updated,
                 )
             ).model_dump_json()
@@ -819,25 +876,15 @@ class ChatService:
                 Message.read_at.is_(None),
             )
             .values(read_at=read_at)
+            .returning(text("1"))
         )
         result = await db.execute(stmt)
-        updated = int(result.rowcount or 0)
-
-        unread_stmt = (
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-        )
-        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
+        updated = len(result.all())
 
         data = {
             "conversation_id": str(conv.id),
             "message_id": str(target.id),
-            "read": unread_remaining == 0,
+            "read": True,
             "updated": updated,
         }
 
@@ -847,7 +894,7 @@ class ChatService:
                     conversation_id=str(conv.id),
                     message_id=str(target.id),
                     reader_id=current_id,
-                    read=unread_remaining == 0,
+                    read=True,
                     updated=updated,
                 )
             ).model_dump_json()
@@ -940,25 +987,15 @@ class ChatService:
                 Message.read_at.is_(None),
             )
             .values(read_at=read_at)
+            .returning(text("1"))
         )
         result = await db.execute(stmt)
-        updated = int(result.rowcount or 0)
-
-        unread_stmt = (
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-        )
-        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
+        updated = len(result.all())
 
         data = {
             "conversation_id": str(conv.id),
             "message_id": str(target.id),
-            "read": unread_remaining == 0,
+            "read": True,
             "updated": updated,
         }
 
@@ -968,7 +1005,7 @@ class ChatService:
                     conversation_id=str(conv.id),
                     message_id=str(target.id),
                     reader_id=current_id,
-                    read=unread_remaining == 0,
+                    read=True,
                     updated=updated,
                 )
             ).model_dump_json()

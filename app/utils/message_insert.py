@@ -9,10 +9,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.models.chat import Conversation, Message
+from app.models.chat import Message
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

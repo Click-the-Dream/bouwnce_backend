@@ -9,10 +9,6 @@ This file stays ~600 lines: send_message, send_media_message, list, get, partner
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
-
-from Backend.app.utils.chat_utils import ChatSerializers
 from fastapi import status
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +18,7 @@ from app.matching_ground.model.notification import Notification
 from app.matching_ground.service.chat_read import ChatReadOps
 from app.models.chat import Conversation, Message
 from app.models.user import User
+from app.utils.chat_utils import ChatSerializers
 from app.utils.exception import ForbiddenException, NotFoundException
 from app.utils.message_insert import insert_message
 from app.utils.responses import response_builder

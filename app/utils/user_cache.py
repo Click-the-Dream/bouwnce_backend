@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import logging
 from collections import OrderedDict
-from typing import Any
 
 from app.db.redis import get_redis_client
+from app.utils.exception import InternalServerErrorException
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,8 @@ async def get_cached_user(user_id: str) -> dict | None:
             _local_cache[user_id] = data
             _evict_local_if_needed()
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        raise InternalServerErrorException("Failed to retrieve cached user data") from e
     return None
 
 
@@ -57,8 +57,8 @@ async def set_cached_user(user_id: str, data: dict) -> None:
     try:
         redis = await get_redis_client()
         await redis.set(f"{CACHE_PREFIX}{user_id}", json.dumps(data), ex=CACHE_TTL)
-    except Exception:
-        pass
+    except Exception as e:
+        raise InternalServerErrorException("Failed to store cached user data") from e
 
 
 async def invalidate_cached_user(user_id: str) -> None:
@@ -67,8 +67,10 @@ async def invalidate_cached_user(user_id: str) -> None:
     try:
         redis = await get_redis_client()
         await redis.delete(f"{CACHE_PREFIX}{user_id}")
-    except Exception:
-        pass
+    except Exception as e:
+        raise InternalServerErrorException(
+            "Failed to invalidate cached user data"
+        ) from e
 
 
 async def invalidate_cached_users(user_ids: list[str]) -> None:
@@ -82,8 +84,10 @@ async def invalidate_cached_users(user_ids: list[str]) -> None:
         keys = [f"{CACHE_PREFIX}{uid}" for uid in user_ids if uid]
         if keys:
             await redis.delete(*keys)
-    except Exception:
-        pass
+    except Exception as e:
+        raise InternalServerErrorException(
+            "Failed to invalidate cached user data"
+        ) from e
 
 
 def _evict_local_if_needed() -> None:

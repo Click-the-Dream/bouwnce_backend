@@ -18,14 +18,12 @@ from app.core.config import (
     PAYMENT_PROGRESS_KEY_PREFIX,
 )
 from app.db.postgres_db_conn import get_async_session
-from app.matching_ground.schema.chat import ChatMessageEvent, ChatUserLite
 from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
 from app.matching_ground.service.chat_service import chat_service
 from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.service.ws_chat import (
     ACTIVE_CHAT_CONNECTIONS,
-    ChatDelivery,
 )
 from app.utils.exception import NotFoundException
 

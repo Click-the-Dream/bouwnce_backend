@@ -21,13 +21,10 @@ from app.matching_ground.model.notification import Notification
 from app.matching_ground.schema.chat import (
     ChatMessageData,
     ChatMessageEvent,
-    ChatSendAckData,
-    ChatSendAckEvent,
     ChatSentData,
     ChatSentEvent,
     ChatUserLite,
 )
-from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
 from app.matching_ground.service.chat_service import chat_service
 from app.models.chat import Conversation
 from app.models.user import User

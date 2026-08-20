@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
@@ -13,7 +13,6 @@ from app.models import BaseModel
 from app.models.wallet import UserWallet
 from app.utils.user_cache import (
     get_cached_user,
-    invalidate_cached_user,
     set_cached_user,
 )
 

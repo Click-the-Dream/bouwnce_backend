@@ -43,7 +43,6 @@ from app.models.user import User
 from app.service.ws_chat import ACTIVE_CHAT_CONNECTIONS, ChatDelivery  # noqa: F401
 from app.service.ws_presence import (
     PRESENCE_KEY_PREFIX,
-    PRESENCE_TTL_SECONDS,
     PresenceManager,
 )
 from app.utils.exception import (
@@ -246,7 +245,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
         try:
             payload = SendMessagePayload.model_validate(incoming)
         except Exception:
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {
                     "type": "error",
@@ -254,9 +253,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     "message": "Expected: {type:'chat.send', recipient_id:'<uuid>', body:'...'}",
                 },
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         if not await self._send_model_safe(
             websocket,
@@ -296,7 +293,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
         try:
             payload = UploadMediaPayload.model_validate(incoming)
         except Exception:
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {
                     "type": "error",
@@ -304,38 +301,30 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_type:'image|video|file', media_urls:['https://...'], body?:'...'}",
                 },
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         if str(payload.recipient_id) == str(user_id):
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {"type": "error", "error": "self_send_not_allowed"},
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         media_type = (payload.media_type or "").strip().lower()
         if media_type not in {"image", "video", "file"}:
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {"type": "error", "error": "invalid_media_type"},
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         urls = [u for u in (payload.media_urls or []) if u]
         if not urls:
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {"type": "error", "error": "missing_media_urls"},
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         if not await self._send_model_safe(
             websocket,
@@ -351,13 +340,11 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             return False
 
         if any(not self._is_cloudinary_secure_url(u) for u in urls):
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {"type": "error", "error": "invalid_media_urls"},
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         asyncio.create_task(
             self._process_chat_upload_media_request(
@@ -387,7 +374,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
         try:
             payload = MarkConversationReadPayload.model_validate(incoming)
         except Exception:
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {
                     "type": "error",
@@ -395,9 +382,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', mark_all?:true|false, message_id?:'<uuid>'}",
                 },
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         async with get_async_session() as db:
             try:
@@ -436,25 +421,17 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 ForbiddenException,
                 BadRequestException,
             ) as e:
-                if not await self._send_json_safe(
+                return await self._send_json_safe(
                     websocket,
-                    {
-                        "type": "error",
-                        "error": "chat.read.failed",
-                        "message": str(e),
-                    },
+                    {"type": "error", "error": "chat.read.failed", "message": str(e)},
                     send_lock=send_lock,
-                ):
-                    return False
-                return True
+                )
 
-        if not await self._send_model_safe(
+        return await self._send_model_safe(
             websocket,
             ChatReadAckEvent(data=ChatReadAckData.model_validate(result)),
             send_lock=send_lock,
-        ):
-            return False
-        return True
+        )
 
     async def _handle_chat_typing(
         self, websocket: WebSocket, send_lock, redis, user_id: str, incoming: dict
@@ -464,7 +441,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
         try:
             payload = TypingPayload.model_validate(incoming)
         except Exception:
-            if not await self._send_json_safe(
+            return await self._send_json_safe(
                 websocket,
                 {
                     "type": "error",
@@ -472,9 +449,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     "message": "Expected: {type:'chat.typing', user_id:'<uuid>', is_typing:true|false}",
                 },
                 send_lock=send_lock,
-            ):
-                return False
-            return True
+            )
 
         async with get_async_session() as db:
             try:
@@ -495,17 +470,11 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 ForbiddenException,
                 BadRequestException,
             ) as e:
-                if not await self._send_json_safe(
+                return await self._send_json_safe(
                     websocket,
-                    {
-                        "type": "error",
-                        "error": "chat.typing.failed",
-                        "message": str(e),
-                    },
+                    {"type": "error", "error": "chat.typing.failed", "message": str(e)},
                     send_lock=send_lock,
-                ):
-                    return False
-                return True
+                )
 
         event_payload = ChatTypingEvent(
             data=ChatTypingData(

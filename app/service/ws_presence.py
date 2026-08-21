@@ -362,6 +362,13 @@ class PresenceManager:
                         if isinstance(payload_raw, (bytes, bytearray)):
                             payload_raw = payload_raw.decode()
                         if str(event_type or "") != "chat.message" or not payload_raw:
+                            # Non-chat event — safe to advance cursor
+                            last_id = msg_id
+                            await redis.set(
+                                last_id_key,
+                                last_id,
+                                ex=PRESENCE_TTL_SECONDS * 8,
+                            )
                             continue
                         payload_obj = None
                         try:
@@ -369,18 +376,40 @@ class PresenceManager:
                         except Exception:
                             payload_obj = None
                         if payload_obj is None:
+                            last_id = msg_id
+                            await redis.set(
+                                last_id_key,
+                                last_id,
+                                ex=PRESENCE_TTL_SECONDS * 8,
+                            )
                             continue
-                        last_id = msg_id
-                        await redis.set(
-                            last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8
-                        )
+                        # Dedup check: if already delivered by queue path,
+                        # advance cursor and skip.
                         if not await self._should_deliver_chat_message(
-                            redis=redis, user_id=user_id, payload=payload_obj
+                            redis=redis,
+                            user_id=user_id,
+                            payload=payload_obj,
                         ):
+                            last_id = msg_id
+                            await redis.set(
+                                last_id_key,
+                                last_id,
+                                ex=PRESENCE_TTL_SECONDS * 8,
+                            )
                             continue
-                        if not await self._send_json_safe(
+                        # Try to send — only advance cursor on success
+                        if await self._send_json_safe(
                             websocket, payload_obj, send_lock=send_lock
                         ):
+                            last_id = msg_id
+                            await redis.set(
+                                last_id_key,
+                                last_id,
+                                ex=PRESENCE_TTL_SECONDS * 8,
+                            )
+                        else:
+                            # Send failed — do NOT advance cursor.
+                            # Next xread will retry this message.
                             return
         except Exception:
             return

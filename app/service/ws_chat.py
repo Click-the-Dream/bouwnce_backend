@@ -137,13 +137,11 @@ class ChatDelivery:
     # ------------------------------------------------------------------
     # Delivery dedup
     # ------------------------------------------------------------------
-    async def _should_deliver_chat_message(
-        self,
-        *,
-        redis,
-        user_id: str,
-        payload: ChatMessageEvent | dict,
-    ) -> bool:
+    @staticmethod
+    def _extract_dedup_key(
+        user_id: str, payload: ChatMessageEvent | dict
+    ) -> tuple[str, str] | None:
+        """Return (delivered_key, message_id) or None if not a chat message."""
         if isinstance(payload, ChatMessageEvent):
             data = payload.data
             recipient_id = str(data.recipient_id)
@@ -151,15 +149,32 @@ class ChatDelivery:
         else:
             data = payload.get("data") if isinstance(payload, dict) else None
             if not isinstance(data, dict):
-                return False
+                return None
             recipient_id = str(data.get("recipient_id") or "")
             message_id = str(data.get("id") or "").strip()
 
-        if recipient_id != str(user_id):
+        if recipient_id != str(user_id) or not message_id:
+            return None
+        return (f"{CHAT_DELIVERED_KEY_PREFIX}{user_id}:{message_id}", message_id)
+
+    @staticmethod
+    async def _invalidate_chat_delivery(*, redis, delivered_key: str) -> None:
+        """Remove dedup keys so other delivery paths can retry."""
+        ACTIVE_CHAT_LOCAL_DELIVERIES.pop(delivered_key, None)
+        with contextlib.suppress(Exception):
+            await redis.delete(delivered_key)
+
+    async def _should_deliver_chat_message(
+        self,
+        *,
+        redis,
+        user_id: str,
+        payload: ChatMessageEvent | dict,
+    ) -> bool:
+        key = self._extract_dedup_key(user_id, payload)
+        if key is None:
             return False
-        if not message_id:
-            return False
-        delivered_key = f"{CHAT_DELIVERED_KEY_PREFIX}{user_id}:{message_id}"
+        delivered_key, _ = key
         if not self._claim_local_chat_delivery(delivered_key):
             return False
         with contextlib.suppress(Exception):
@@ -228,14 +243,33 @@ class ChatDelivery:
         try:
             while True:
                 payload = await chat_queue.get()
-                if not await self._should_deliver_chat_message(
-                    redis=redis, user_id=user_id, payload=payload
-                ):
-                    continue
-                if not await self._send_model_safe(
-                    websocket, payload, send_lock=send_lock
-                ):
-                    return
+                # Claim dedup only AFTER we confirm we can deliver.
+                # If we claim before sending and the send fails, pubsub/stream
+                # will see the dedup key and skip the message → lost forever.
+                delivered_key_pair = self._extract_dedup_key(user_id, payload)
+                if delivered_key_pair is not None:
+                    dk, _ = delivered_key_pair
+                    if not self._claim_local_chat_delivery(dk):
+                        continue  # already delivered by another path
+                if await self._send_model_safe(websocket, payload, send_lock=send_lock):
+                    # Delivery succeeded — now persist the dedup key so
+                    # pubsub/stream don't re-deliver.
+                    if delivered_key_pair is not None:
+                        dk, _ = delivered_key_pair
+                        with contextlib.suppress(Exception):
+                            await redis.set(dk, "1", ex=75 * 48, nx=True)
+                else:
+                    # Send failed — invalidate dedup so other paths can retry.
+                    if delivered_key_pair is not None:
+                        dk, _ = delivered_key_pair
+                        await self._invalidate_chat_delivery(
+                            redis=redis, delivered_key=dk
+                        )
+                    await asyncio.sleep(0.5)  # back-off before retry
+                    await chat_queue.put(payload)  # put back for retry
+                    return  # connection is dead, stop trying
+        except asyncio.CancelledError:
+            return
         except Exception:
             return
 

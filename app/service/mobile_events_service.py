@@ -157,55 +157,63 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     ConnectionClosedOK,
                 ):
                     break
-                incoming = None
-                with contextlib.suppress(Exception):
-                    incoming = json.loads(raw)
-                if incoming is None:
-                    continue
 
-                msg_type = str(incoming.get("type") or "").strip().lower()
-                if not msg_type:
-                    continue
+                try:
+                    incoming = None
+                    with contextlib.suppress(Exception):
+                        incoming = json.loads(raw)
+                    if incoming is None:
+                        continue
 
-                # ---- ping ----
-                if msg_type == "ping":
-                    if not await self._send_model_safe(
-                        websocket, PongEvent(), send_lock=send_lock
-                    ):
-                        break
-                    continue
+                    msg_type = str(incoming.get("type") or "").strip().lower()
+                    if not msg_type:
+                        continue
 
-                # ---- chat.send ----
-                if msg_type == "chat.send":
-                    if not await self._handle_chat_send(
-                        websocket, send_lock, redis, user_id, incoming
-                    ):
-                        break
-                    continue
+                    # ---- ping ----
+                    if msg_type == "ping":
+                        if not await self._send_model_safe(
+                            websocket, PongEvent(), send_lock=send_lock
+                        ):
+                            break
+                        continue
 
-                # ---- chat.upload_media ----
-                if msg_type == "chat.upload_media":
-                    if not await self._handle_chat_upload_media(
-                        websocket, send_lock, redis, user_id, incoming
-                    ):
-                        break
-                    continue
+                    # ---- chat.send ----
+                    if msg_type == "chat.send":
+                        if not await self._handle_chat_send(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
 
-                # ---- chat.read ----
-                if msg_type == "chat.read":
-                    if not await self._handle_chat_read(
-                        websocket, send_lock, redis, user_id, incoming
-                    ):
-                        break
-                    continue
+                    # ---- chat.upload_media ----
+                    if msg_type == "chat.upload_media":
+                        if not await self._handle_chat_upload_media(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
 
-                # ---- chat.typing ----
-                if msg_type == "chat.typing":
-                    if not await self._handle_chat_typing(
-                        websocket, send_lock, redis, user_id, incoming
-                    ):
-                        break
-                    continue
+                    # ---- chat.read ----
+                    if msg_type == "chat.read":
+                        if not await self._handle_chat_read(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
+
+                    # ---- chat.typing ----
+                    if msg_type == "chat.typing":
+                        if not await self._handle_chat_typing(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
+
+                    # Unknown event type — ignore, don't crash
+                except Exception:
+                    # Safety net: a single event handler bug must never
+                    # kill the WebSocket connection.
+                    pass
         finally:
             user_connections = ACTIVE_CHAT_CONNECTIONS.get(str(user_id))
             if user_connections is not None:
@@ -416,16 +424,18 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                         commit=False,
                         as_response=False,
                     )
-            except (
-                NotFoundException,
-                ForbiddenException,
-                BadRequestException,
-            ) as e:
-                return await self._send_json_safe(
-                    websocket,
-                    {"type": "error", "error": "chat.read.failed", "message": str(e)},
-                    send_lock=send_lock,
-                )
+            except Exception as e:
+                with contextlib.suppress(Exception):
+                    await self._send_json_safe(
+                        websocket,
+                        {
+                            "type": "error",
+                            "error": "chat.read.failed",
+                            "message": str(e),
+                        },
+                        send_lock=send_lock,
+                    )
+                return True  # keep connection alive
 
         return await self._send_model_safe(
             websocket,
@@ -467,16 +477,23 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 # Pre-warm Redis cache for recipient
                 await User.get_chat_users_by_ids([str(payload.user_id)], db)
                 targets = {str(user_id), str(payload.user_id)}
-            except (
-                NotFoundException,
-                ForbiddenException,
-                BadRequestException,
-            ) as e:
-                return await self._send_json_safe(
-                    websocket,
-                    {"type": "error", "error": "chat.typing.failed", "message": str(e)},
-                    send_lock=send_lock,
-                )
+            except Exception as e:
+                # Catch ALL exceptions — a typing error must never crash
+                # the WebSocket connection (which would kill message delivery).
+                with contextlib.suppress(Exception):
+                    await self._send_json_safe(
+                        websocket,
+                        {
+                            "type": "error",
+                            "error": "chat.typing.failed",
+                            "message": str(e),
+                        },
+                        send_lock=send_lock,
+                    )
+                return True  # keep connection alive
+
+        if conv_id is None or sender_lite is None or targets is None:
+            return True
 
         event_payload = ChatTypingEvent(
             data=ChatTypingData(

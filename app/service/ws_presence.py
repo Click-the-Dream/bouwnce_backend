@@ -296,7 +296,10 @@ class PresenceManager:
         redis,
         user_id: str,
         send_lock: asyncio.Lock | None = None,
+        delivery_ready: asyncio.Event | None = None,
     ) -> None:
+        if delivery_ready is not None:
+            await delivery_ready.wait()
         try:
             async for msg in pubsub.listen():
                 if msg is None:
@@ -335,18 +338,25 @@ class PresenceManager:
         user_id: str,
         ready_event: asyncio.Event | None = None,
         send_lock: asyncio.Lock | None = None,
+        delivery_ready: asyncio.Event | None = None,
     ) -> None:
         stream_key = f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{user_id}"
         last_id_key = f"{CHAT_EVENTS_LAST_ID_KEY_PREFIX}{user_id}"
         last_id = await redis.get(last_id_key)
         if isinstance(last_id, (bytes, bytearray)):
             last_id = last_id.decode()
+        # xread is EXCLUSIVE of the given ID — if we used xrevrange to
+        # grab the latest entry's ID, xread would start AFTER it and
+        # skip that message.  So when no cursor is persisted we must
+        # start from "0-0" to include all pending entries.
         if not last_id:
-            latest_entries = await redis.xrevrange(stream_key, count=1)
-            last_id = str(latest_entries[0][0]) if latest_entries else "0-0"
+            last_id = "0-0"
 
         if ready_event is not None:
             ready_event.set()
+        # Wait until chat.ready has been sent before delivering messages
+        if delivery_ready is not None:
+            await delivery_ready.wait()
 
         try:
             while True:
@@ -383,6 +393,8 @@ class PresenceManager:
                                 ex=PRESENCE_TTL_SECONDS * 8,
                             )
                             continue
+                        # Dedup check: if already delivered by queue path,
+                        # advance cursor and skip.
                         # Dedup check: if already delivered by queue path,
                         # advance cursor and skip.
                         if not await self._should_deliver_chat_message(

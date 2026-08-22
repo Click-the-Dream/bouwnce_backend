@@ -95,6 +95,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             chat_queue,
         )
         chat_stream_ready = asyncio.Event()
+        delivery_ready = asyncio.Event()  # set after chat.ready is sent
         pubsub_task = asyncio.create_task(
             self._forward_pubsub(
                 websocket=websocket,
@@ -102,6 +103,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 redis=redis,
                 user_id=str(user_id),
                 send_lock=send_lock,
+                delivery_ready=delivery_ready,
             )
         )
         chat_stream_task = asyncio.create_task(
@@ -111,6 +113,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 user_id=str(user_id),
                 ready_event=chat_stream_ready,
                 send_lock=send_lock,
+                delivery_ready=delivery_ready,
             )
         )
         bootstrap_task = asyncio.create_task(
@@ -145,6 +148,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             ChatReadyEvent(data=ChatReadyData(user_id=str(user_id))),
             send_lock=send_lock,
         )
+        delivery_ready.set()  # now safe to deliver messages
 
         try:
             while True:

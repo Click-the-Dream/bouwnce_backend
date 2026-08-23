@@ -17,7 +17,6 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
-
 from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client

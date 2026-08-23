@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import time
 import uuid
@@ -20,6 +19,7 @@ from app.core.config import (
     PAYMENT_PROGRESS_KEY_PREFIX,
     settings,
 )
+from app.core.logger import logger
 from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
@@ -164,7 +164,7 @@ class MobileEventsService:
         delivered_key = f"chat:delivered:{user_id}:{message_id}"
         if not self._claim_local_chat_delivery(delivered_key):
             return False
-        with contextlib.suppress(Exception):
+        try:
             return bool(
                 await redis.set(
                     delivered_key,
@@ -172,6 +172,13 @@ class MobileEventsService:
                     ex=PRESENCE_TTL_SECONDS * 48,
                     nx=True,
                 )
+            )
+        except Exception:
+            logger.warning(
+                "Failed to set chat delivered key for user %s message %s",
+                user_id,
+                message_id,
+                exc_info=True,
             )
         return True
 
@@ -207,9 +214,15 @@ class MobileEventsService:
             return False
         delivered = False
         for _connection_id, (_websocket, _send_lock, chat_queue) in connections.items():
-            with contextlib.suppress(Exception):
+            try:
                 await chat_queue.put(payload)
                 delivered = True
+            except Exception:
+                logger.warning(
+                    "Failed to enqueue chat message for connection %s",
+                    _connection_id,
+                    exc_info=True,
+                )
         return delivered
 
     @staticmethod
@@ -219,11 +232,18 @@ class MobileEventsService:
         delivery_key = f"{CHAT_DELIVERED_KEY_PREFIX}{recipient_id}:{message_id}"
         if delivery_event := ACTIVE_CHAT_DELIVERY_EVENTS.get(delivery_key):
             delivery_event.set()
-        with contextlib.suppress(Exception):
+        try:
             await redis.set(
                 delivery_key,
                 "1",
                 ex=PRESENCE_TTL_SECONDS * 48,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to mark chat message %s delivered for user %s",
+                message_id,
+                recipient_id,
+                exc_info=True,
             )
 
     async def _wait_for_chat_message_delivery(
@@ -246,10 +266,16 @@ class MobileEventsService:
                 return True
             except TimeoutError:
                 pass
-            with contextlib.suppress(Exception):
+            try:
                 if await redis.exists(delivered_key):
                     delivery_event.set()
                     return True
+            except Exception:
+                logger.warning(
+                    "Failed to check delivery key %s in Redis",
+                    delivered_key,
+                    exc_info=True,
+                )
         return False
 
     async def _drain_chat_queue(
@@ -386,18 +412,36 @@ class MobileEventsService:
         await self._send_chat_message_direct(
             redis=redis, recipient_id=recipient_id, payload=payload
         )
-        with contextlib.suppress(Exception):
+        try:
             await redis.publish(f"chat:conversation:{conversation_id}", payload_json)
-        with contextlib.suppress(Exception):
+        except Exception:
+            logger.warning(
+                "Failed to publish chat to conversation %s",
+                conversation_id,
+                exc_info=True,
+            )
+        try:
             await redis.publish(f"chat:user:{sender_id}", payload_json)
-        with contextlib.suppress(Exception):
+        except Exception:
+            logger.warning(
+                "Failed to publish chat to sender %s", sender_id, exc_info=True
+            )
+        try:
             await redis.publish(f"chat:user:{recipient_id}", payload_json)
-        with contextlib.suppress(Exception):
+        except Exception:
+            logger.warning(
+                "Failed to publish chat to recipient %s", recipient_id, exc_info=True
+            )
+        try:
             await redis.xadd(
                 f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient_id}",
                 {"type": "chat.message", "data": payload_json},
                 maxlen=5000,
                 approximate=True,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to xadd chat to stream for user %s", recipient_id, exc_info=True
             )
 
     async def _confirm_chat_message_sent(
@@ -600,7 +644,7 @@ class MobileEventsService:
         user_id: str,
         send_lock: asyncio.Lock,
     ) -> None:
-        with contextlib.suppress(Exception):
+        try:
             async with get_async_session() as db:
                 system_user = await bouwnce_dm_service.get_system_user(db=db)
                 if system_user is not None:
@@ -622,22 +666,34 @@ class MobileEventsService:
                         },
                         send_lock=send_lock,
                     )
+        except Exception:
+            logger.warning("Failed to fetch/send system user info", exc_info=True)
 
-        with contextlib.suppress(Exception):
+        try:
             async with get_async_session() as db:
                 await bouwnce_dm_service.ensure_welcome_conversation(
                     db=db, redis=redis, user_id=str(user_id), commit=True
                 )
+        except Exception:
+            logger.warning(
+                "Failed to ensure welcome conversation for user %s",
+                user_id,
+                exc_info=True,
+            )
 
         await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
         await self._publish_presence(redis=redis, user_id=str(user_id), online=True)
 
-        with contextlib.suppress(Exception):
+        try:
             await self._send_presence_snapshot(
                 websocket=websocket,
                 redis=redis,
                 user_id=str(user_id),
                 send_lock=send_lock,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to send presence snapshot to user %s", user_id, exc_info=True
             )
 
     async def read_mobile_events(
@@ -791,9 +847,13 @@ class MobileEventsService:
                 send_lock,
                 _chat_queue,
             ) in connections.items():
-                with contextlib.suppress(Exception):
+                try:
                     await self._send_json_safe(
                         websocket, payload_obj, send_lock=send_lock
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to send presence event locally", exc_info=True
                     )
 
         for pid in partner_ids:
@@ -1012,10 +1072,18 @@ class MobileEventsService:
             await pubsub.subscribe(f"chat:user:{user_id}")
         except Exception:
             if pubsub is not None:
-                with contextlib.suppress(Exception):
+                try:
                     await pubsub.aclose()
-            with contextlib.suppress(Exception):
+                except Exception:
+                    logger.warning(
+                        "Failed to close pubsub during error cleanup", exc_info=True
+                    )
+            try:
                 await websocket.close(code=1013)
+            except Exception:
+                logger.warning(
+                    "Failed to close websocket during error cleanup", exc_info=True
+                )
             return
 
         await websocket.accept()
@@ -1067,10 +1135,16 @@ class MobileEventsService:
             self._presence_heartbeat(redis=redis, user_id=str(user_id))
         )
 
-        with contextlib.suppress(Exception):
+        try:
             await bootstrap_task
-        with contextlib.suppress(Exception):
+        except Exception:
+            logger.warning("Bootstrap task failed for user %s", user_id, exc_info=True)
+        try:
             await asyncio.wait_for(chat_stream_ready.wait(), timeout=5)
+        except Exception:
+            logger.warning(
+                "Chat stream ready wait failed for user %s", user_id, exc_info=True
+            )
 
         await self._send_model_safe(
             websocket,
@@ -1090,8 +1164,13 @@ class MobileEventsService:
                 ):
                     break
                 incoming = None
-                with contextlib.suppress(Exception):
+                try:
                     incoming = json.loads(raw)
+                except Exception:
+                    logger.debug(
+                        "Failed to parse incoming WS message: %s",
+                        raw[:200] if raw else "(empty)",
+                    )
                 if incoming is None:
                     continue
 
@@ -1386,10 +1465,18 @@ class MobileEventsService:
             chat_stream_task.cancel()
             chat_queue_task.cancel()
             presence_task.cancel()
-            with contextlib.suppress(Exception):
+            try:
                 await pubsub.unsubscribe(f"chat:user:{user_id}")
-            with contextlib.suppress(Exception):
+            except Exception:
+                logger.warning(
+                    "Failed to unsubscribe pubsub for user %s", user_id, exc_info=True
+                )
+            try:
                 await pubsub.aclose()
+            except Exception:
+                logger.warning(
+                    "Failed to close pubsub for user %s", user_id, exc_info=True
+                )
             await asyncio.gather(
                 bootstrap_task,
                 pubsub_task,
@@ -1398,10 +1485,14 @@ class MobileEventsService:
                 presence_task,
                 return_exceptions=True,
             )
-            with contextlib.suppress(Exception):
+            try:
                 await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
                 await self._publish_presence(
                     redis=redis, user_id=str(user_id), online=False
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to clean up presence for user %s", user_id, exc_info=True
                 )
 
 

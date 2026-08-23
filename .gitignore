@@ -11,3 +11,4 @@ wheels/
 /venv
 tests/test_search_parser.py
 /.qwen
+scripts/

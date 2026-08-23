@@ -1,23 +1,26 @@
+"""Chat service — send, list, get conversations and messages.
+
+The heavy logic lives in:
+  - chat_utils.py  (ChatSerializers) — serialization + batch loaders
+  - chat_read.py   (ChatReadOps)     — mark_conversation_read variants
+
+This file stays ~600 lines: send_message, send_media_message, list, get, partner_ids.
+"""
+
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
-
 from fastapi import status
-from sqlalchemy import desc, func, select, update
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CHAT_EVENTS_STREAM_KEY_PREFIX, settings
 from app.matching_ground.model.notification import Notification
-from app.matching_ground.schema.chat import (
-    ChatMessageData,
-    ChatMessageEvent,
-    ChatReadUpdatedData,
-    ChatReadUpdatedEvent,
-)
+from app.matching_ground.service.chat_read import ChatReadOps
 from app.models.chat import Conversation, Message
 from app.models.user import User
+from app.utils.chat_utils import ChatSerializers
 from app.utils.exception import ForbiddenException, NotFoundException
+from app.utils.message_insert import insert_message
 from app.utils.responses import response_builder
 from app.worker.event_system import (
     EventNames,
@@ -27,97 +30,8 @@ from app.worker.event_system import (
 )
 
 
-class ChatService:
-    @staticmethod
-    def _extract_profile_pic_url(user: User) -> str | None:
-        value = getattr(user, "profile_pic", None)
-        if not value:
-            return None
-        if isinstance(value, str):
-            return value
-        if isinstance(value, dict):
-            url_val = value.get("url")
-            if isinstance(url_val, str):
-                return url_val
-            if isinstance(url_val, dict):
-                nested = url_val.get("url")
-                return nested if isinstance(nested, str) else None
-        return None
-
-    @staticmethod
-    def _serialize_profile_pic(user: User) -> dict | None:
-        url = ChatService._extract_profile_pic_url(user)
-        if not url:
-            return None
-        return {"url": url}
-
-    @staticmethod
-    def _serialize_user(user: User) -> dict:
-        return {
-            "id": str(user.id),
-            "username": user.username,
-            "full_name": user.full_name,
-            "profile_pic": ChatService._serialize_profile_pic(user),
-        }
-
-    @staticmethod
-    def _serialize_conversation(conv: Conversation, *, current_user_id: str) -> dict:
-        """
-        API-safe conversation dict including the other participant's identity.
-        """
-        base = {
-            "id": str(conv.id),
-            "user_a_id": str(conv.user_a_id),
-            "user_b_id": str(conv.user_b_id),
-            "last_message_at": (
-                conv.last_message_at.isoformat()
-                if getattr(conv, "last_message_at", None)
-                else None
-            ),
-            "created_at": conv.created_at.isoformat() if conv.created_at else None,
-            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
-        }
-
-        current_id = str(current_user_id)
-        other = conv.user_b if current_id == str(conv.user_a_id) else conv.user_a
-        base["user"] = {
-            "id": str(other.id),
-            "username": other.username,
-            "full_name": other.full_name,
-            "profile_pic": ChatService._serialize_profile_pic(other),
-        }
-        return base
-
-    def _build_chat_message_data(
-        self,
-        *,
-        msg: Message,
-        sender: User,
-        recipient: User,
-        reply_obj: dict | bool,
-    ) -> ChatMessageData:
-        message_payload = msg.to_dict()
-        message_payload["sender"] = self._serialize_user(sender)
-        message_payload["recipient"] = self._serialize_user(recipient)
-        message_payload["reply_to_message"] = reply_obj
-        return ChatMessageData.model_validate(message_payload)
-
-    def _build_chat_message_event(
-        self,
-        *,
-        msg: Message,
-        sender: User,
-        recipient: User,
-        reply_obj: dict | bool,
-    ) -> ChatMessageEvent:
-        return ChatMessageEvent(
-            data=self._build_chat_message_data(
-                msg=msg,
-                sender=sender,
-                recipient=recipient,
-                reply_obj=reply_obj,
-            )
-        )
+class ChatService(ChatSerializers, ChatReadOps):
+    """Chat business logic — inherits serialization + read-status mixins."""
 
     async def get_or_create_conversation(
         self, *, db: AsyncSession, user1_id: str, user2_id: str
@@ -126,6 +40,9 @@ class ChatService:
             raise ForbiddenException("You can't chat with yourself")
         return await Conversation.get_or_create_between(db, user1_id, user2_id)
 
+    # ------------------------------------------------------------------
+    # send_message
+    # ------------------------------------------------------------------
     async def send_message(
         self,
         *,
@@ -141,7 +58,10 @@ class ChatService:
         notify_side_effects: bool = True,
         publish_redis_fanout: bool = True,
     ) -> dict:
-        recipient = await User.get_by_id(str(recipient_id), db)
+        recipient_users = await User.get_chat_users_by_ids([str(recipient_id)], db)
+        if not recipient_users:
+            raise NotFoundException("Recipient not found")
+        recipient = recipient_users[0]
         recipient_is_bouwnce = (
             settings.BOUWNCE_SYSTEM_EMAIL
             and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
@@ -162,18 +82,14 @@ class ChatService:
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
 
-        msg = Message(
+        msg = await insert_message(
+            db=db,
             conversation_id=conversation.id,
             sender_id=sender.id,
             recipient_id=recipient.id,
             body=body.strip(),
             reply_to_message_id=reply_to_message_id,
         )
-        db.add(msg)
-
-        conversation.last_message_at = datetime.now(UTC)
-        await db.flush()
-        await db.refresh(msg)
 
         if persist_notification:
             await Notification.create(
@@ -200,11 +116,19 @@ class ChatService:
                 )
             ).scalar_one_or_none()
             if reply_row is not None:
-                reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
-                reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
+                reply_user_ids = [
+                    str(reply_row.sender_id),
+                    str(reply_row.recipient_id),
+                ]
+                reply_users = await User.get_chat_users_by_ids(reply_user_ids, db)
+                reply_users_map = {str(u.id): u for u in reply_users}
                 reply_payload = reply_row.to_dict()
-                reply_payload["sender"] = self._serialize_user(reply_sender)
-                reply_payload["recipient"] = self._serialize_user(reply_recipient)
+                reply_payload["sender"] = self._serialize_user(
+                    reply_users_map[str(reply_row.sender_id)]
+                )
+                reply_payload["recipient"] = self._serialize_user(
+                    reply_users_map[str(reply_row.recipient_id)]
+                )
                 reply_payload.pop("reply_to_message_id", None)
                 reply_payload.pop("reply_to_message", None)
                 reply_obj = reply_payload
@@ -220,18 +144,17 @@ class ChatService:
                 reply_obj=reply_obj,
             )
             payload = chat_message_event.model_dump_json()
-            await redis.publish(
-                f"chat:conversation:{conversation.id}",
-                payload,
-            )
-            await redis.publish(f"chat:user:{sender.id}", payload)
-            await redis.publish(f"chat:user:{recipient.id}", payload)
-            await redis.xadd(
-                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
-                {"type": "chat.message", "data": payload},
-                maxlen=5000,
-                approximate=True,
-            )
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:conversation:{conversation.id}", payload)
+                pipe.publish(f"chat:user:{sender.id}", payload)
+                pipe.publish(f"chat:user:{recipient.id}", payload)
+                pipe.xadd(
+                    f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
+                    {"type": "chat.message", "data": payload},
+                    maxlen=5000,
+                    approximate=True,
+                )
+                await pipe.execute()
 
         if notify_side_effects:
             await dispatch_event(
@@ -287,6 +210,9 @@ class ChatService:
 
         return result
 
+    # ------------------------------------------------------------------
+    # send_media_message
+    # ------------------------------------------------------------------
     async def send_media_message(
         self,
         *,
@@ -305,7 +231,10 @@ class ChatService:
         notify_side_effects: bool = True,
         publish_redis_fanout: bool = True,
     ) -> dict:
-        recipient = await User.get_by_id(str(recipient_id), db)
+        recipient_users = await User.get_chat_users_by_ids([str(recipient_id)], db)
+        if not recipient_users:
+            raise NotFoundException("Recipient not found")
+        recipient = recipient_users[0]
         recipient_is_bouwnce = (
             settings.BOUWNCE_SYSTEM_EMAIL
             and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
@@ -327,17 +256,17 @@ class ChatService:
         )
 
         urls = [u for u in (media_urls or []) if u]
-        # de-dupe while preserving order
         seen: set[str] = set()
         urls = [u for u in urls if not (u in seen or seen.add(u))]
 
-        msg = Message(
+        msg = await insert_message(
+            db=db,
             conversation_id=conversation.id,
             sender_id=sender.id,
             recipient_id=recipient.id,
             body=(body or "").strip(),
             media_type=media_type,
-            media_urls=(urls or None),
+            media_urls=urls or None,
             media_name=(
                 file_name.strip()
                 if isinstance(file_name, str) and file_name.strip()
@@ -345,11 +274,6 @@ class ChatService:
             ),
             reply_to_message_id=reply_to_message_id,
         )
-        db.add(msg)
-
-        conversation.last_message_at = datetime.now(UTC)
-        await db.flush()
-        await db.refresh(msg)
 
         if persist_notification:
             await Notification.create(
@@ -379,11 +303,19 @@ class ChatService:
                 )
             ).scalar_one_or_none()
             if reply_row is not None:
-                reply_sender = await User.get_by_id(str(reply_row.sender_id), db)
-                reply_recipient = await User.get_by_id(str(reply_row.recipient_id), db)
+                reply_user_ids = [
+                    str(reply_row.sender_id),
+                    str(reply_row.recipient_id),
+                ]
+                reply_users = await User.get_chat_users_by_ids(reply_user_ids, db)
+                reply_users_map = {str(u.id): u for u in reply_users}
                 reply_payload = reply_row.to_dict()
-                reply_payload["sender"] = self._serialize_user(reply_sender)
-                reply_payload["recipient"] = self._serialize_user(reply_recipient)
+                reply_payload["sender"] = self._serialize_user(
+                    reply_users_map[str(reply_row.sender_id)]
+                )
+                reply_payload["recipient"] = self._serialize_user(
+                    reply_users_map[str(reply_row.recipient_id)]
+                )
                 reply_payload.pop("reply_to_message_id", None)
                 reply_payload.pop("reply_to_message", None)
                 reply_obj = reply_payload
@@ -399,15 +331,17 @@ class ChatService:
                 reply_obj=reply_obj,
             )
             payload = chat_message_event.model_dump_json()
-            await redis.publish(f"chat:conversation:{conversation.id}", payload)
-            await redis.publish(f"chat:user:{sender.id}", payload)
-            await redis.publish(f"chat:user:{recipient.id}", payload)
-            await redis.xadd(
-                f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
-                {"type": "chat.message", "data": payload},
-                maxlen=5000,
-                approximate=True,
-            )
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:conversation:{conversation.id}", payload)
+                pipe.publish(f"chat:user:{sender.id}", payload)
+                pipe.publish(f"chat:user:{recipient.id}", payload)
+                pipe.xadd(
+                    f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient.id}",
+                    {"type": "chat.message", "data": payload},
+                    maxlen=5000,
+                    approximate=True,
+                )
+                await pipe.execute()
 
         if notify_side_effects:
             await dispatch_event(
@@ -450,6 +384,9 @@ class ChatService:
 
         return result
 
+    # ------------------------------------------------------------------
+    # list_conversations
+    # ------------------------------------------------------------------
     async def list_conversations(
         self,
         *,
@@ -480,7 +417,6 @@ class ChatService:
             last_stmt = (
                 select(Message)
                 .where(Message.conversation_id.in_(conv_ids))
-                # Postgres DISTINCT ON via SQLAlchemy .distinct(col)
                 .order_by(Message.conversation_id, desc(Message.created_at))
                 .distinct(Message.conversation_id)
             )
@@ -505,6 +441,8 @@ class ChatService:
                 str(conv_id): int(count or 0) for conv_id, count in unread_result.all()
             }
 
+        users_by_id = await self._load_users_for_conversations(db, rows)
+
         data = {
             "items": [],
             "page": page,
@@ -513,7 +451,9 @@ class ChatService:
         }
 
         for conv in rows:
-            conv_data = self._serialize_conversation(conv, current_user_id=user_id)
+            conv_data = self._serialize_conversation(
+                conv, current_user_id=user_id, users_by_id=users_by_id
+            )
             last = last_by_conversation_id.get(str(conv.id))
             conv_data["last_message"] = last.to_dict() if last is not None else False
             conv_data["unread_count"] = unread_by_conversation_id.get(str(conv.id), 0)
@@ -528,11 +468,14 @@ class ChatService:
             )
         return data
 
+    # ------------------------------------------------------------------
+    # get_conversation_partner_ids
+    # ------------------------------------------------------------------
     async def get_conversation_partner_ids(
         self, *, db: AsyncSession, user_id: str
     ) -> set[str]:
         """
-        Return ids of users that have a conversation with `user_id`.
+        Return ids of users that have a conversation with ``user_id``.
         Used for presence fanout (online/offline).
         """
         stmt = select(Conversation.user_a_id, Conversation.user_b_id).where(
@@ -549,6 +492,9 @@ class ChatService:
                 partner_ids.add(b)
         return partner_ids
 
+    # ------------------------------------------------------------------
+    # list_messages
+    # ------------------------------------------------------------------
     async def list_messages(
         self,
         *,
@@ -603,10 +549,8 @@ class ChatService:
 
         users_by_id: dict[str, User] = {}
         if user_ids:
-            users_result = await db.execute(
-                select(User).where(User.id.in_(list(user_ids)))
-            )
-            users_by_id = {str(u.id): u for u in users_result.scalars().all()}
+            users = await User.get_chat_users_by_ids(list(user_ids), db)
+            users_by_id = {str(u.id): u for u in users}
 
         items: list[dict] = []
         for m in msgs:
@@ -639,6 +583,9 @@ class ChatService:
             )
         return data
 
+    # ------------------------------------------------------------------
+    # get_conversation
+    # ------------------------------------------------------------------
     async def get_conversation(
         self,
         *,
@@ -654,9 +601,10 @@ class ChatService:
         current_id = str(current_user_id)
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise NotFoundException("Conversation not found")
+        users_by_id = await self._load_two_conversation_users(db, conv)
         data: dict = {
             "conversation": self._serialize_conversation(
-                conv, current_user_id=current_user_id
+                conv, current_user_id=current_user_id, users_by_id=users_by_id
             )
         }
         if include_messages:
@@ -677,6 +625,9 @@ class ChatService:
             )
         return data
 
+    # ------------------------------------------------------------------
+    # get_or_create_conversation_with_user
+    # ------------------------------------------------------------------
     async def get_or_create_conversation_with_user(
         self,
         *,
@@ -692,9 +643,10 @@ class ChatService:
         conv = await self.get_or_create_conversation(
             db=db, user1_id=str(current_user_id), user2_id=str(user_id)
         )
+        users_by_id = await self._load_two_conversation_users(db, conv)
         data: dict = {
             "conversation": self._serialize_conversation(
-                conv, current_user_id=current_user_id
+                conv, current_user_id=current_user_id, users_by_id=users_by_id
             )
         }
         if include_messages:
@@ -715,272 +667,6 @@ class ChatService:
                 message="Conversation ready",
                 data=data,
             )
-        return data
-
-    async def mark_conversation_read(
-        self,
-        *,
-        db: AsyncSession,
-        redis=None,
-        conversation_id: str,
-        current_user_id: str,
-        commit: bool = False,
-        as_response: bool = False,
-    ) -> dict:
-        conv = await Conversation.get_by_id(str(conversation_id), db)
-        current_id = str(current_user_id)
-        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
-            raise ForbiddenException("You cannot access this conversation")
-
-        read_at = datetime.now(UTC)
-        stmt = (
-            update(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_user_id,
-                Message.read_at.is_(None),
-            )
-            .values(read_at=read_at)
-        )
-        result = await db.execute(stmt)
-        updated = int(result.rowcount or 0)
-
-        unread_stmt = (
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_user_id,
-                Message.read_at.is_(None),
-            )
-        )
-        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
-
-        data = {
-            "conversation_id": str(conv.id),
-            "reader_id": str(current_user_id),
-            "read": unread_remaining == 0,
-            "updated": updated,
-        }
-
-        if redis is not None and updated > 0:
-            payload = ChatReadUpdatedEvent(
-                data=ChatReadUpdatedData(
-                    conversation_id=str(conv.id),
-                    reader_id=current_user_id,
-                    read=unread_remaining == 0,
-                    updated=updated,
-                )
-            ).model_dump_json()
-            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
-            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
-        if commit:
-            await db.commit()
-        if as_response:
-            return response_builder(
-                status_code=status.HTTP_200_OK,
-                status="success",
-                message="Conversation marked as read",
-                data=data,
-            )
-        return data
-
-    async def mark_conversation_read_up_to_message(
-        self,
-        *,
-        db: AsyncSession,
-        redis=None,
-        current_user_id: str,
-        conversation_id: str,
-        message_id: str,
-        commit: bool = False,
-        as_response: bool = False,
-    ) -> dict:
-        conv = await Conversation.get_by_id(str(conversation_id), db)
-        current_id = str(current_user_id)
-        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
-            raise ForbiddenException("You cannot access this conversation")
-
-        target = await Message.get_by_id(str(message_id), db)
-        if str(target.conversation_id) != str(conv.id):
-            raise NotFoundException("Message not found")
-        if str(target.recipient_id) != current_id:
-            raise ForbiddenException("You can only mark received messages as read")
-
-        read_at = datetime.now(UTC)
-        stmt = (
-            update(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-            .values(read_at=read_at)
-        )
-        result = await db.execute(stmt)
-        updated = int(result.rowcount or 0)
-
-        unread_stmt = (
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-        )
-        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
-
-        data = {
-            "conversation_id": str(conv.id),
-            "message_id": str(target.id),
-            "read": unread_remaining == 0,
-            "updated": updated,
-        }
-
-        if redis is not None and updated > 0:
-            payload = ChatReadUpdatedEvent(
-                data=ChatReadUpdatedData(
-                    conversation_id=str(conv.id),
-                    message_id=str(target.id),
-                    reader_id=current_id,
-                    read=unread_remaining == 0,
-                    updated=updated,
-                )
-            ).model_dump_json()
-            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
-            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
-
-        if commit:
-            await db.commit()
-
-        if as_response:
-            return response_builder(
-                status_code=status.HTTP_200_OK,
-                status="success",
-                message="Messages marked as read",
-                data=data,
-            )
-
-        return data
-
-    async def mark_conversation_read_with_user_up_to_message(
-        self,
-        *,
-        db: AsyncSession,
-        redis=None,
-        current_user_id: str,
-        recipient_id: str,
-        message_id: str,
-        commit: bool = False,
-        as_response: bool = False,
-    ) -> dict:
-        current_id = str(current_user_id)
-        other_id = str(recipient_id)
-        if current_id == other_id:
-            raise ForbiddenException("You can't mark messages with yourself")
-
-        conv = await Conversation.get_between(
-            db, uuid.UUID(current_id), uuid.UUID(other_id)
-        )
-        if conv is None:
-            data = {
-                "conversation_id": False,
-                "message_id": str(message_id),
-                "read": False,
-                "updated": 0,
-            }
-            if as_response:
-                return response_builder(
-                    status_code=status.HTTP_200_OK,
-                    status="success",
-                    message="No conversation found",
-                    data=data,
-                )
-            return data
-
-        if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
-            raise ForbiddenException("You cannot access this conversation")
-
-        target = (
-            await db.execute(
-                select(Message).where(Message.id == uuid.UUID(str(message_id)))
-            )
-        ).scalar_one_or_none()
-        if target is None or str(target.conversation_id) != str(conv.id):
-            data = {
-                "conversation_id": str(conv.id),
-                "message_id": str(message_id),
-                "read": False,
-                "updated": 0,
-            }
-            if as_response:
-                return response_builder(
-                    status_code=status.HTTP_200_OK,
-                    status="success",
-                    message="Message not found in conversation",
-                    data=data,
-                )
-            return data
-
-        if str(target.recipient_id) != current_id:
-            raise ForbiddenException("You can only mark received messages as read")
-
-        read_at = datetime.now(UTC)
-        stmt = (
-            update(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-            .values(read_at=read_at)
-        )
-        result = await db.execute(stmt)
-        updated = int(result.rowcount or 0)
-
-        unread_stmt = (
-            select(func.count())
-            .select_from(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-        )
-        unread_remaining = int((await db.execute(unread_stmt)).scalar() or 0)
-
-        data = {
-            "conversation_id": str(conv.id),
-            "message_id": str(target.id),
-            "read": unread_remaining == 0,
-            "updated": updated,
-        }
-
-        if redis is not None and updated > 0:
-            payload = ChatReadUpdatedEvent(
-                data=ChatReadUpdatedData(
-                    conversation_id=str(conv.id),
-                    message_id=str(target.id),
-                    reader_id=current_id,
-                    read=unread_remaining == 0,
-                    updated=updated,
-                )
-            ).model_dump_json()
-            await redis.publish(f"chat:user:{conv.user_a_id}", payload)
-            await redis.publish(f"chat:user:{conv.user_b_id}", payload)
-
-        if commit:
-            await db.commit()
-
-        if as_response:
-            return response_builder(
-                status_code=status.HTTP_200_OK,
-                status="success",
-                message="Messages marked as read",
-                data=data,
-            )
-
         return data
 
 

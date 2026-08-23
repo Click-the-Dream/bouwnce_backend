@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     BASE_URL: str = ""
     REDIS_URL: str = ""
-    REDIS_MAX_CONNECTIONS: int = 200
+    REDIS_MAX_CONNECTIONS: int = 20
     REDIS_HEALTH_CHECK_INTERVAL: int = 30
 
     SECRET_KEY: str = ""

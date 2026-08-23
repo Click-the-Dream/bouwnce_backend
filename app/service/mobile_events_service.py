@@ -10,6 +10,7 @@ This file (~400 lines) stays small: it wires everything together via handle_ws.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 
@@ -17,7 +18,7 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
-
+from app.core.logger import logger
 from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
@@ -47,7 +48,6 @@ from app.service.ws_presence import (
 )
 from app.utils.exception import (
     BadRequestException,
-    ForbiddenException,
     InternalServerErrorException,
     NotFoundException,
 )
@@ -220,7 +220,11 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 except Exception:
                     # Safety net: a single event handler bug must never
                     # kill the WebSocket connection.
-                    pass
+                    logger.warning(
+                        "Failed to unsubscribe pubsub for user %s",
+                        user_id,
+                        exc_info=True,
+                    )
         finally:
             user_connections = ACTIVE_CHAT_CONNECTIONS.get(str(user_id))
             if user_connections is not None:

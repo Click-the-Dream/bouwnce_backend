@@ -38,17 +38,5 @@ module.exports = {
         PYTHONUNBUFFERED: "1",
       },
     },
-    {
-      name: "production-api",
-      cwd: baseDir,
-      script: "bin/start-api.sh",
-      interpreter: "bash",
-      autorestart: true,
-      watch: false,
-      max_restarts: 10,
-      env: {
-        PYTHONUNBUFFERED: "1",
-      },
-    },
   ],
 };

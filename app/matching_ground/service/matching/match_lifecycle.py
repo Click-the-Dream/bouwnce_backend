@@ -444,6 +444,7 @@ class MatchLifecycleService:
                     "user_id": item.user_id,
                     "username": item.username,
                     "full_name": item.full_name,
+                    "gender": item.gender,
                     "distance_km": item.distance_km,
                     "profile_pic": item.profile_pic,
                     "banner_url": item.profile_banner,

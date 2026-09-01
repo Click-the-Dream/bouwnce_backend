@@ -8,6 +8,7 @@ class BuddyMatch:
     user_id: str
     username: str | None
     full_name: str | None
+    gender: str | None
     profile_pic: dict | str | None
     profile_banner: str
     bio: str | None

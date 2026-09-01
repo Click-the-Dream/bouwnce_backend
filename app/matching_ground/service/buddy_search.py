@@ -404,6 +404,7 @@ class BuddySearchService:
                     user_id=str(r.user_id),
                     username=r.username,
                     full_name=full_name,
+                    gender=r.gender,
                     distance_km=distance_val,
                     profile_pic=self._extract_media_url(r.profile_pic),
                     profile_banner=self._extract_media_url(r.profile_banner),

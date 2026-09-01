@@ -28,12 +28,21 @@ class UserCreate(UserBase):
     pass
 
 
+class GenderEnum(Enum):
+    MALE = "male"
+    FEMALE = "female"
+    OTHER = "other"
+
+
 class UserResponsSchema(UserBase):
     id: Annotated[str, Field(examples=["52fecfe4-c101-4d24-9f82-8d66f145dd1d"])]
     profile_pic: Annotated[Image | None, Field(...)]
     profile_banner: Annotated[Image | None, Field(...)]
     is_active: Annotated[bool, Field(examples=[True])]
     role: Annotated[str, Field(description="Role of the user", examples=["user"])]
+    gender: Annotated[
+        str | None, Field(description="Gender of the user", examples=["female"])
+    ] = None
     otp: Annotated[str | None, Field(examples=["123456"])] = None
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
@@ -84,3 +93,4 @@ class UpdateUser(BaseModel):
     username: Annotated[str | None, Field(min_length=2, examples=["johnDoe"])] = None
     bio: Annotated[str | None, Field(min_length=2, examples=["Hello I'm John!"])] = None
     role: Annotated[RoleEnum | None, Field(description="Role of user")] = None
+    gender: Annotated[GenderEnum | None, Field(description="Gender of user")] = None

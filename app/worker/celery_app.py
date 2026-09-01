@@ -20,10 +20,14 @@ celery_app.conf.update(
     enable_utc=True,
     task_always_eager=settings.CELERY_ALWAYS_EAGER,
     task_eager_propagates=settings.CELERY_ALWAYS_EAGER,
+    broker_pool_limit=1,
+    broker_transport_options={"max_connections": 1},
+    result_backend=None,
+    broker_heartbeat=0,
+    broker_connection_retry_on_startup=True,
+    broker_connection_max_retries=3,
 )
 
-# Deliver pending web push notifications every 5 seconds.
-# Requires a beat scheduler to be running (e.g. `celery -A app.worker.celery_app.celery_app beat`).
 celery_app.conf.beat_schedule = {
     "drain-push-queue": {
         "task": "app.worker.tasks.web_push.drain_push_queue",

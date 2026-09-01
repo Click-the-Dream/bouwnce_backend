@@ -2,4 +2,4 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-exec "$PROJECT_ROOT/.venv/bin/python" -m celery -A app.worker.celery_app.celery_app beat --loglevel=info
+exec "$PROJECT_ROOT/.venv/bin/python" -m celery -A app.worker.celery_app.celery_app beat --loglevel=warning

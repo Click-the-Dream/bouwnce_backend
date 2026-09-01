@@ -51,6 +51,15 @@ class BuddySearchService:
                 return nested_url if isinstance(nested_url, str) else None
         return None
 
+    @staticmethod
+    def _opposite_gender(gender: str | None) -> str | None:
+        """Return the opposite gender, or None if unknown."""
+        if gender == "male":
+            return "female"
+        if gender == "female":
+            return "male"
+        return None
+
     async def search(
         self,
         session: AsyncSession,
@@ -58,6 +67,7 @@ class BuddySearchService:
         radius_km: float | None = 10.0,
         interest_hints: set[str] | None = None,
         target_user_ids: set[uuid.UUID] | None = None,
+        requester_gender: str | None = None,
         page: int = 1,
         page_size: int | None = None,
         limit: int = 10,
@@ -213,12 +223,31 @@ class BuddySearchService:
             radius_bucket_expr = sa.null()
 
         shared_interest_rank_expr = case((shared_interest_count > 0, 0), else_=1)
+
+        opposite_gender = self._opposite_gender(requester_gender)
+
         if targeted_user_ids:
             order_by_parts.append(
                 case(
                     (self.user_model.id.in_(list(targeted_user_ids)), 0), else_=1
                 ).asc()
             )
+
+        # Gender priority: opposite gender first (0), same gender second (1),
+        # unknown/unset last (2).  Only applied when requester gender is known.
+        if opposite_gender is not None:
+            gender_priority_expr = case(
+                (
+                    self.user_model.gender == opposite_gender,
+                    0,
+                ),
+                (
+                    self.user_model.gender == requester_gender,
+                    1,
+                ),
+                else_=2,
+            )
+            order_by_parts.append(gender_priority_expr.asc())
 
         if distance_expr is not None:
             order_by_parts.extend(
@@ -285,6 +314,7 @@ class BuddySearchService:
                 self.user_model.id.label("user_id"),
                 self.user_model.username,
                 self.user_model.full_name,
+                self.user_model.gender,
                 self.user_model.profile_pic,
                 self.user_model.profile_banner,
                 self.user_model.bio,
@@ -321,6 +351,21 @@ class BuddySearchService:
         )
         has_next = len(rows) > page_size
         rows = rows[:page_size]
+
+        # Determine if we fell back to same-gender results
+        if opposite_gender is not None and rows:
+            has_opposite = any(r.gender == opposite_gender for r in rows)
+            has_same = any(r.gender == requester_gender for r in rows)
+            if not has_opposite and has_same:
+                used_reason = (
+                    "Could not find opposite-gender matches that "
+                    "match your search. Showing same-gender matches as a fallback."
+                )
+            elif has_opposite and has_same:
+                used_reason = (
+                    "Some same-gender matches are included because "
+                    "opposite-gender matches were limited."
+                )
 
         user_ids = [r.user_id for r in rows]
         shared_by_user: dict[str, list[tuple[bool, str]]] = {}
@@ -359,6 +404,7 @@ class BuddySearchService:
                     user_id=str(r.user_id),
                     username=r.username,
                     full_name=full_name,
+                    gender=r.gender,
                     distance_km=distance_val,
                     profile_pic=self._extract_media_url(r.profile_pic),
                     profile_banner=self._extract_media_url(r.profile_banner),

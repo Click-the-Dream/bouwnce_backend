@@ -18,6 +18,7 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
+from app.core.logger import logger
 from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
@@ -47,7 +48,6 @@ from app.service.ws_presence import (
 )
 from app.utils.exception import (
     BadRequestException,
-    ForbiddenException,
     InternalServerErrorException,
     NotFoundException,
 )
@@ -79,10 +79,18 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             await pubsub.subscribe(f"chat:user:{user_id}")
         except Exception:
             if pubsub is not None:
-                with contextlib.suppress(Exception):
+                try:
                     await pubsub.aclose()
-            with contextlib.suppress(Exception):
+                except Exception:
+                    logger.warning(
+                        "Failed to close pubsub during error cleanup", exc_info=True
+                    )
+            try:
                 await websocket.close(code=1013)
+            except Exception:
+                logger.warning(
+                    "Failed to close websocket during error cleanup", exc_info=True
+                )
             return
 
         await websocket.accept()
@@ -161,7 +169,6 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     ConnectionClosedOK,
                 ):
                     break
-
                 try:
                     incoming = None
                     with contextlib.suppress(Exception):
@@ -217,7 +224,11 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 except Exception:
                     # Safety net: a single event handler bug must never
                     # kill the WebSocket connection.
-                    pass
+                    logger.warning(
+                        "Failed to unsubscribe pubsub for user %s",
+                        user_id,
+                        exc_info=True,
+                    )
         finally:
             user_connections = ACTIVE_CHAT_CONNECTIONS.get(str(user_id))
             if user_connections is not None:
@@ -229,10 +240,18 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             chat_stream_task.cancel()
             chat_queue_task.cancel()
             presence_task.cancel()
-            with contextlib.suppress(Exception):
+            try:
                 await pubsub.unsubscribe(f"chat:user:{user_id}")
-            with contextlib.suppress(Exception):
+            except Exception:
+                logger.warning(
+                    "Failed to unsubscribe pubsub for user %s", user_id, exc_info=True
+                )
+            try:
                 await pubsub.aclose()
+            except Exception:
+                logger.warning(
+                    "Failed to close pubsub for user %s", user_id, exc_info=True
+                )
             await asyncio.gather(
                 bootstrap_task,
                 pubsub_task,
@@ -241,10 +260,14 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 presence_task,
                 return_exceptions=True,
             )
-            with contextlib.suppress(Exception):
+            try:
                 await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
                 await self._publish_presence(
                     redis=redis, user_id=str(user_id), online=False
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to clean up presence for user %s", user_id, exc_info=True
                 )
 
     # ------------------------------------------------------------------

@@ -4,7 +4,7 @@ from app.core.config import settings
 
 celery_app = Celery(
     settings.PROJECT_NAME,
-    broker=f"{settings.REDIS_URL}/1",
+    broker=f"{settings.REDIS_URL}/0",
     include=[
         "app.worker.tasks.email",
         "app.worker.tasks.order_processor",

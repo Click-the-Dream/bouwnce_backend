@@ -415,6 +415,10 @@ class MatchLifecycleService:
         page: int = 1,
         page_size: int = 10,
     ) -> dict:
+        # Fetch the requester's gender for opposite-gender prioritization
+        requester = await User.get_by_id(str(requester_id), session)
+        requester_gender = getattr(requester, "gender", None) if requester else None
+
         buddy_search_service = BuddySearchService()
         result = await buddy_search_service.search(
             session=session,
@@ -422,6 +426,7 @@ class MatchLifecycleService:
             radius_km=radius_km,
             interest_hints=interest_hints,
             target_user_ids=target_user_ids,
+            requester_gender=requester_gender,
             page=page,
             page_size=page_size,
         )

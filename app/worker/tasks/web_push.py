@@ -3,8 +3,10 @@ import json
 import logging
 from uuid import UUID
 
+import redis.asyncio as aioredis
+
+from app.core.config import settings
 from app.db.postgres_db_conn import get_async_session
-from app.db.redis import get_redis_client
 from app.models.web_push_subscription import WebPushSubscription
 from app.service.web_push_service import (
     send_web_push,
@@ -20,7 +22,7 @@ MAX_PER_RUN = 100  # hard cap on items processed per task run
 SEND_DELAY_SECONDS = 0.05  # gentle pacing to avoid push-service rate limits
 
 
-async def _drain_once() -> int:
+async def _drain_once(redis) -> int:
     """Pop queued push payloads and deliver them to web subscriptions.
 
     Payload shape (produced by ``dispatch_event`` PUSH_NOTIFICATION):
@@ -33,7 +35,6 @@ async def _drain_once() -> int:
       endpoint is not hammered, at the cost of delaying the rest).
     - Permanent failures -> payload moved to ``dlq:web_push`` for replay.
     """
-    redis = await get_redis_client()
     processed = 0
     retry_payloads: list[str] = []
 
@@ -170,11 +171,25 @@ async def _drain_once() -> int:
     return processed
 
 
+async def _drain_once_with_client() -> int:
+    """Create a fresh Redis client, drain, then close it."""
+    pool = aioredis.ConnectionPool.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        max_connections=2,
+    )
+    redis = aioredis.Redis(connection_pool=pool)
+    try:
+        return await _drain_once(redis)
+    finally:
+        await redis.aclose()
+
+
 @celery_app.task(name="app.worker.tasks.web_push.drain_push_queue")
 def drain_push_queue() -> int:
     """Celery task: deliver pending web push notifications."""
     try:
-        processed = asyncio.run(_drain_once())
+        processed = asyncio.run(_drain_once_with_client())
         if processed:
             logger.info("Push queue drained: %d item(s) processed", processed)
         else:

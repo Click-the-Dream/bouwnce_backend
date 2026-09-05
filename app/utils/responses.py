@@ -9,7 +9,7 @@ class BaseResponse(BaseModel):
     status_code: Annotated[int, Field(examples=[200])]
     status: Annotated[Literal["success", "error"], Field(examples=["success", "error"])]
     message: Annotated[str, Field(examples=["message is successful"])]
-    data: dict[str, Any] | list[Any] | None = None
+    data: dict[str, Any] | list[Any] | Any | None = None
 
     model_config = ConfigDict(
         json_encoders={

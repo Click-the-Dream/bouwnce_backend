@@ -8,7 +8,9 @@ class BuddyMatch:
     user_id: str
     username: str | None
     full_name: str | None
+    gender: str | None
     profile_pic: dict | str | None
+    profile_banner: str
     bio: str | None
     distance_km: float
     score: float
@@ -21,3 +23,5 @@ class BuddySearchResult:
     status: str
     matches: list[BuddyMatch]
     reason: str | None = None
+    has_next: bool = False
+    radius_step_km: float = 10.0

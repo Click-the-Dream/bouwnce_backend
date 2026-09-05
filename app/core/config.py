@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Redis keys / streams
 MOBILE_EVENTS_STREAM_KEY = "events:mobile:stream"
+CHAT_EVENTS_STREAM_KEY_PREFIX = "chat:events:stream:"
+CHAT_EVENTS_LAST_ID_KEY_PREFIX = "chat:events:last:"
 PAYMENT_PROGRESS_KEY_PREFIX = "payment:progress:"
 
 
@@ -23,12 +25,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_TTL: str = "30d"
     FASTAPI_ENV: str = "development"
 
+    FRONTEND_URL: str = ""
+
     SQLALCHEMY_DATABASE_URL: str = ""
     SQLALCHEMY_DATABASE_DEV_URL: str = ""
     SQLALCHEMY_DATABASE_STAG_URL: str = ""
     SQLALCHEMY_DATABASE_PROD_URL: str = ""
-    SQLALCHEMY_POOL_SIZE: int = 10
-    SQLALCHEMY_MAX_OVERFLOW: int = 20
+    SQLALCHEMY_POOL_SIZE: int = 30
+    SQLALCHEMY_MAX_OVERFLOW: int = 40
     SQLALCHEMY_FUTURE: bool = True
     SQLALCHEMY_ECHO: bool = False
 
@@ -37,7 +41,10 @@ class Settings(BaseSettings):
 
     BASE_URL: str = ""
     REDIS_URL: str = ""
-    REDIS_MAX_CONNECTIONS: int = 200
+    # Upstash Free plan allows ~10 concurrent connections total.
+    # Budget: API ~3, Celery worker ~3, Celery beat ~1, WebSocket ~3.
+    # Each WebSocket user holds 1-2 connections (pubsub + xread).
+    REDIS_MAX_CONNECTIONS: int = 3
     REDIS_HEALTH_CHECK_INTERVAL: int = 30
 
     SECRET_KEY: str = ""
@@ -125,6 +132,17 @@ class Settings(BaseSettings):
     SEARCH_MATCH_USER_SCORE: float = 0.92
 
     # =========================
+    # Search parser (LLM)
+    # =========================
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""
+    SEARCH_PARSER_LLM_ENABLED: bool = True
+    SEARCH_PARSER_LLM_MODEL: str = ""
+    SEARCH_PARSER_LLM_TIMEOUT: float = 10.0
+    SEARCH_CACHE_CATALOG_TTL: int = 300
+    SEARCH_CACHE_PARSE_TTL: int = 600
+
+    # =========================
     # QStash
     # =========================
     QSTASH_API_KEY: str = ""
@@ -132,6 +150,15 @@ class Settings(BaseSettings):
     QSTASH_TOKEN: str = ""
     QSTASH_CURRENT_SIGNING_KEY: str = ""
     QSTASH_NEXT_SIGNING_KEY: str = ""
+
+    # =========================
+    # Web Push (VAPID)
+    # =========================
+    # Generate keys with: python -m pywebpush generate-vapid-keys
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    # mailto: contact (or https URL) shown to push service operators
+    VAPID_SUBJECT: str = ""
 
     @model_validator(mode="after")
     def _resolve_database_url(self) -> "Settings":

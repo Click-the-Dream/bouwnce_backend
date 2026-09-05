@@ -1,17 +1,40 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
 from sqlalchemy import JSON, Boolean, DateTime, Enum, String, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, load_only, mapped_column, relationship
 
 from app.core.security import genrate_verification_code
 from app.models import BaseModel
 from app.models.wallet import UserWallet
+from app.utils.user_cache import (
+    get_cached_user,
+    set_cached_user,
+)
+
+
+@dataclass
+class ChatUser:
+    """Lightweight user object for chat — no SQLAlchemy state.
+
+    Used for Redis-cached user data. Has the same attributes that the
+    chat system reads from User (id, email, username, full_name, profile_pic)
+    but without the ORM overhead.
+    """
+
+    id: str = ""
+    email: str = ""
+    username: str | None = None
+    full_name: str | None = None
+    profile_pic: dict | None = None
+
 
 if TYPE_CHECKING:
+    from app.event_broadcast.models.events import OutingEvent
     from app.matching_ground.model.interest import Interest
     from app.matching_ground.model.user_geolocation import UserGeolocation
     from app.matching_ground.model.user_interest import UserInterest
@@ -39,6 +62,9 @@ class User(BaseModel):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     role: Mapped[str] = mapped_column(
         Enum("user", "vendor", "admin", name="user_role_enum"), default="user"
+    )
+    gender: Mapped[str | None] = mapped_column(
+        Enum("male", "female", "other", name="user_gender_enum"), nullable=True
     )
     otp: Mapped[str | None] = mapped_column(String(6))
     otp_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -89,10 +115,75 @@ class User(BaseModel):
     )
     geolocation: Mapped[UserGeolocation] = relationship(back_populates="user")
 
+    outing_events: Mapped[list[OutingEvent]] = relationship(
+        back_populates="creator",
+        cascade="all, delete-orphan",
+        foreign_keys="[OutingEvent.creator_id]",
+        lazy="selectin",
+    )
+
     def to_dict(self):
         data_dict = super().to_dict()
 
         return data_dict
+
+    @classmethod
+    async def get_chat_users_by_ids(
+        cls, ids: list[str], db: AsyncSession
+    ) -> list[User]:
+        """Fetch users for chat — Redis cache first, DB fallback.
+
+        User chat data (id, email, username, full_name, profile_pic) changes
+        rarely. Caching in Redis eliminates the DB round-trip on the hot path.
+        """
+        if not ids:
+            return []
+
+        unique_ids = list(set(str(uid) for uid in ids))
+        users: list[User] = []
+        uncached_ids: list[str] = []
+
+        # 1. Check Redis cache
+        for uid in unique_ids:
+            cached = await get_cached_user(uid)
+            if cached is not None:
+                users.append(ChatUser(**cached))
+            else:
+                uncached_ids.append(uid)
+
+        # 2. Fetch uncached users from DB
+        if uncached_ids:
+            stmt = (
+                select(cls)
+                .where(cls.id.in_(uncached_ids))
+                .options(
+                    load_only(
+                        cls.id,
+                        cls.email,
+                        cls.username,
+                        cls.full_name,
+                        cls.profile_pic,
+                    )
+                )
+            )
+            result = await db.execute(stmt)
+            db_users = list(result.scalars().all())
+
+            # 3. Populate cache for DB results
+            for u in db_users:
+                users.append(u)
+                await set_cached_user(
+                    str(u.id),
+                    {
+                        "id": str(u.id),
+                        "email": u.email or "",
+                        "username": u.username,
+                        "full_name": u.full_name,
+                        "profile_pic": u.profile_pic,
+                    },
+                )
+
+        return users
 
     @classmethod
     async def get_by_email(cls, email: str, db: AsyncSession) -> Self | None:

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bouwnce — Web Push Demo</title>
+    <link rel="manifest" href="/static/manifest.json" />
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: 640px;
+        margin: 48px auto;
+        padding: 0 24px;
+        line-height: 1.5;
+      }
+      h1 {
+        margin-bottom: 4px;
+      }
+      .muted {
+        color: #666;
+      }
+      label {
+        display: block;
+        margin: 16px 0 4px;
+        font-weight: 600;
+      }
+      input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-sizing: border-box;
+        font-size: 14px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+      }
+      button {
+        padding: 10px 18px;
+        border: none;
+        border-radius: 6px;
+        background: #111;
+        color: #fff;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: #555;
+      }
+      pre {
+        background: #f4f4f4;
+        border-radius: 6px;
+        padding: 12px;
+        overflow: auto;
+        font-size: 12px;
+      }
+      .status {
+        margin-top: 20px;
+        white-space: pre-wrap;
+      }
+      .ok {
+        color: #0a7d32;
+      }
+      .err {
+        color: #b00020;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Bouwnce — Web Push Demo</h1>
+    <p class="muted">
+      Paste a valid access token, then subscribe. This page is served by the
+      backend for local development — production uses the frontend's own service
+      worker.
+    </p>
+
+    <label for="token">Access token (Bearer)</label>
+    <input
+      id="token"
+      type="password"
+      placeholder="eyJhbGciOi..."
+      autocomplete="off"
+    />
+
+    <div class="row">
+      <button id="subscribeBtn">Subscribe</button>
+      <button id="unsubscribeBtn" class="secondary" disabled>
+        Unsubscribe
+      </button>
+      <button id="testBtn" class="secondary" disabled>Send test push</button>
+    </div>
+
+    <pre class="status" id="status">Not subscribed yet.</pre>
+
+    <script>
+      const API_BASE = "/api/v1";
+      let swRegistration = null;
+      let pushSubscription = null;
+
+      const statusEl = document.getElementById("status");
+      const subscribeBtn = document.getElementById("subscribeBtn");
+      const unsubscribeBtn = document.getElementById("unsubscribeBtn");
+      const testBtn = document.getElementById("testBtn");
+
+      function setStatus(message, isError) {
+        statusEl.className = "status " + (isError ? "err" : "ok");
+        statusEl.textContent = message;
+      }
+
+      function getToken() {
+        return document.getElementById("token").value.trim();
+      }
+
+      function authHeaders() {
+        return {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + getToken(),
+        };
+      }
+
+      async function api(path, options = {}) {
+        const res = await fetch(API_BASE + path, options);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(body.message || res.statusText || "Request failed");
+        }
+        return body;
+      }
+
+      function urlBase64ToUint8Array(base64String) {
+        const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding)
+          .replace(/-/g, "+")
+          .replace(/_/g, "/");
+        const raw = atob(base64);
+        const output = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i);
+        return output;
+      }
+
+      async function init() {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+          setStatus("Web Push is not supported in this browser.", true);
+          return;
+        }
+        swRegistration =
+          await navigator.serviceWorker.register("/static/sw.js");
+        await navigator.serviceWorker.ready;
+        pushSubscription = await swRegistration.pushManager.getSubscription();
+        refreshButtons();
+      }
+
+      function refreshButtons() {
+        subscribeBtn.disabled = !!pushSubscription;
+        unsubscribeBtn.disabled = !pushSubscription;
+        testBtn.disabled = !pushSubscription;
+      }
+
+      subscribeBtn.addEventListener("click", async () => {
+        try {
+          const token = getToken();
+          if (!token) {
+            setStatus("Enter an access token first.", true);
+            return;
+          }
+          setStatus("Requesting permission...");
+
+          if (!swRegistration) {
+            swRegistration =
+              await navigator.serviceWorker.register("/static/sw.js");
+          }
+          await swRegistration.pushManager.getSubscription().then((sub) => {
+            if (sub) return sub.unsubscribe();
+          });
+
+          const publicKeyResp = await api("/push/vapid-public-key");
+          const applicationServerKey = urlBase64ToUint8Array(
+            publicKeyResp.data.public_key,
+          );
+
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") {
+            setStatus("Notification permission was denied.", true);
+            return;
+          }
+
+          pushSubscription = await swRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+          });
+
+          const body = {
+            endpoint: pushSubscription.endpoint,
+            keys: pushSubscription.toJSON().keys,
+            expirationTime: pushSubscription.expirationTime || null,
+          };
+
+          const resp = await api("/push/subscribe", {
+            method: "POST",
+            headers: authHeaders(),
+            body: JSON.stringify(body),
+          });
+          setStatus("Subscribed:\n" + JSON.stringify(resp, null, 2));
+          refreshButtons();
+        } catch (err) {
+          setStatus("Subscribe failed: " + err.message, true);
+        }
+      });
+
+      unsubscribeBtn.addEventListener("click", async () => {
+        try {
+          const body = { endpoint: pushSubscription.endpoint };
+          await api("/push/subscribe", {
+            method: "DELETE",
+            headers: authHeaders(),
+            body: JSON.stringify(body),
+          });
+          await pushSubscription.unsubscribe();
+          pushSubscription = null;
+          setStatus("Unsubscribed.");
+          refreshButtons();
+        } catch (err) {
+          setStatus("Unsubscribe failed: " + err.message, true);
+        }
+      });
+
+      testBtn.addEventListener("click", async () => {
+        try {
+          const resp = await api("/push/test", {
+            method: "POST",
+            headers: authHeaders(),
+          });
+          setStatus("Test push result:\n" + JSON.stringify(resp, null, 2));
+        } catch (err) {
+          setStatus("Test push failed: " + err.message, true);
+        }
+      });
+
+      init().catch((err) => setStatus("Init failed: " + err.message, true));
+    </script>
+  </body>
+</html>

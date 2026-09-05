@@ -1,3 +1,12 @@
+"""WebSocket event handler — entry-point class composing Chat + Presence mixins.
+
+The heavy logic lives in:
+  - ws_chat.py      (ChatDelivery)    — send / dedup / queue / fanout / typing
+  - ws_presence.py  (PresenceManager) — bootstrap / presence / forwarders
+
+This file (~400 lines) stays small: it wires everything together via handle_ws.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,288 +15,46 @@ import json
 import uuid
 
 from fastapi import WebSocket
-from sqlalchemy import func, select
 from starlette.websockets import WebSocketDisconnect
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
-from app.core.config import (
-    MOBILE_EVENTS_STREAM_KEY,
-    PAYMENT_PROGRESS_KEY_PREFIX,
-    settings,
-)
+from app.core.logger import logger
 from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
-from app.matching_ground.model.notification import Notification
 from app.matching_ground.schema.chat import (
+    ChatMessageEvent,
+    ChatReadAckData,
+    ChatReadAckEvent,
+    ChatReadyData,
+    ChatReadyEvent,
+    ChatSendAckData,
+    ChatSendAckEvent,
+    ChatTypingData,
+    ChatTypingEvent,
     MarkConversationReadPayload,
+    PongEvent,
     SendMessagePayload,
     TypingPayload,
     UploadMediaPayload,
 )
-from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
 from app.matching_ground.service.chat_service import chat_service
-from app.models.chat import Conversation, Message
+from app.models.chat import Conversation
 from app.models.user import User
+from app.service.ws_chat import ACTIVE_CHAT_CONNECTIONS, ChatDelivery  # noqa: F401
+from app.service.ws_presence import (
+    PRESENCE_KEY_PREFIX,
+    PresenceManager,
+)
 from app.utils.exception import (
     BadRequestException,
-    ForbiddenException,
+    InternalServerErrorException,
     NotFoundException,
 )
 
-PRESENCE_KEY_PREFIX = "presence:user:"
-PRESENCE_TTL_SECONDS = 75
 
-
-class MobileEventsService:
-    @staticmethod
-    def _is_cloudinary_secure_url(url: str) -> bool:
-        if not url:
-            return False
-        prefix = f"https://res.cloudinary.com/{settings.CLOUDINARY_NAME}/"
-        return str(url).startswith(prefix)
-
-    async def read_mobile_events(
-        self,
-        *,
-        redis,
-        user_id: str,
-        last_id: str,
-        block_ms: int,
-        count: int,
-    ) -> dict:
-        streams = await redis.xread(
-            streams={MOBILE_EVENTS_STREAM_KEY: last_id},
-            count=count,
-            block=block_ms if block_ms > 0 else None,
-        )
-
-        items: list[dict] = []
-        next_last_id = last_id
-
-        for _stream_name, messages in streams or []:
-            for msg_id, fields in messages:
-                decoded = {}
-                for k, v in dict(fields).items():
-                    key = k.decode() if isinstance(k, (bytes, bytearray)) else str(k)
-                    val = v.decode() if isinstance(v, (bytes, bytearray)) else v
-                    decoded[key] = val
-
-                items.append({"id": msg_id, **decoded})
-                next_last_id = msg_id
-
-        return {"status": "success", "items": items, "next_last_id": next_last_id}
-
-    async def get_payment_progress(self, *, redis, reference: str) -> dict:
-        key = f"{PAYMENT_PROGRESS_KEY_PREFIX}{reference}"
-        value = await redis.get(key)
-        if not value:
-            raise NotFoundException("Payment progress not found (or expired)")
-        if isinstance(value, (bytes, bytearray)):
-            value = value.decode()
-        try:
-            data = json.loads(value)
-        except Exception:
-            data = {"raw": value}
-        return {"status": "success", "data": data}
-
-    async def get_unread_summary(
-        self, *, db, user_id: str, page_size: int = 20
-    ) -> dict:
-        unread_stmt = (
-            select(
-                Message.conversation_id, func.count(Message.id).label("unread_count")
-            )
-            .where(Message.recipient_id == user_id, Message.read_at.is_(None))
-            .group_by(Message.conversation_id)
-        )
-        unread_rows = list((await db.execute(unread_stmt)).all())
-        unread_by_conv = {str(cid): int(cnt) for cid, cnt in unread_rows}
-        conv_ids = list(unread_by_conv.keys())
-
-        conversations: list[Conversation] = []
-        last_by_conversation_id: dict[str, Message] = {}
-        if conv_ids:
-            conv_result = await db.execute(
-                select(Conversation)
-                .where(Conversation.id.in_(conv_ids))
-                .order_by(Conversation.last_message_at.desc())
-            )
-            conversations = list(conv_result.scalars().all())
-
-            last_stmt = (
-                select(Message)
-                .where(Message.conversation_id.in_(conv_ids))
-                .order_by(Message.conversation_id, Message.created_at.desc())
-                .distinct(Message.conversation_id)
-            )
-            last_result = await db.execute(last_stmt)
-            last_msgs = list(last_result.scalars().all())
-            last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
-
-        notif_count_stmt = (
-            select(func.count())
-            .select_from(Notification)
-            .where(
-                Notification.user_id == user_id,
-                Notification.read_at.is_(None),
-                Notification.is_deleted.is_(False),
-            )
-        )
-        notifications_unread = int((await db.execute(notif_count_stmt)).scalar() or 0)
-
-        notif_list_stmt = (
-            select(Notification)
-            .where(
-                Notification.user_id == user_id,
-                Notification.read_at.is_(None),
-                Notification.is_deleted.is_(False),
-            )
-            .order_by(Notification.created_at.desc())
-            .limit(page_size)
-        )
-        notif_rows = list((await db.execute(notif_list_stmt)).scalars().all())
-
-        conv_items: list[dict] = []
-        for conv in conversations:
-            conv_data = chat_service._serialize_conversation(
-                conv, current_user_id=user_id
-            )
-            last = last_by_conversation_id.get(str(conv.id))
-            conv_data["last_message"] = last.to_dict() if last is not None else False
-            conv_data["unread_count"] = unread_by_conv.get(str(conv.id), 0)
-            conv_items.append(conv_data)
-
-        return {
-            "notifications": {
-                "unread_count": notifications_unread,
-                "items": [n.to_dict() for n in notif_rows],
-            },
-            "chats": {
-                "unread_conversations": len(conv_items),
-                "items": conv_items,
-            },
-        }
-
-    async def _publish_presence(self, *, redis, user_id: str, online: bool) -> None:
-        async with get_async_session() as db:
-            partner_ids = await chat_service.get_conversation_partner_ids(
-                db=db, user_id=str(user_id)
-            )
-            me = await User.get_by_id(str(user_id), db)
-
-        payload = json.dumps(
-            {
-                "type": "user.online",
-                "data": {
-                    "user": {
-                        "id": str(me.id),
-                        "username": me.username,
-                        "full_name": me.full_name,
-                        "profile_pic": chat_service._serialize_profile_pic(me),
-                    },
-                    "online": online,
-                },
-            }
-        )
-        for pid in partner_ids:
-            await redis.publish(f"chat:user:{pid}", payload)
-        await redis.publish(f"chat:user:{user_id}", payload)
-
-    async def _presence_heartbeat(self, *, redis, user_id: str) -> None:
-        try:
-            key = f"{PRESENCE_KEY_PREFIX}{user_id}"
-            while True:
-                await redis.set(key, "1", ex=PRESENCE_TTL_SECONDS)
-                await asyncio.sleep(max(PRESENCE_TTL_SECONDS // 2, 10))
-        except Exception:
-            return
-
-    async def _send_presence_snapshot(
-        self, *, websocket: WebSocket, redis, user_id: str
-    ) -> None:
-        async with get_async_session() as db:
-            partner_ids = await chat_service.get_conversation_partner_ids(
-                db=db, user_id=str(user_id)
-            )
-            partner_id_list = sorted({str(pid) for pid in partner_ids})
-            users_by_id: dict[str, User] = {}
-            if partner_id_list:
-                users_result = await db.execute(
-                    select(User).where(User.id.in_(partner_id_list))
-                )
-                users_by_id = {str(u.id): u for u in users_result.scalars().all()}
-
-        keys = [f"{PRESENCE_KEY_PREFIX}{pid}" for pid in partner_id_list]
-        values = await redis.mget(*keys) if keys else []
-        items: list[dict] = []
-        for pid, val in zip(partner_id_list, values, strict=False):
-            u = users_by_id.get(pid)
-            if u is None:
-                continue
-            items.append(
-                {
-                    "user": {
-                        "id": str(u.id),
-                        "username": u.username,
-                        "full_name": u.full_name,
-                        "profile_pic": chat_service._serialize_profile_pic(u),
-                    },
-                    "online": bool(val),
-                }
-            )
-        await websocket.send_json(
-            {"type": "user.online.snapshot", "data": {"items": items}}
-        )
-
-    async def _forward_pubsub(self, *, websocket: WebSocket, pubsub) -> None:
-        try:
-            async for msg in pubsub.listen():
-                if msg is None:
-                    continue
-                if msg.get("type") != "message":
-                    continue
-                data = msg.get("data")
-                if isinstance(data, (bytes, bytearray)):
-                    data = data.decode()
-                try:
-                    await websocket.send_json(json.loads(data))
-                except Exception:
-                    await websocket.send_text(str(data))
-        except Exception:
-            return
-
-    async def _forward_stream(
-        self, *, websocket: WebSocket, redis, user_id: str
-    ) -> None:
-        last_id = "$"
-        try:
-            while True:
-                streams = await redis.xread(
-                    streams={MOBILE_EVENTS_STREAM_KEY: last_id}, count=50, block=25000
-                )
-                for _stream_name, messages in streams or []:
-                    for msg_id, fields in messages:
-                        last_id = msg_id
-                        event_name = fields.get("event_name")
-                        payload_raw = fields.get("payload")
-                        if not event_name or not payload_raw:
-                            continue
-                        payload_obj = None
-                        with contextlib.suppress(Exception):
-                            payload_obj = json.loads(payload_raw)
-                        if payload_obj is None:
-                            continue
-                        if str(payload_obj.get("user_id") or "") != str(user_id):
-                            continue
-                        await websocket.send_json(
-                            {
-                                "type": "event",
-                                "event_name": event_name,
-                                "payload": payload_obj,
-                            }
-                        )
-        except Exception:
-            return
+class MobileEventsService(ChatDelivery, PresenceManager):
+    """Composed WebSocket handler — inherits chat + presence logic."""
 
     async def handle_ws(self, websocket: WebSocket) -> None:
         token = websocket.query_params.get("token")
@@ -305,352 +72,471 @@ class MobileEventsService:
             await websocket.close(code=1008)
             return
 
-        redis = await get_redis_client()
-        pubsub = redis.pubsub()
-        await pubsub.subscribe(f"chat:user:{user_id}")
+        pubsub = None
+        try:
+            redis = await get_redis_client()
+            pubsub = redis.pubsub()
+            await pubsub.subscribe(f"chat:user:{user_id}")
+        except Exception:
+            if pubsub is not None:
+                try:
+                    await pubsub.aclose()
+                except Exception:
+                    logger.warning(
+                        "Failed to close pubsub during error cleanup", exc_info=True
+                    )
+            try:
+                await websocket.close(code=1013)
+            except Exception:
+                logger.warning(
+                    "Failed to close websocket during error cleanup", exc_info=True
+                )
+            return
 
         await websocket.accept()
-
-        # Tell client who the Bouwnce system user is (for disabling replies in UI).
-        with contextlib.suppress(Exception):
-            async with get_async_session() as db:
-                system_user = await bouwnce_dm_service.get_system_user(db=db)
-                if system_user is not None:
-                    await websocket.send_json(
-                        {
-                            "type": "bouwnce.system",
-                            "data": {
-                                "user": {
-                                    "id": str(system_user.id),
-                                    "email": system_user.email,
-                                    "username": system_user.username,
-                                    "full_name": system_user.full_name,
-                                    "profile_pic": chat_service._serialize_profile_pic(
-                                        system_user
-                                    ),
-                                }
-                            },
-                        }
-                    )
-
-        # Ensure Bouwnce inbox conversation exists with welcome message
-        with contextlib.suppress(Exception):
-            async with get_async_session() as db:
-                await bouwnce_dm_service.ensure_welcome_conversation(
-                    db=db, redis=redis, user_id=str(user_id), commit=True
-                )
-
-        await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
-        await self._publish_presence(redis=redis, user_id=str(user_id), online=True)
-
-        with contextlib.suppress(Exception):
-            await self._send_presence_snapshot(
-                websocket=websocket, redis=redis, user_id=str(user_id)
-            )
-
-        pubsub_task = asyncio.create_task(
-            self._forward_pubsub(websocket=websocket, pubsub=pubsub)
+        send_lock = asyncio.Lock()
+        chat_queue: asyncio.Queue[ChatMessageEvent] = asyncio.Queue(maxsize=200)
+        connection_id = uuid.uuid4().hex
+        ACTIVE_CHAT_CONNECTIONS.setdefault(str(user_id), {})[connection_id] = (
+            websocket,
+            send_lock,
+            chat_queue,
         )
-        stream_task = asyncio.create_task(
-            self._forward_stream(websocket=websocket, redis=redis, user_id=str(user_id))
+        chat_stream_ready = asyncio.Event()
+        pubsub_task = asyncio.create_task(
+            self._forward_pubsub(
+                websocket=websocket,
+                pubsub=pubsub,
+                redis=redis,
+                user_id=str(user_id),
+                send_lock=send_lock,
+            )
+        )
+        chat_stream_task = asyncio.create_task(
+            self._forward_chat_stream(
+                websocket=websocket,
+                redis=redis,
+                user_id=str(user_id),
+                ready_event=chat_stream_ready,
+                send_lock=send_lock,
+            )
+        )
+        bootstrap_task = asyncio.create_task(
+            self._bootstrap_connection(
+                websocket=websocket,
+                redis=redis,
+                user_id=str(user_id),
+                send_lock=send_lock,
+            )
+        )
+        chat_queue_task = asyncio.create_task(
+            self._drain_chat_queue(
+                websocket=websocket,
+                redis=redis,
+                user_id=str(user_id),
+                chat_queue=chat_queue,
+                send_lock=send_lock,
+            )
         )
         presence_task = asyncio.create_task(
             self._presence_heartbeat(redis=redis, user_id=str(user_id))
+        )
+
+        # Wait for bootstrap + stream ready before sending chat.ready
+        with contextlib.suppress(Exception):
+            await bootstrap_task
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(chat_stream_ready.wait(), timeout=5)
+
+        await self._send_model_safe(
+            websocket,
+            ChatReadyEvent(data=ChatReadyData(user_id=str(user_id))),
+            send_lock=send_lock,
         )
 
         try:
             while True:
                 try:
                     raw = await websocket.receive_text()
-                except (WebSocketDisconnect, RuntimeError):
+                except (
+                    WebSocketDisconnect,
+                    RuntimeError,
+                    ConnectionClosedError,
+                    ConnectionClosedOK,
+                ):
                     break
-                incoming = None
-                with contextlib.suppress(Exception):
-                    incoming = json.loads(raw)
-                if incoming is None:
-                    continue
-
-                msg_type = str(incoming.get("type") or "").strip().lower()
-                if not msg_type:
-                    continue
-
-                if msg_type == "ping":
-                    await websocket.send_json({"type": "pong"})
-                    continue
-
-                if msg_type == "chat.send":
-                    try:
-                        payload = SendMessagePayload.model_validate(incoming)
-                    except Exception:
-                        await websocket.send_json(
-                            {
-                                "type": "error",
-                                "error": "invalid_payload",
-                                "message": "Expected: {type:'chat.send', recipient_id:'<uuid>', body:'...'}",
-                            }
-                        )
+                try:
+                    incoming = None
+                    with contextlib.suppress(Exception):
+                        incoming = json.loads(raw)
+                    if incoming is None:
                         continue
 
-                    async with get_async_session() as db:
-                        try:
-                            sender = await User.get_by_id(str(user_id), db)
-                            result = await chat_service.send_message(
-                                db=db,
-                                redis=redis,
-                                sender=sender,
-                                recipient_id=payload.recipient_id,
-                                body=payload.body,
-                                reply_to_message_id=(
-                                    str(payload.reply_to_message_id)
-                                    if payload.reply_to_message_id
-                                    else None
-                                ),
-                                commit=False,
-                                as_response=False,
-                            )
-                        except (
-                            NotFoundException,
-                            ForbiddenException,
-                            BadRequestException,
-                        ) as e:
-                            await websocket.send_json(
-                                {
-                                    "type": "error",
-                                    "error": "chat.send.failed",
-                                    "message": str(e),
-                                }
-                            )
-                            continue
+                    msg_type = str(incoming.get("type") or "").strip().lower()
+                    if not msg_type:
+                        continue
 
-                    await websocket.send_json(
-                        {
-                            "type": "chat.sent",
-                            "client_id": payload.client_id,
-                            "data": {**result},
-                        }
+                    # ---- ping ----
+                    if msg_type == "ping":
+                        if not await self._send_model_safe(
+                            websocket, PongEvent(), send_lock=send_lock
+                        ):
+                            break
+                        continue
+
+                    # ---- chat.send ----
+                    if msg_type == "chat.send":
+                        if not await self._handle_chat_send(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
+
+                    # ---- chat.upload_media ----
+                    if msg_type == "chat.upload_media":
+                        if not await self._handle_chat_upload_media(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
+
+                    # ---- chat.read ----
+                    if msg_type == "chat.read":
+                        if not await self._handle_chat_read(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
+
+                    # ---- chat.typing ----
+                    if msg_type == "chat.typing":
+                        if not await self._handle_chat_typing(
+                            websocket, send_lock, redis, user_id, incoming
+                        ):
+                            break
+                        continue
+
+                    # Unknown event type — ignore, don't crash
+                except Exception:
+                    # Safety net: a single event handler bug must never
+                    # kill the WebSocket connection.
+                    logger.warning(
+                        "Failed to unsubscribe pubsub for user %s",
+                        user_id,
+                        exc_info=True,
                     )
-                    continue
-
-                if msg_type == "chat.upload_media":
-                    try:
-                        payload = UploadMediaPayload.model_validate(incoming)
-                    except Exception:
-                        await websocket.send_json(
-                            {
-                                "type": "error",
-                                "error": "invalid_payload",
-                                "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_type:'image|video|file', media_urls:['https://...'], body?:'...'}",
-                            }
-                        )
-                        continue
-
-                    if str(payload.recipient_id) == str(user_id):
-                        await websocket.send_json(
-                            {"type": "error", "error": "self_send_not_allowed"}
-                        )
-                        continue
-
-                    media_type = (payload.media_type or "").strip().lower()
-                    if media_type not in {"image", "video", "file"}:
-                        await websocket.send_json(
-                            {"type": "error", "error": "invalid_media_type"}
-                        )
-                        continue
-
-                    urls = [u for u in (payload.media_urls or []) if u]
-                    if not urls:
-                        await websocket.send_json(
-                            {"type": "error", "error": "missing_media_urls"}
-                        )
-                        continue
-                    if any(not self._is_cloudinary_secure_url(u) for u in urls):
-                        await websocket.send_json(
-                            {"type": "error", "error": "invalid_media_urls"}
-                        )
-                        continue
-
-                    async with get_async_session() as db:
-                        try:
-                            sender = await User.get_by_id(str(user_id), db)
-                            result = await chat_service.send_media_message(
-                                db=db,
-                                redis=redis,
-                                sender=sender,
-                                recipient_id=str(payload.recipient_id),
-                                body=payload.body,
-                                media_urls=urls,
-                                media_type=media_type,
-                                file_name=payload.file_name,
-                                reply_to_message_id=(
-                                    str(payload.reply_to_message_id)
-                                    if payload.reply_to_message_id
-                                    else None
-                                ),
-                                commit=False,
-                                as_response=False,
-                            )
-                        except (
-                            NotFoundException,
-                            ForbiddenException,
-                            BadRequestException,
-                        ) as e:
-                            await websocket.send_json(
-                                {
-                                    "type": "error",
-                                    "error": "chat.upload_media.failed",
-                                    "message": str(e),
-                                }
-                            )
-                            continue
-
-                    await websocket.send_json(
-                        {
-                            "type": "chat.sent",
-                            "client_id": payload.client_id,
-                            "data": {**result},
-                        }
-                    )
-                    continue
-
-                if msg_type == "chat.read":
-                    try:
-                        payload = MarkConversationReadPayload.model_validate(incoming)
-                    except Exception:
-                        await websocket.send_json(
-                            {
-                                "type": "error",
-                                "error": "invalid_payload",
-                                "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', message_id:'<uuid>', mark_all?:true|false}",
-                            }
-                        )
-                        continue
-
-                    async with get_async_session() as db:
-                        try:
-                            if payload.mark_all:
-                                conv = await Conversation.get_between(
-                                    db,
-                                    uuid.UUID(str(user_id)),
-                                    uuid.UUID(str(payload.recipient_id)),
-                                )
-                                if conv is None:
-                                    raise NotFoundException("Conversation not found")
-                                result = await chat_service.mark_conversation_read(
-                                    db=db,
-                                    redis=redis,
-                                    current_user_id=str(user_id),
-                                    conversation_id=str(conv.id),
-                                    commit=False,
-                                    as_response=False,
-                                )
-                            else:
-                                result = await chat_service.mark_conversation_read_with_user_up_to_message(
-                                    db=db,
-                                    redis=redis,
-                                    current_user_id=str(user_id),
-                                    recipient_id=str(payload.recipient_id),
-                                    message_id=str(payload.message_id),
-                                    commit=False,
-                                    as_response=False,
-                                )
-                        except (
-                            NotFoundException,
-                            ForbiddenException,
-                            BadRequestException,
-                        ) as e:
-                            await websocket.send_json(
-                                {
-                                    "type": "error",
-                                    "error": "chat.read.failed",
-                                    "message": str(e),
-                                }
-                            )
-                            continue
-
-                    await websocket.send_json({"type": "chat.read.ack", "data": result})
-                    continue
-
-                if msg_type == "chat.typing":
-                    try:
-                        payload = TypingPayload.model_validate(incoming)
-                    except Exception:
-                        await websocket.send_json(
-                            {
-                                "type": "error",
-                                "error": "invalid_payload",
-                                "message": "Expected: {type:'chat.typing', user_id:'<uuid>', is_typing:true|false}",
-                            }
-                        )
-                        continue
-
-                    async with get_async_session() as db:
-                        try:
-                            conv = await Conversation.get_between(
-                                db,
-                                uuid.UUID(str(user_id)),
-                                uuid.UUID(str(payload.user_id)),
-                            )
-                            if conv is None:
-                                raise NotFoundException("Conversation not found")
-
-                            sender = await User.get_by_id(str(user_id), db)
-                            targets = {str(conv.user_a_id), str(conv.user_b_id)}
-                        except (
-                            NotFoundException,
-                            ForbiddenException,
-                            BadRequestException,
-                        ) as e:
-                            await websocket.send_json(
-                                {
-                                    "type": "error",
-                                    "error": "chat.typing.failed",
-                                    "message": str(e),
-                                }
-                            )
-                            continue
-
-                    event_payload = json.dumps(
-                        {
-                            "type": "chat.typing",
-                            "data": {
-                                "conversation_id": str(conv.id),
-                                "user": {
-                                    "id": str(sender.id),
-                                    "username": sender.username,
-                                    "full_name": sender.full_name,
-                                    "profile_pic": chat_service._serialize_profile_pic(
-                                        sender
-                                    ),
-                                },
-                                "is_typing": bool(payload.is_typing),
-                            },
-                        }
-                    )
-                    for target_id in targets:
-                        await redis.publish(f"chat:user:{target_id}", event_payload)
-
-                    await websocket.send_json(
-                        {
-                            "type": "chat.typing.ack",
-                            "data": {
-                                "conversation_id": str(conv.id),
-                                "user_id": str(payload.user_id),
-                                "is_typing": bool(payload.is_typing),
-                            },
-                        }
-                    )
-                    continue
         finally:
+            user_connections = ACTIVE_CHAT_CONNECTIONS.get(str(user_id))
+            if user_connections is not None:
+                user_connections.pop(connection_id, None)
+                if not user_connections:
+                    ACTIVE_CHAT_CONNECTIONS.pop(str(user_id), None)
+            bootstrap_task.cancel()
             pubsub_task.cancel()
-            stream_task.cancel()
+            chat_stream_task.cancel()
+            chat_queue_task.cancel()
             presence_task.cancel()
-            await pubsub.unsubscribe(f"chat:user:{user_id}")
-            await pubsub.close()
-            with contextlib.suppress(Exception):
+            try:
+                await pubsub.unsubscribe(f"chat:user:{user_id}")
+            except Exception:
+                logger.warning(
+                    "Failed to unsubscribe pubsub for user %s", user_id, exc_info=True
+                )
+            try:
+                await pubsub.aclose()
+            except Exception:
+                logger.warning(
+                    "Failed to close pubsub for user %s", user_id, exc_info=True
+                )
+            await asyncio.gather(
+                bootstrap_task,
+                pubsub_task,
+                chat_stream_task,
+                chat_queue_task,
+                presence_task,
+                return_exceptions=True,
+            )
+            try:
                 await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
                 await self._publish_presence(
                     redis=redis, user_id=str(user_id), online=False
                 )
+            except Exception:
+                logger.warning(
+                    "Failed to clean up presence for user %s", user_id, exc_info=True
+                )
+
+    # ------------------------------------------------------------------
+    # Event handlers (extracted from the main loop for readability)
+    # ------------------------------------------------------------------
+    async def _handle_chat_send(
+        self, websocket: WebSocket, send_lock, redis, user_id: str, incoming: dict
+    ) -> bool:
+        """Handle chat.send. Returns False if the connection should close."""
+        try:
+            payload = SendMessagePayload.model_validate(incoming)
+        except Exception:
+            return await self._send_json_safe(
+                websocket,
+                {
+                    "type": "error",
+                    "error": "invalid_payload",
+                    "message": "Expected: {type:'chat.send', recipient_id:'<uuid>', body:'...'}",
+                },
+                send_lock=send_lock,
+            )
+
+        if not await self._send_model_safe(
+            websocket,
+            ChatSendAckEvent(
+                data=ChatSendAckData(
+                    sender_id=uuid.UUID(str(user_id)),
+                    recipient_id=payload.recipient_id,
+                    client_id=payload.client_id,
+                )
+            ),
+            send_lock=send_lock,
+        ):
+            return False
+
+        asyncio.create_task(
+            self._process_chat_send_request(
+                websocket=websocket,
+                send_lock=send_lock,
+                redis=redis,
+                sender_id=str(user_id),
+                recipient_id=str(payload.recipient_id),
+                body=payload.body,
+                reply_to_message_id=(
+                    str(payload.reply_to_message_id)
+                    if payload.reply_to_message_id
+                    else None
+                ),
+                client_id=payload.client_id,
+            )
+        )
+        return True
+
+    async def _handle_chat_upload_media(
+        self, websocket: WebSocket, send_lock, redis, user_id: str, incoming: dict
+    ) -> bool:
+        """Handle chat.upload_media. Returns False if the connection should close."""
+        try:
+            payload = UploadMediaPayload.model_validate(incoming)
+        except Exception:
+            return await self._send_json_safe(
+                websocket,
+                {
+                    "type": "error",
+                    "error": "invalid_payload",
+                    "message": "Expected: {type:'chat.upload_media', recipient_id:'<uuid>', media_type:'image|video|file', media_urls:['https://...'], body?:'...'}",
+                },
+                send_lock=send_lock,
+            )
+
+        if str(payload.recipient_id) == str(user_id):
+            return await self._send_json_safe(
+                websocket,
+                {"type": "error", "error": "self_send_not_allowed"},
+                send_lock=send_lock,
+            )
+
+        media_type = (payload.media_type or "").strip().lower()
+        if media_type not in {"image", "video", "file"}:
+            return await self._send_json_safe(
+                websocket,
+                {"type": "error", "error": "invalid_media_type"},
+                send_lock=send_lock,
+            )
+
+        urls = [u for u in (payload.media_urls or []) if u]
+        if not urls:
+            return await self._send_json_safe(
+                websocket,
+                {"type": "error", "error": "missing_media_urls"},
+                send_lock=send_lock,
+            )
+
+        if not await self._send_model_safe(
+            websocket,
+            ChatSendAckEvent(
+                data=ChatSendAckData(
+                    sender_id=uuid.UUID(str(user_id)),
+                    recipient_id=payload.recipient_id,
+                    client_id=payload.client_id,
+                )
+            ),
+            send_lock=send_lock,
+        ):
+            return False
+
+        if any(not self._is_cloudinary_secure_url(u) for u in urls):
+            return await self._send_json_safe(
+                websocket,
+                {"type": "error", "error": "invalid_media_urls"},
+                send_lock=send_lock,
+            )
+
+        asyncio.create_task(
+            self._process_chat_upload_media_request(
+                websocket=websocket,
+                send_lock=send_lock,
+                redis=redis,
+                sender_id=str(user_id),
+                recipient_id=str(payload.recipient_id),
+                body=payload.body,
+                media_urls=urls,
+                media_type=media_type,
+                file_name=payload.file_name,
+                reply_to_message_id=(
+                    str(payload.reply_to_message_id)
+                    if payload.reply_to_message_id
+                    else None
+                ),
+                client_id=payload.client_id,
+            )
+        )
+        return True
+
+    async def _handle_chat_read(
+        self, websocket: WebSocket, send_lock, redis, user_id: str, incoming: dict
+    ) -> bool:
+        """Handle chat.read. Returns False if the connection should close."""
+        try:
+            payload = MarkConversationReadPayload.model_validate(incoming)
+        except Exception:
+            return await self._send_json_safe(
+                websocket,
+                {
+                    "type": "error",
+                    "error": "invalid_payload",
+                    "message": "Expected: {type:'chat.read', recipient_id:'<uuid>', mark_all?:true|false, message_id?:'<uuid>'}",
+                },
+                send_lock=send_lock,
+            )
+
+        async with get_async_session() as db:
+            try:
+                if payload.mark_all:
+                    conv = await Conversation.get_between(
+                        db,
+                        uuid.UUID(str(user_id)),
+                        uuid.UUID(str(payload.recipient_id)),
+                    )
+                    if conv is None:
+                        raise NotFoundException("Conversation not found")
+                    result = await chat_service.mark_conversation_read(
+                        db=db,
+                        redis=redis,
+                        current_user_id=str(user_id),
+                        conversation_id=str(conv.id),
+                        commit=False,
+                        as_response=False,
+                    )
+                else:
+                    if payload.message_id is None:
+                        raise BadRequestException(
+                            "message_id is required when mark_all is false"
+                        )
+                    result = await chat_service.mark_conversation_read_with_user_up_to_message(
+                        db=db,
+                        redis=redis,
+                        current_user_id=str(user_id),
+                        recipient_id=str(payload.recipient_id),
+                        message_id=str(payload.message_id),
+                        commit=False,
+                        as_response=False,
+                    )
+            except Exception as e:
+                with contextlib.suppress(Exception):
+                    await self._send_json_safe(
+                        websocket,
+                        {
+                            "type": "error",
+                            "error": "chat.read.failed",
+                            "message": str(e),
+                        },
+                        send_lock=send_lock,
+                    )
+                return True  # keep connection alive
+
+        return await self._send_model_safe(
+            websocket,
+            ChatReadAckEvent(data=ChatReadAckData.model_validate(result)),
+            send_lock=send_lock,
+        )
+
+    async def _handle_chat_typing(
+        self, websocket: WebSocket, send_lock, redis, user_id: str, incoming: dict
+    ) -> bool:
+        """Handle chat.typing. Returns False if the connection should close."""
+        self._prune_typing_caches()
+        try:
+            payload = TypingPayload.model_validate(incoming)
+        except Exception:
+            return await self._send_json_safe(
+                websocket,
+                {
+                    "type": "error",
+                    "error": "invalid_payload",
+                    "message": "Expected: {type:'chat.typing', user_id:'<uuid>', is_typing:true|false}",
+                },
+                send_lock=send_lock,
+            )
+
+        async with get_async_session() as db:
+            try:
+                conv_id = await self._get_cached_conversation_id(
+                    db=db,
+                    user1_id=str(user_id),
+                    user2_id=str(payload.user_id),
+                )
+                if conv_id is None:
+                    raise NotFoundException("Conversation not found")
+
+                sender_lite = await self._get_cached_user_lite(
+                    db=db, user_id=str(user_id)
+                )
+                # Pre-warm Redis cache for recipient
+                await User.get_chat_users_by_ids([str(payload.user_id)], db)
+                targets = {str(user_id), str(payload.user_id)}
+            except Exception as e:
+                # Catch ALL exceptions — a typing error must never crash
+                # the WebSocket connection (which would kill message delivery).
+                with contextlib.suppress(Exception):
+                    await self._send_json_safe(
+                        websocket,
+                        {
+                            "type": "error",
+                            "error": "chat.typing.failed",
+                            "message": str(e),
+                        },
+                        send_lock=send_lock,
+                    )
+                return True  # keep connection alive
+
+        if conv_id is None or sender_lite is None or targets is None:
+            return True
+
+        event_payload = ChatTypingEvent(
+            data=ChatTypingData(
+                conversation_id=uuid.UUID(str(conv_id)),
+                user=sender_lite,
+                is_typing=bool(payload.is_typing),
+            )
+        )
+        try:
+            async with redis.pipeline() as pipe:
+                for target_id in targets:
+                    pipe.publish(
+                        f"chat:user:{target_id}",
+                        event_payload.model_dump_json(),
+                    )
+                await pipe.execute()
+        except Exception as e:
+            raise InternalServerErrorException("Failed to publish typing event") from e
+
+        return True
 
 
 mobile_events_service = MobileEventsService()

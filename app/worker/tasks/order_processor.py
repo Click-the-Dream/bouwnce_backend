@@ -2,9 +2,11 @@ import asyncio
 import json
 from datetime import UTC, datetime
 
+import redis.asyncio as aioredis
+
+from app.core.config import settings
 from app.core.security import genrate_verification_code
 from app.db.postgres_db_conn import get_async_session
-from app.db.redis import get_redis_client
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.payment import Payment
@@ -27,11 +29,9 @@ from app.worker.event_system import (
 )
 
 
-async def _process_paid_order(event: PaidOrderEvent) -> None:
+async def _process_paid_order(event: PaidOrderEvent, redis) -> None:
     reference = event.reference
     amount = event.amount
-
-    redis = await get_redis_client()
     lock_key = f"order_processing:lock:{reference}"
     queue_key = f"order_processing:queued:{reference}"
 
@@ -294,14 +294,41 @@ async def _process_paid_order(event: PaidOrderEvent) -> None:
         await redis.delete(queue_key)
 
 
-async def _push_to_dlq(event: PaidOrderEvent, error_message: str) -> None:
-    redis = await get_redis_client()
+async def _push_to_dlq(event: PaidOrderEvent, error_message: str, redis) -> None:
     dlq_message = {
         "event": event.model_dump(mode="json"),
         "error": error_message,
         "failed_at": datetime.now(UTC).isoformat(),
     }
     await redis.rpush("dlq:order_processor", json.dumps(dlq_message))
+
+
+async def _run_order_processing(event: PaidOrderEvent) -> None:
+    """Create a fresh Redis client, process order, then close it."""
+    pool = aioredis.ConnectionPool.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        max_connections=2,
+    )
+    redis = aioredis.Redis(connection_pool=pool)
+    try:
+        await _process_paid_order(event, redis)
+    finally:
+        await redis.aclose()
+
+
+async def _run_push_to_dlq(event: PaidOrderEvent, error_message: str) -> None:
+    """Create a fresh Redis client, push to DLQ, then close it."""
+    pool = aioredis.ConnectionPool.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        max_connections=2,
+    )
+    redis = aioredis.Redis(connection_pool=pool)
+    try:
+        await _push_to_dlq(event, error_message, redis)
+    finally:
+        await redis.aclose()
 
 
 @celery_app.task(
@@ -314,11 +341,11 @@ def process_paid_order(self, event_payload: dict) -> None:
     event = PaidOrderEvent.model_validate(event_payload)
 
     try:
-        asyncio.run(_process_paid_order(event=event))
+        asyncio.run(_run_order_processing(event=event))
     except Exception as exc:
         retries = self.request.retries or 0
         if retries >= self.max_retries:
-            asyncio.run(_push_to_dlq(event, str(exc)))
+            asyncio.run(_run_push_to_dlq(event, str(exc)))
             raise
 
         delay_seconds = min(2 ** (retries + 1), 300)

@@ -12,3 +12,4 @@ wheels/
 tests/test_search_parser.py
 /.qwen
 scripts/
+.agent/

@@ -1,12 +1,14 @@
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from uuid import UUID
 
 import redis.asyncio as aioredis
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.db.postgres_db_conn import get_async_session
 from app.models.web_push_subscription import WebPushSubscription
 from app.service.web_push_service import (
     send_web_push,
@@ -22,7 +24,20 @@ MAX_PER_RUN = 100  # hard cap on items processed per task run
 SEND_DELAY_SECONDS = 0.05  # gentle pacing to avoid push-service rate limits
 
 
-async def _drain_once(redis) -> int:
+@asynccontextmanager
+async def _worker_db_session(session_factory: async_sessionmaker[AsyncSession]):
+    """Open and commit one database session owned by this worker task."""
+    async with session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.warning("Error during worker database session: %s", exc)
+            raise
+
+
+async def _drain_once(redis, session_context_factory) -> int:
     """Pop queued push payloads and deliver them to web subscriptions.
 
     Payload shape (produced by ``dispatch_event`` PUSH_NOTIFICATION):
@@ -38,7 +53,7 @@ async def _drain_once(redis) -> int:
     processed = 0
     retry_payloads: list[str] = []
 
-    async with get_async_session() as db:
+    async with session_context_factory() as db:
         for _ in range(MAX_PER_RUN):
             raw = await redis.lpop(PUSH_QUEUE_KEY)
             if raw is None:
@@ -172,17 +187,35 @@ async def _drain_once(redis) -> int:
 
 
 async def _drain_once_with_client() -> int:
-    """Create a fresh Redis client, drain, then close it."""
+    """Create task-local Redis and database clients, then close them."""
     pool = aioredis.ConnectionPool.from_url(
         settings.REDIS_URL,
         decode_responses=True,
         max_connections=2,
     )
     redis = aioredis.Redis(connection_pool=pool)
+    engine = None
     try:
-        return await _drain_once(redis)
+        engine = create_async_engine(
+            settings.SQLALCHEMY_DATABASE_URL,
+            echo=settings.SQLALCHEMY_ECHO,
+            future=settings.SQLALCHEMY_FUTURE,
+            poolclass=NullPool,
+        )
+        session_factory = async_sessionmaker(
+            bind=engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+        return await _drain_once(
+            redis,
+            lambda: _worker_db_session(session_factory),
+        )
     finally:
         await redis.aclose()
+        if engine is not None:
+            await engine.dispose()
 
 
 @celery_app.task(name="app.worker.tasks.web_push.drain_push_queue")

@@ -16,7 +16,7 @@ class _ScalarResult:
     def __init__(self, values: list[UUID]) -> None:
         self._values = values
 
-    def scalars(self) -> "_ScalarResult":
+    def scalars(self) -> _ScalarResult:
         return self
 
     def all(self) -> list[UUID]:

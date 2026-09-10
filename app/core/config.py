@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Upstash Free plan allows ~10 concurrent connections total.
     # Budget: API ~3, Celery worker ~3, Celery beat ~1, WebSocket ~3.
     # Each WebSocket user holds 1-2 connections (pubsub + xread).
-    REDIS_MAX_CONNECTIONS: int = 3
+    REDIS_MAX_CONNECTIONS: int = 50
     REDIS_HEALTH_CHECK_INTERVAL: int = 30
 
     SECRET_KEY: str = ""

@@ -64,11 +64,12 @@ class AdminBouwnceService:
                 commit=False,
                 as_response=False,
             )
+            message = result["message"]
             sent.append(
                 {
                     "user_id": str(uid),
                     "conversation_id": result["conversation_id"],
-                    "message_id": result["message"]["id"],
+                    "message_id": str(message.id),
                 }
             )
 

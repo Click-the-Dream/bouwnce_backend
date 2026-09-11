@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.core.config import settings
 from app.matching_ground.service.chat_service import chat_service
@@ -11,10 +12,25 @@ from app.models.user import User
 
 class BouwnceDMService:
     async def get_system_user(self, *, db: AsyncSession) -> User | None:
+        """Fetch the Bouwnce system user with only the columns needed for chat.
+
+        Uses load_only to avoid triggering the 8 eager-loaded relationships
+        (stores, orders, carts, payments, etc.) on every WebSocket connect.
+        """
+        _chat_cols = load_only(
+            User.id,
+            User.email,
+            User.username,
+            User.full_name,
+            User.profile_pic,
+            User.role,
+        )
         if settings.BOUWNCE_SYSTEM_EMAIL:
             by_email = (
                 await db.execute(
-                    select(User).where(User.email == settings.BOUWNCE_SYSTEM_EMAIL)
+                    select(User)
+                    .where(User.email == settings.BOUWNCE_SYSTEM_EMAIL)
+                    .options(_chat_cols)
                 )
             ).scalar_one_or_none()
             if by_email is not None:
@@ -23,9 +39,9 @@ class BouwnceDMService:
         if settings.BOUWNCE_SYSTEM_USERNAME:
             by_username = (
                 await db.execute(
-                    select(User).where(
-                        User.username == settings.BOUWNCE_SYSTEM_USERNAME
-                    )
+                    select(User)
+                    .where(User.username == settings.BOUWNCE_SYSTEM_USERNAME)
+                    .options(_chat_cols)
                 )
             ).scalar_one_or_none()
             if by_username is not None:
@@ -34,9 +50,9 @@ class BouwnceDMService:
         if settings.BOUWNCE_SYSTEM_FULL_NAME:
             by_name = (
                 await db.execute(
-                    select(User).where(
-                        User.full_name == settings.BOUWNCE_SYSTEM_FULL_NAME
-                    )
+                    select(User)
+                    .where(User.full_name == settings.BOUWNCE_SYSTEM_FULL_NAME)
+                    .options(_chat_cols)
                 )
             ).scalar_one_or_none()
             if by_name is not None:
@@ -51,8 +67,10 @@ class BouwnceDMService:
         redis,
         user_id: str,
         commit: bool = False,
+        system_user: User | None = None,
     ) -> None:
-        system_user = await self.get_system_user(db=db)
+        if system_user is None:
+            system_user = await self.get_system_user(db=db)
         if system_user is None:
             return
 

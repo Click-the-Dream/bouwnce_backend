@@ -1,3 +1,4 @@
+from app.event_broadcast.models.events import OutingEvent
 from app.matching_ground.model.interest import Interest
 from app.matching_ground.model.match import Match, MatchRequest
 from app.matching_ground.model.notification import Notification
@@ -25,6 +26,7 @@ from app.models.verification import Verification
 from app.models.waitlist import Waitlist
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
+from app.models.web_push_subscription import WebPushSubscription
 
 __all__ = [
     "BaseModel",
@@ -57,4 +59,6 @@ __all__ = [
     "Message",
     "DeviceToken",
     "Notification",
+    "WebPushSubscription",
+    "OutingEvent",
 ]

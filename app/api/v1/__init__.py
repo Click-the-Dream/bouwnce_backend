@@ -13,6 +13,7 @@ from app.api.v1 import (
     payment,
     payout_info_crud,
     product_router,
+    push,
     shipments_info_crud,
     store_crud,
     uploads,
@@ -22,7 +23,9 @@ from app.api.v1 import (
     waitlist_router,
 )
 from app.core.rate_limiter import rate_limiter
+from app.event_broadcast.api.v1 import event_router
 from app.matching_ground.api.rest import chat, interest, location, match
+from app.search_parser.api.rest import search
 from app.utils.responses import (
     BadRequestResponse,
     ForbiddenResponse,
@@ -62,6 +65,7 @@ waitlist = APIRouter(prefix="/waitlist")
 
 waitlist.include_router(waitlist_router.router)
 
+
 api_router = APIRouter()
 
 api_router.include_router(
@@ -90,3 +94,6 @@ api_router.include_router(uploads.router)
 api_router.include_router(chat.router)
 api_router.include_router(admin_bouwnce.router)
 api_router.include_router(notifications.router)
+api_router.include_router(push.router)
+api_router.include_router(event_router)
+api_router.include_router(search.router)

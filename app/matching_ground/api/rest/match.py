@@ -19,9 +19,16 @@ router = APIRouter(prefix="/matches", tags=["matches"])
 async def suggest_candidates(
     db: dbSessionDep,
     current_user: CurrentUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
 ) -> dict:
     service = MatchLifecycleService()
-    return await service.suggest_candidates(session=db, requester_id=current_user.id)
+    return await service.suggest_candidates(
+        session=db,
+        requester_id=current_user.id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get(

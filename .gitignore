@@ -9,8 +9,7 @@ wheels/
 .venv
 .env
 /venv
-.trunk/
-
-# Deployment files
-bin/
-ecosystem.config.js
+tests/test_search_parser.py
+/.qwen
+scripts/
+.agent/

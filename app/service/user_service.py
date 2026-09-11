@@ -18,6 +18,7 @@ from app.utils.exception import (
     NotFoundException,
 )
 from app.utils.responses import response_builder
+from app.utils.user_cache import invalidate_cached_user
 
 
 class UserService:
@@ -55,6 +56,7 @@ class UserService:
 
         try:
             user = await User.update_by_id(user_id, user_data, db)
+            await invalidate_cached_user(str(user_id))
 
             return response_builder(
                 status_code=status.HTTP_200_OK,
@@ -73,6 +75,7 @@ class UserService:
     ) -> dict[str, Any]:
 
         user = await user.update_me(user_data, db)
+        await invalidate_cached_user(str(user.id))
 
         return response_builder(
             status_code=status.HTTP_200_OK,
@@ -214,6 +217,7 @@ class UserService:
             await cleanup_temp_files(banner_path)
 
         await user.update(db=db, data=data)
+        await invalidate_cached_user(str(user.id))
 
         return response_builder(
             status_code=status.HTTP_200_OK,

@@ -13,6 +13,7 @@ db = client.get_database(settings.MONGODB_DB_NAME)
 
 async def mongo_conn():
     from app.models.products import Category, Product
+    from app.search_parser.model.parse_cache import SearchCatalogCache, SearchParseCache
 
     try:
         await client.admin.command("ping")
@@ -21,5 +22,8 @@ async def mongo_conn():
         print("❌ Failed to connect to MongoDB")
         print(f"Error: {e}")
 
-    await init_beanie(database=db, document_models=[Product, Category])
+    await init_beanie(
+        database=db,
+        document_models=[Product, Category, SearchParseCache, SearchCatalogCache],
+    )
     return client

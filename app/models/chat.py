@@ -4,8 +4,18 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, select
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,8 +39,8 @@ class Conversation(BaseModel):
         DateTime(timezone=True), default=func.now(), nullable=False
     )
 
-    user_a: Mapped[User] = relationship(foreign_keys=[user_a_id], lazy="joined")
-    user_b: Mapped[User] = relationship(foreign_keys=[user_b_id], lazy="joined")
+    user_a: Mapped[User] = relationship(foreign_keys=[user_a_id], lazy="noload")
+    user_b: Mapped[User] = relationship(foreign_keys=[user_b_id], lazy="noload")
 
     __table_args__ = (
         UniqueConstraint("user_a_id", "user_b_id", name="uix_conversation_users"),
@@ -58,15 +68,23 @@ class Conversation(BaseModel):
     async def get_or_create_between(
         cls, db: AsyncSession, user1_id: UUID_Type, user2_id: UUID_Type
     ) -> Self:
-        existing = await cls.get_between(db, user1_id, user2_id)
-        if existing is not None:
-            return existing
+        """Single-query upsert: INSERT ... ON CONFLICT DO UPDATE RETURNING *.
+
+        Reduces 3 roundtrips (SELECT + INSERT + REFRESH) to 1.
+        """
         a_id, b_id = cls.normalize_user_pair(user1_id, user2_id)
-        row = cls(user_a_id=a_id, user_b_id=b_id)
-        db.add(row)
-        await db.flush()
-        await db.refresh(row)
-        return row
+        now = func.now()
+        stmt = (
+            pg_insert(cls)
+            .values(user_a_id=a_id, user_b_id=b_id)
+            .on_conflict_do_update(
+                constraint="uix_conversation_users",
+                set_={"last_message_at": now},
+            )
+            .returning(cls)
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one()
 
 
 class Message(BaseModel):
@@ -82,7 +100,10 @@ class Message(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     recipient_id: Mapped[UUID_Type] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     body: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -102,4 +123,15 @@ class Message(BaseModel):
         nullable=True,
     )
 
-    conversation: Mapped[Conversation] = relationship(lazy="joined")
+    conversation: Mapped[Conversation] = relationship(lazy="noload")
+
+    __table_args__ = (
+        # Speeds up `ORDER BY created_at DESC` per-conversation message pages.
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+        # Speeds up unread counts / mark-as-read on unread rows for a user.
+        Index(
+            "ix_messages_recipient_unread",
+            "recipient_id",
+            postgresql_where=text("read_at IS NULL"),
+        ),
+    )

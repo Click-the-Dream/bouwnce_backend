@@ -66,29 +66,6 @@ def upgrade() -> None:
                 batch_op.f("ix_users_username"), ["username"], unique=True
             )
 
-    if not _table_exists("business_info"):
-        op.create_table(
-            "business_info",
-            sa.Column("name", sa.String(), nullable=False),
-            sa.Column("user_id", sa.UUID(), nullable=False),
-            sa.Column("address", sa.String(), nullable=False),
-            sa.Column("phone_number", sa.String(), nullable=False),
-            sa.Column("email", sa.String(), nullable=False),
-            sa.Column("phone", sa.String(), nullable=False),
-            sa.Column("btype", sa.String(), nullable=False),
-            sa.Column("id", sa.UUID(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=False),
-            sa.Column("deleted_at", sa.DateTime(), nullable=True),
-            sa.Column("is_deleted", sa.Boolean(), nullable=False),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-            sa.PrimaryKeyConstraint("id"),
-        )
-        with op.batch_alter_table("business_info", schema=None) as batch_op:
-            batch_op.create_index(
-                batch_op.f("ix_business_info_id"), ["id"], unique=False
-            )
-
     if not _table_exists("contact_info"):
         op.create_table(
             "contact_info",
@@ -109,24 +86,6 @@ def upgrade() -> None:
             batch_op.create_index(
                 batch_op.f("ix_contact_info_id"), ["id"], unique=False
             )
-
-    if not _table_exists("payouts"):
-        op.create_table(
-            "payouts",
-            sa.Column("account_name", sa.String(), nullable=False),
-            sa.Column("user_id", sa.UUID(), nullable=False),
-            sa.Column("bank_name", sa.String(), nullable=False),
-            sa.Column("account_number", sa.String(), nullable=False),
-            sa.Column("id", sa.UUID(), nullable=False),
-            sa.Column("created_at", sa.DateTime(), nullable=False),
-            sa.Column("updated_at", sa.DateTime(), nullable=False),
-            sa.Column("deleted_at", sa.DateTime(), nullable=True),
-            sa.Column("is_deleted", sa.Boolean(), nullable=False),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-            sa.PrimaryKeyConstraint("id"),
-        )
-        with op.batch_alter_table("payouts", schema=None) as batch_op:
-            batch_op.create_index(batch_op.f("ix_payouts_id"), ["id"], unique=False)
 
     if not _table_exists("shipment_info"):
         op.create_table(
@@ -216,19 +175,10 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f("ix_shipment_info_id"))
 
     op.drop_table("shipment_info")
-    with op.batch_alter_table("payouts", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_payouts_id"))
-
-    op.drop_table("payouts")
     with op.batch_alter_table("contact_info", schema=None) as batch_op:
         batch_op.drop_index(batch_op.f("ix_contact_info_id"))
 
     op.drop_table("contact_info")
-    with op.batch_alter_table("business_info", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_business_info_id"))
-
-    op.drop_table("business_info")
-
     postgresql.ENUM(name="status_enum").drop(op.get_bind(), checkfirst=True)
     postgresql.ENUM(name="user_role_enum").drop(op.get_bind(), checkfirst=True)
     with op.batch_alter_table("users", schema=None) as batch_op:

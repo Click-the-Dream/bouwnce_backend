@@ -186,17 +186,32 @@ class MatchLifecycleService:
         rows = await session.execute(select(Interest.name))
         known_names = [r[0] for r in rows.all() if r and r[0]]
 
-        scored_hits: list[tuple[float, str]] = []
+        exact_hits: list[str] = []
+        normalized_hits: list[str] = []
+        fuzzy_hits: list[tuple[float, str]] = []
         for name in known_names:
             score = MatchLifecycleService._score_interest_match(text, name)
+            normalized_name = normalize_interest_name(name)
+            if score >= settings.SEARCH_MATCH_REGEX_SCORE:
+                exact_hits.append(normalized_name)
+                continue
+            if score >= settings.SEARCH_MATCH_NORMALIZED_SCORE:
+                normalized_hits.append(normalized_name)
+                continue
             if score >= settings.SEARCH_MATCH_FUZZY_SCORE:
-                scored_hits.append((score, normalize_interest_name(name)))
+                fuzzy_hits.append((score, normalized_name))
 
-        scored_hits.sort(key=lambda item: (-item[0], item[1].lower()))
+        if exact_hits:
+            hits_source = exact_hits
+        elif normalized_hits:
+            hits_source = normalized_hits
+        else:
+            fuzzy_hits.sort(key=lambda item: (-item[0], item[1].lower()))
+            hits_source = [name for _, name in fuzzy_hits]
 
         hits: list[str] = []
         seen: set[str] = set()
-        for _, name in scored_hits:
+        for name in hits_source:
             if name in seen:
                 continue
             seen.add(name)
@@ -226,17 +241,32 @@ class MatchLifecycleService:
                 User.is_active.is_(True), User.is_deleted.is_(False)
             )
         )
-        hits: set[uuid.UUID] = set()
+        exact_hits: set[uuid.UUID] = set()
+        normalized_hits: set[uuid.UUID] = set()
+        fuzzy_hits: set[uuid.UUID] = set()
         for user_id, username, full_name in rows.all():
             candidate_score = max(
                 self._score_text_match(text, username or ""),
                 self._score_text_match(text, full_name or ""),
             )
+            if candidate_score >= settings.SEARCH_MATCH_REGEX_SCORE:
+                exact_hits.add(user_id)
+                continue
+            if candidate_score >= settings.SEARCH_MATCH_NORMALIZED_SCORE:
+                normalized_hits.add(user_id)
+                continue
             if candidate_score >= settings.SEARCH_MATCH_USER_SCORE:
-                hits.add(user_id)
-                if len(hits) >= max_users:
-                    break
-        return hits
+                fuzzy_hits.add(user_id)
+
+        if exact_hits:
+            hits = exact_hits
+        elif normalized_hits:
+            hits = normalized_hits
+        else:
+            hits = fuzzy_hits
+
+        ordered_hits = list(hits)[:max_users]
+        return set(ordered_hits)
 
     async def _build_suggested_queries(
         self, session: AsyncSession, requester_id: uuid.UUID, *, limit: int = 5
@@ -270,15 +300,42 @@ class MatchLifecycleService:
         page_size: int = 10,
     ) -> dict:
         message_text = (message or "").strip()
-        radius_km = self._parse_radius_km(message_text)
-        interest_hints = await self._extract_interest_hints(session, message_text)
-        target_user_ids = await self._extract_user_hints(session, message_text)
+
+        interest_hints: list[str] = []
+        target_user_ids: set[uuid.UUID] = set()
+        radius_km: float | None = None
+
+        if message_text and settings.SEARCH_PARSER_LLM_ENABLED:
+            from app.search_parser.search_parser import CompositeQueryParser
+            from app.search_parser.service.buddy_param_mapper import (
+                map_parsed_query_to_buddy_params,
+            )
+
+            parser = CompositeQueryParser()
+            parsed = await parser.parse_with_session(
+                session=session,
+                message=message_text,
+                domain_name="buddy",
+                requester_id=requester_id,
+            )
+            if parsed is not None:
+                params = await map_parsed_query_to_buddy_params(parsed, session)
+                interest_hints = list(params.interest_hints)
+                target_user_ids = params.target_user_ids
+                radius_km = params.radius_km
+
+        if not interest_hints and message_text:
+            radius_km = self._parse_radius_km(message_text)
+            interest_hints = await self._extract_interest_hints(session, message_text)
+            target_user_ids = await self._extract_user_hints(session, message_text)
         result = await self.suggest_candidates(
             session=session,
             requester_id=requester_id,
             interest_hints=set(interest_hints),
             target_user_ids=target_user_ids,
             radius_km=radius_km,
+            page=page,
+            page_size=page_size,
         )
 
         items = result.get("items", []) or []
@@ -289,7 +346,6 @@ class MatchLifecycleService:
                 self._normalized_interest_key(interest) for interest in interest_hints
             }
             for item in items:
-                score = float(item.get("score") or 0.0)
                 is_direct_user_hit = item.get("user_id") in direct_user_ids
                 matched_interest = item.get("matched_interest")
                 matched_interests = item.get("matched_interests") or []
@@ -302,11 +358,7 @@ class MatchLifecycleService:
                     or matched_interest
                     or matched_interests
                 )
-                if (
-                    is_direct_user_hit
-                    or has_interest_match
-                    or score >= settings.SEARCH_MATCH_FUZZY_SCORE
-                ):
+                if is_direct_user_hit or has_interest_match:
                     filtered_items.append(item)
             items = filtered_items
 
@@ -317,8 +369,11 @@ class MatchLifecycleService:
                 interest_hints=None,
                 target_user_ids=set(),
                 radius_km=radius_km,
+                page=page,
+                page_size=page_size,
             )
             items = fallback_result.get("items", []) or []
+            result = fallback_result
 
         if not message_text:
             suggested_queries = await self._build_suggested_queries(
@@ -333,15 +388,14 @@ class MatchLifecycleService:
                 "reason": result.get("reason") or "no_relevant_matches",
             }
 
-        start = (page - 1) * page_size
-        end = start + page_size
         return {
             "status": result.get("status", "ok"),
             "reason": result.get("reason"),
             "page": page,
             "page_size": page_size,
             "total": len(items),
-            "items": items[start:end],
+            "has_next": result.get("has_next", False),
+            "items": items,
             "query": {
                 "message": message_text,
                 "radius_km": radius_km,
@@ -358,7 +412,13 @@ class MatchLifecycleService:
         interest_hints: set[str] | None = None,
         target_user_ids: set[uuid.UUID] | None = None,
         radius_km: float | None = 10.0,
+        page: int = 1,
+        page_size: int = 10,
     ) -> dict:
+        # Fetch the requester's gender for opposite-gender prioritization
+        requester = await User.get_by_id(str(requester_id), session)
+        requester_gender = getattr(requester, "gender", None) if requester else None
+
         buddy_search_service = BuddySearchService()
         result = await buddy_search_service.search(
             session=session,
@@ -366,32 +426,29 @@ class MatchLifecycleService:
             radius_km=radius_km,
             interest_hints=interest_hints,
             target_user_ids=target_user_ids,
+            requester_gender=requester_gender,
+            page=page,
+            page_size=page_size,
         )
-        filtered_matches = []
         interest_hint_list = list(interest_hints or [])
         direct_user_ids = {str(uid) for uid in target_user_ids or set()}
-        for item in result.matches:
-            if str(item.user_id) == str(requester_id):
-                continue
-            if await UserBlock.is_blocked_between(
-                session, requester_id, uuid.UUID(item.user_id)
-            ):
-                continue
-            filtered_matches.append(item)
-        filtered_matches.sort(
-            key=lambda item: (float(item.score or 0.0), item.distance_km),
-            reverse=True,
-        )
         return {
             "status": result.status,
             "reason": result.reason,
+            "page": page,
+            "page_size": page_size,
+            "has_next": result.has_next,
+            "radius_step_km": result.radius_step_km,
             "items": [
                 {
                     "user_id": item.user_id,
                     "username": item.username,
                     "full_name": item.full_name,
+                    "gender": item.gender,
                     "distance_km": item.distance_km,
                     "profile_pic": item.profile_pic,
+                    "banner_url": item.profile_banner,
+                    "bio": item.bio,
                     "score": item.score,
                     "shared_interests": item.shared_interests,
                     "candidate_interests": item.candidate_interests,
@@ -454,7 +511,7 @@ class MatchLifecycleService:
                         shared_interests_count=len(item.shared_interests),
                     ),
                 }
-                for item in filtered_matches
+                for item in result.matches
             ],
         }
 
@@ -585,6 +642,7 @@ class MatchLifecycleService:
             "requester_name": requester.full_name,
             "requester_location": "Lagos",
             "year": datetime.now().year,
+            "action_link": f"{settings.FRONTEND_URL}/app/requests?id={request.id}",
         }
         email_data = generate_email_content(
             subject="Match Request",

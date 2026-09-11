@@ -263,6 +263,94 @@ Ensures **code formatting, linting, and other checks** before commits.
 
 ---
 
+### Web Push Notifications
+
+The backend supports standard **Web Push** (VAPID + encrypted payloads) so browsers can
+receive notifications even when the app is closed.
+
+**Setup**
+
+1. Generate VAPID keys (one-time, per environment):
+
+   ```bash
+   .venv/bin/python - <<'EOF'
+   import base64
+   from py_vapid import Vapid01
+   v = Vapid01(); v.generate_keys()
+   def b64url(d): return base64.urlsafe_b64encode(d).rstrip(b'=').decode()
+   nums = v.public_key.public_numbers()
+   pub = b64url(b'\x04' + nums.x.to_bytes(32, 'big') + nums.y.to_bytes(32, 'big'))
+   priv = b64url(v.private_key.private_numbers().private_value.to_bytes(32, 'big'))
+   print('VAPID_PUBLIC_KEY=' + pub)
+   print('VAPID_PRIVATE_KEY=' + priv)
+   EOF
+   ```
+
+2. Set in `.env`:
+
+   ```
+   VAPID_PUBLIC_KEY="..."
+   VAPID_PRIVATE_KEY="..."
+   VAPID_SUBJECT="mailto:ops@bouwnce.com"
+   ```
+
+**API endpoints**
+
+| Method | Path                            | Auth | Purpose                            |
+| ------ | ------------------------------- | ---- | ---------------------------------- |
+| GET    | `/api/v1/push/vapid-public-key` | No   | VAPID public key for `subscribe()` |
+| POST   | `/api/v1/push/subscribe`        | Yes  | Store a browser subscription       |
+| DELETE | `/api/v1/push/subscribe`        | Yes  | Remove a browser subscription      |
+| POST   | `/api/v1/push/test`             | Yes  | Send a test push (dev only)        |
+
+Subscribe request body (the browser `PushSubscription`):
+
+```json
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/...",
+  "keys": { "p256dh": "...", "auth": "..." },
+  "expirationTime": null
+}
+```
+
+**Delivery pipeline**
+
+- Events emitted with `PushNotificationEvent` (chat, matches, orders, payments) are
+  persisted and pushed onto the Redis list `notifications:push:queue`.
+- A **Celery beat** task (`app.worker.tasks.web_push.drain_push_queue`) drains that queue
+  every 5 seconds and sends encrypted pushes to the user's web subscriptions.
+- Expired subscriptions (HTTP 404/410 from the push service) are removed automatically.
+
+Run the worker **and** beat to deliver pushes:
+
+```bash
+./bin/start-celery-worker.sh
+./bin/start-celery-beat.sh
+```
+
+**Client side (frontend)**
+
+For localhost development a demo page is served by the backend at `/push-demo`
+(`/static/push-demo.html`), including `sw.js` and `manifest.json`. In production the
+**frontend origin must host its own service worker** and call:
+
+```js
+const sub = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+});
+fetch("/api/v1/push/subscribe", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify(sub.toJSON()),
+});
+```
+
+---
+
 ### References
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)

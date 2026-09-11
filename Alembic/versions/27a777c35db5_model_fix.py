@@ -10,7 +10,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "27a777c35db5"
@@ -36,7 +35,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["store_id"], ["stores.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.drop_table("payouts")
     with op.batch_alter_table("contact_info", schema=None) as batch_op:
         batch_op.add_column(sa.Column("phone_number", sa.String(), nullable=False))
         batch_op.drop_column("phone")
@@ -81,39 +79,5 @@ def downgrade() -> None:
         )
         batch_op.drop_column("phone_number")
 
-    op.create_table(
-        "payouts",
-        sa.Column("account_name", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("bank_name", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("account_number", sa.VARCHAR(), autoincrement=False, nullable=False),
-        sa.Column("id", sa.UUID(), autoincrement=False, nullable=False),
-        sa.Column(
-            "created_at",
-            postgresql.TIMESTAMP(timezone=True),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            postgresql.TIMESTAMP(timezone=True),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column(
-            "deleted_at",
-            postgresql.TIMESTAMP(timezone=True),
-            autoincrement=False,
-            nullable=True,
-        ),
-        sa.Column("is_deleted", sa.BOOLEAN(), autoincrement=False, nullable=False),
-        sa.Column("store_id", sa.UUID(), autoincrement=False, nullable=False),
-        sa.ForeignKeyConstraint(
-            ["store_id"],
-            ["stores.id"],
-            name=op.f("payouts_store_id_fkey"),
-            ondelete="CASCADE",
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("payouts_pkey")),
-    )
     op.drop_table("payouts_info")
     # ### end Alembic commands ###

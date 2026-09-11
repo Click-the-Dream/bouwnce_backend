@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from typing import Callable
+from collections.abc import Awaitable, Callable
 
 from fastapi import WebSocket
 
@@ -151,13 +151,13 @@ class PubSubDispatcher:
                     callback = self._callbacks.get(target_user_id)
 
                 if callback is None:
-                    # User not connected — message is lost (this is the same
-                    # behaviour as before: pubsub to a user with no WS is dropped)
+                    # User not connected — message is lost (same behavior as
+                    # before: pubsub to a user with no WS is dropped)
                     continue
 
                 # Fire-and-forget the send — we don't await here because the
                 # callback handles its own errors and the dispatcher must keep
-                # reading.  If the callback needs backpressure, that's a future
+                # reading. If the callback needs backpressure, that's a future
                 # concern; for now the chat_queue in drain_chat_queue handles it.
                 asyncio.ensure_future(callback(payload, None))
         except asyncio.CancelledError:
@@ -469,7 +469,7 @@ class PresenceManager:
             lambda p: asyncio.ensure_future(asyncio.sleep(0, result=True))
         )
         _send_json = send_json or (
-            lambda ws, p, l: asyncio.ensure_future(asyncio.sleep(0, result=True))
+            lambda ws, p, lock: asyncio.ensure_future(asyncio.sleep(0, result=True))
         )
 
         for _stream_name, messages in streams or []:
@@ -508,7 +508,7 @@ class PresenceManager:
                     last_id = msg_id
                     await redis.set(last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8)
                 else:
-                    # Send failed — don't advance cursor, message will be
+                    # Send failed — don't advance cursor; message will be
                     # re-delivered via pubsub (which is still active).
                     return
 

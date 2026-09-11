@@ -146,8 +146,7 @@ class PubSubDispatcher:
                 except Exception:
                     # Malformed JSON — skip, don't crash the dispatcher
                     print(
-                        "Error parsing pubsub payload for user %s: %r"
-                        % (target_user_id, data)
+                        f"Error parsing pubsub payload for user {target_user_id}: {data}"
                     )
 
                 async with self._register_lock:

@@ -145,7 +145,10 @@ class PubSubDispatcher:
                     payload = json.loads(data)
                 except Exception:
                     # Malformed JSON — skip, don't crash the dispatcher
-                    continue
+                    print(
+                        "Error parsing pubsub payload for user %s: %r"
+                        % (target_user_id, data)
+                    )
 
                 async with self._register_lock:
                     callback = self._callbacks.get(target_user_id)

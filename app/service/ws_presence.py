@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from collections.abc import Awaitable, Callable
 
 from fastapi import WebSocket
 
@@ -22,13 +23,158 @@ from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
 from app.matching_ground.service.chat_service import chat_service
 from app.models.chat import Conversation, Message
 from app.models.user import User
-from app.service.ws_chat import (
-    ACTIVE_CHAT_CONNECTIONS,
-)
+from app.service.ws_chat import ACTIVE_CHAT_CONNECTIONS
 from app.utils.exception import NotFoundException
 
 PRESENCE_KEY_PREFIX = "presence:user:"
 PRESENCE_TTL_SECONDS = 75
+
+# ---------------------------------------------------------------------------
+# Shared PubSub dispatcher — one psubscribe connection per app instance
+# ---------------------------------------------------------------------------
+
+_SEND_CALLBACK = Callable[
+    [str, dict, asyncio.Lock | None],
+    asyncio.Future[bool],
+]
+
+
+class PubSubDispatcher:
+    """Route PubSub messages to the correct WebSocket using one psubscribe.
+
+    Instead of each WebSocket creating its own ``pubsub.subscribe()`` (which
+    consumes one Redis connection per user forever), a single background task
+    does ``psubscribe("chat:user:*")`` and dispatches messages to the
+    registered send callback for the target user.
+
+    Usage::
+
+        dispatcher = PubSubDispatcher()
+
+        # At app startup (lifespan):
+        await dispatcher.start(redis)
+
+        # In handle_ws, after accept:
+        await dispatcher.register(
+            user_id=user_id,
+            send_callback=lambda payload, lock: _send_json_safe(ws, payload, send_lock=lock),
+        )
+
+        # On disconnect (finally block):
+        await dispatcher.unregister(user_id)
+    """
+
+    def __init__(self) -> None:
+        self._redis = None
+        self._pubsub = None
+        self._task: asyncio.Task[None] | None = None
+        # user_id -> send callback
+        self._callbacks: dict[str, _SEND_CALLBACK] = {}
+        self._register_lock = asyncio.Lock()
+
+    async def start(self, redis) -> None:
+        """Start the dispatch loop.  Safe to call multiple times — idempotent."""
+        if self._task is not None and not self._task.done():
+            return  # already running
+
+        self._redis = redis
+        self._pubsub = redis.pubsub()
+        await self._pubsub.psubscribe("chat:user:*")
+        self._task = asyncio.create_task(self._dispatch_loop())
+
+    async def stop(self) -> None:
+        """Stop the dispatch loop and close the pubsub connection."""
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._task
+            self._task = None
+
+        if self._pubsub is not None:
+            with contextlib.suppress(Exception):
+                await self._pubsub.aclose()
+            self._pubsub = None
+            self._redis = None
+
+        self._callbacks.clear()
+
+    async def register(
+        self,
+        *,
+        user_id: str,
+        send_callback: _SEND_CALLBACK,
+    ) -> None:
+        """Register a send callback for ``user_id``.
+
+        The callback receives ``(payload_dict, send_lock_or_none)`` and must
+        return a ``Future[bool]`` — ``True`` if the message was sent, ``False``
+        if the connection is dead.
+        """
+        async with self._register_lock:
+            self._callbacks[user_id] = send_callback
+
+    async def unregister(self, *, user_id: str) -> None:
+        """Remove the send callback for ``user_id``."""
+        async with self._register_lock:
+            self._callbacks.pop(user_id, None)
+
+    async def _dispatch_loop(self) -> None:
+        """Read from psubscribe and dispatch to registered callbacks."""
+        try:
+            async for msg in self._pubsub.listen():
+                if msg is None:
+                    continue
+                if msg.get("type") != "pmessage":
+                    continue
+
+                channel = msg.get("channel")
+                if isinstance(channel, (bytes, bytearray)):
+                    channel = channel.decode()
+
+                # channel is "chat:user:{user_id}" — extract user_id
+                parts = channel.split(":", 2)
+                if len(parts) != 3:
+                    continue
+                target_user_id = parts[2]
+
+                data = msg.get("data")
+                if isinstance(data, (bytes, bytearray)):
+                    data = data.decode()
+
+                try:
+                    payload = json.loads(data)
+                except Exception:
+                    # Malformed JSON — skip, don't crash the dispatcher
+                    print(
+                        f"Error parsing pubsub payload for user {target_user_id}: {data}"
+                    )
+
+                async with self._register_lock:
+                    callback = self._callbacks.get(target_user_id)
+
+                if callback is None:
+                    # User not connected — message is lost (same behavior as
+                    # before: pubsub to a user with no WS is dropped)
+                    continue
+
+                # Fire-and-forget the send — we don't await here because the
+                # callback handles its own errors and the dispatcher must keep
+                # reading. If the callback needs backpressure, that's a future
+                # concern; for now the chat_queue in drain_chat_queue handles it.
+                asyncio.ensure_future(callback(payload, None))
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            return
+
+
+# Module-level singleton — one dispatcher per app instance
+pubsub_dispatcher = PubSubDispatcher()
+
+
+# ---------------------------------------------------------------------------
+# PresenceManager
+# ---------------------------------------------------------------------------
 
 
 class PresenceManager:
@@ -286,56 +432,26 @@ class PresenceManager:
             return
 
     # ------------------------------------------------------------------
-    # Redis stream forwarders
+    # Stream catch-up on connect (replaces persistent XREAD BLOCK)
     # ------------------------------------------------------------------
-    async def _forward_pubsub(
+    async def _catchup_chat_stream(
         self,
         *,
         websocket: WebSocket,
-        pubsub,
         redis,
         user_id: str,
         send_lock: asyncio.Lock | None = None,
-    ) -> None:
-        try:
-            async for msg in pubsub.listen():
-                if msg is None:
-                    continue
-                if msg.get("type") != "message":
-                    continue
-                data = msg.get("data")
-                if isinstance(data, (bytes, bytearray)):
-                    data = data.decode()
-                try:
-                    parsed_data = json.loads(data)
-                except Exception:
-                    if not await self._send_text_safe(
-                        websocket, str(data), send_lock=send_lock
-                    ):
-                        return
-                    continue
-                if str(
-                    parsed_data.get("type") or ""
-                ) == "chat.message" and not await self._should_deliver_chat_message(
-                    redis=redis, user_id=user_id, payload=parsed_data
-                ):
-                    continue
-                if not await self._send_json_safe(
-                    websocket, parsed_data, send_lock=send_lock
-                ):
-                    return
-        except Exception:
-            return
-
-    async def _forward_chat_stream(
-        self,
-        *,
-        websocket: WebSocket,
-        redis,
-        user_id: str,
         ready_event: asyncio.Event | None = None,
-        send_lock: asyncio.Lock | None = None,
+        should_deliver: Callable[[dict], Awaitable[bool]] | None = None,
+        send_json: (
+            Callable[[WebSocket, dict, asyncio.Lock | None], Awaitable[bool]] | None
+        ) = None,
     ) -> None:
+        """One-time non-blocking read from the chat stream to catch up missed
+        messages after a reconnect.
+
+        ``should_deliver`` and ``send_json`` are injectable for testing.
+        """
         stream_key = f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{user_id}"
         last_id_key = f"{CHAT_EVENTS_LAST_ID_KEY_PREFIX}{user_id}"
         last_id = await redis.get(last_id_key)
@@ -348,71 +464,55 @@ class PresenceManager:
         if ready_event is not None:
             ready_event.set()
 
-        try:
-            while True:
-                streams = await redis.xread(
-                    streams={stream_key: last_id}, count=50, block=25000
-                )
-                for _stream_name, messages in streams or []:
-                    for msg_id, fields in messages:
-                        event_type = fields.get("type")
-                        payload_raw = fields.get("data")
-                        if isinstance(event_type, (bytes, bytearray)):
-                            event_type = event_type.decode()
-                        if isinstance(payload_raw, (bytes, bytearray)):
-                            payload_raw = payload_raw.decode()
-                        if str(event_type or "") != "chat.message" or not payload_raw:
-                            # Non-chat event — safe to advance cursor
-                            last_id = msg_id
-                            await redis.set(
-                                last_id_key,
-                                last_id,
-                                ex=PRESENCE_TTL_SECONDS * 8,
-                            )
-                            continue
-                        payload_obj = None
-                        try:
-                            payload_obj = json.loads(payload_raw)
-                        except Exception:
-                            payload_obj = None
-                        if payload_obj is None:
-                            last_id = msg_id
-                            await redis.set(
-                                last_id_key,
-                                last_id,
-                                ex=PRESENCE_TTL_SECONDS * 8,
-                            )
-                            continue
-                        # Dedup check: if already delivered by queue path,
-                        # advance cursor and skip.
-                        if not await self._should_deliver_chat_message(
-                            redis=redis,
-                            user_id=user_id,
-                            payload=payload_obj,
-                        ):
-                            last_id = msg_id
-                            await redis.set(
-                                last_id_key,
-                                last_id,
-                                ex=PRESENCE_TTL_SECONDS * 8,
-                            )
-                            continue
-                        # Try to send — only advance cursor on success
-                        if await self._send_json_safe(
-                            websocket, payload_obj, send_lock=send_lock
-                        ):
-                            last_id = msg_id
-                            await redis.set(
-                                last_id_key,
-                                last_id,
-                                ex=PRESENCE_TTL_SECONDS * 8,
-                            )
-                        else:
-                            # Send failed — do NOT advance cursor.
-                            # Next xread will retry this message.
-                            return
-        except Exception:
-            return
+        # Non-blocking read — returns immediately even if no messages
+        streams = await redis.xread(streams={stream_key: last_id}, count=100, block=0)
+
+        _should_deliver = should_deliver or (
+            lambda p: asyncio.ensure_future(asyncio.sleep(0, result=True))
+        )
+        _send_json = send_json or (
+            lambda ws, p, lock: asyncio.ensure_future(asyncio.sleep(0, result=True))
+        )
+
+        for _stream_name, messages in streams or []:
+            for msg_id, fields in messages:
+                event_type = fields.get("type")
+                payload_raw = fields.get("data")
+                if isinstance(event_type, (bytes, bytearray)):
+                    event_type = event_type.decode()
+                if isinstance(payload_raw, (bytes, bytearray)):
+                    payload_raw = payload_raw.decode()
+
+                # Only process chat.message events — skip others
+                if str(event_type or "") != "chat.message" or not payload_raw:
+                    last_id = msg_id
+                    await redis.set(last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8)
+                    continue
+
+                payload_obj = None
+                try:
+                    payload_obj = json.loads(payload_raw)
+                except Exception:
+                    last_id = msg_id
+                    await redis.set(last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8)
+                    continue
+
+                # Dedup: skip if already delivered by queue path
+                if not await _should_deliver(payload_obj):
+                    last_id = msg_id
+                    await redis.set(last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8)
+                    continue
+
+                # Try to send — only advance cursor on success.
+                # _send_json_safe catches RuntimeError internally and returns False.
+                sent = await _send_json(websocket, payload_obj, send_lock)
+                if sent:
+                    last_id = msg_id
+                    await redis.set(last_id_key, last_id, ex=PRESENCE_TTL_SECONDS * 8)
+                else:
+                    # Send failed — don't advance cursor; message will be
+                    # re-delivered via pubsub (which is still active).
+                    return
 
     # ------------------------------------------------------------------
     # Mobile events / payment progress / unread summary

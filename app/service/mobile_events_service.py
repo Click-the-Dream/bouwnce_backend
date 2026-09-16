@@ -89,6 +89,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
         # receives fanout messages via the single psubscribe connection.
         await pubsub_dispatcher.register(
             user_id=str(user_id),
+            connection_id=connection_id,
             send_callback=lambda payload, lock: self._send_json_safe(
                 websocket, payload, send_lock=send_lock
             ),
@@ -220,7 +221,9 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             presence_task.cancel()
             catchup_task.cancel()
             # Unregister from shared pubsub dispatcher
-            await pubsub_dispatcher.unregister(user_id=str(user_id))
+            await pubsub_dispatcher.unregister(
+                user_id=str(user_id), connection_id=connection_id
+            )
             await asyncio.gather(
                 bootstrap_task,
                 chat_queue_task,

@@ -13,6 +13,7 @@ from app.models.payment import Payment
 from app.models.store import Store
 from app.models.suborder import SubOrder
 from app.schemas.events import PaidOrderEvent
+from app.service.payment.paystack import paystack_service
 from app.utils.helper import generate_suborder_track_id
 from app.utils.money import naira_to_kobo
 from app.worker.celery_app import celery_app
@@ -47,6 +48,23 @@ async def _process_paid_order(event: PaidOrderEvent, redis) -> None:
 
             if order.status not in ["initiated", "abandoned"]:
                 return
+
+            paid, payment_data = await asyncio.to_thread(
+                paystack_service.callback, reference
+            )
+            if not paid:
+                return
+            try:
+                verified_amount_kobo = int(payment_data.get("amount", 0))
+            except (TypeError, ValueError):
+                return
+            if verified_amount_kobo != naira_to_kobo(order.total_amount):
+                await order.update(db, {"status": "failed"})
+                await Payment.update_by_id(
+                    str(order.payment_id), {"status": "failed"}, db
+                )
+                return
+            amount = verified_amount_kobo
 
             await dispatch_event(
                 EventNames.MOBILE_EVENT,

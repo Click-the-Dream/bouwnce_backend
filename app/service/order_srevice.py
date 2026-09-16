@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 from uuid import uuid4
 
@@ -357,6 +358,7 @@ class OrderService:
         event_id: str | None,
         db: AsyncSession,
         redis: Redis,
+        verify_provider: bool = True,
     ) -> dict[str, Any]:
         order = await Order.get_by_reference(reference, db)
 
@@ -369,6 +371,22 @@ class OrderService:
                 status="success",
                 message="Order has been processed",
             )
+
+        if verify_provider:
+            paid, payment_data = await asyncio.to_thread(
+                paystack_service.callback, reference
+            )
+            if not paid:
+                raise BadRequestException("Payment could not be verified")
+            try:
+                verified_amount_kobo = int(payment_data.get("amount", 0))
+            except (TypeError, ValueError):
+                raise ConflictException(
+                    message="invalid verified payment amount"
+                ) from None
+            if verified_amount_kobo != int(amount_kobo):
+                raise ConflictException(message="amount mismatch")
+            amount_kobo = verified_amount_kobo
 
         expected_amount_kobo = naira_to_kobo(order.total_amount)
         if expected_amount_kobo != int(amount_kobo):

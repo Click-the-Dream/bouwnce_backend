@@ -472,6 +472,27 @@ class TestBeatSchedule:
             is not None
         )
 
+    def test_beat_schedule_wires_event_payment_reconciliation(self) -> None:
+        from app.worker.celery_app import celery_app
+
+        entry = celery_app.conf.beat_schedule["reconcile-event-payments"]
+        assert (
+            entry["task"] == "app.worker.tasks.event_payment_reconciliation.reconcile"
+        )
+        assert entry["schedule"] == 300.0
+
+    def test_event_payment_reconciliation_task_is_registered(self) -> None:
+        from app.worker.celery_app import celery_app
+        from app.worker.tasks.event_payment_reconciliation import reconcile
+
+        assert reconcile is not None
+        assert (
+            celery_app.tasks.get(
+                "app.worker.tasks.event_payment_reconciliation.reconcile"
+            )
+            is not None
+        )
+
 
 # ---------------------------------------------------------------------------
 # Producer: dispatch_event (PUSH_NOTIFICATION)

@@ -7,6 +7,7 @@ celery_app = Celery(
     broker=f"{settings.REDIS_URL}/0",
     include=[
         "app.worker.tasks.email",
+        "app.worker.tasks.event_payment_reconciliation",
         "app.worker.tasks.order_processor",
         "app.worker.tasks.web_push",
     ],
@@ -32,5 +33,9 @@ celery_app.conf.beat_schedule = {
     "drain-push-queue": {
         "task": "app.worker.tasks.web_push.drain_push_queue",
         "schedule": 5.0,
+    },
+    "reconcile-event-payments": {
+        "task": "app.worker.tasks.event_payment_reconciliation.reconcile",
+        "schedule": 300.0,
     },
 }

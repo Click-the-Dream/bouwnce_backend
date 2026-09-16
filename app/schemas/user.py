@@ -41,7 +41,6 @@ class UserResponsSchema(UserBase):
     profile_banner: Annotated[Image | None, Field(...)]
     is_active: Annotated[bool, Field(examples=[True])]
     role: Annotated[str, Field(description="Role of the user", examples=["user"])]
-    otp: Annotated[str | None, Field(examples=["123456"])] = None
     created_at: Annotated[str, Field(examples=["2025-04-03"])]
     updated_at: Annotated[str, Field(examples=["2025-04-03"])]
 

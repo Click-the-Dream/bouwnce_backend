@@ -125,6 +125,41 @@ class TestPubSubDispatcher:
         await dispatcher.stop()
 
     @pytest.mark.asyncio
+    async def test_dispatch_delivers_to_all_of_a_users_connections(self, mock_redis):
+        redis, pubsub = mock_redis
+        listen_future = asyncio.Future()
+        pubsub.listen.return_value = listen_future
+        dispatcher = PubSubDispatcher()
+        await dispatcher.start(redis)
+
+        first_device = AsyncMock()
+        second_device = AsyncMock()
+        await dispatcher.register(
+            user_id="alice", connection_id="phone", send_callback=first_device
+        )
+        await dispatcher.register(
+            user_id="alice", connection_id="browser", send_callback=second_device
+        )
+        listen_future.set_result(
+            iter(
+                [
+                    {
+                        "type": "pmessage",
+                        "channel": b"chat:user:alice",
+                        "data": json.dumps({"type": "chat.message"}).encode(),
+                    },
+                    None,
+                ]
+            )
+        )
+
+        await asyncio.sleep(0.1)
+
+        first_device.assert_called_once()
+        second_device.assert_called_once()
+        await dispatcher.stop()
+
+    @pytest.mark.asyncio
     async def test_dispatch_skips_unregistered_user(self, mock_redis):
         """Messages for users without a registered callback are silently dropped."""
         redis, pubsub = mock_redis
@@ -363,3 +398,46 @@ class TestCatchupChatStream:
 
         websocket.send_json.assert_called_once()
         redis.set.assert_not_called()
+
+
+class TestMobileEventPrivacy:
+    @pytest.mark.asyncio
+    async def test_read_mobile_events_only_returns_the_current_users_events(self):
+        from app.service.ws_presence import PresenceManager
+
+        manager = PresenceManager()
+        redis = AsyncMock()
+        redis.xread.return_value = [
+            (
+                "mobile:events:stream",
+                [
+                    (
+                        "1-0",
+                        {
+                            "payload": json.dumps(
+                                {"user_id": "another-user", "progress": 25}
+                            )
+                        },
+                    ),
+                    (
+                        "2-0",
+                        {
+                            "payload": json.dumps(
+                                {"user_id": "current-user", "progress": 100}
+                            )
+                        },
+                    ),
+                ],
+            )
+        ]
+
+        result = await manager.read_mobile_events(
+            redis=redis,
+            user_id="current-user",
+            last_id="0-0",
+            block_ms=0,
+            count=50,
+        )
+
+        assert [item["id"] for item in result["items"]] == ["2-0"]
+        assert result["next_last_id"] == "2-0"

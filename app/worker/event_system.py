@@ -30,6 +30,7 @@ class EventNames:
     BUYER_WALLET_CREDIT = "buyer.wallet.credit"
     STORE_WALLET_RELEASE = "store.wallet.release"
     ORDER_COMPLETE = "order.complete"
+    EVENT_ATTENDANCE_PAYMENT_COMPLETED = "event.attendance.payment.completed"
     MOBILE_EVENT = "mobile.event"
 
 
@@ -52,11 +53,13 @@ async def _set_payment_progress(
     progress: int,
     status: str,
     order_id: str | None = None,
+    user_id: str | None = None,
 ) -> None:
     key = f"{PAYMENT_PROGRESS_KEY_PREFIX}{reference}"
     value = {
         "reference": reference,
         "order_id": order_id,
+        "user_id": user_id,
         "progress": int(max(-100, min(100, progress))),
         "status": status,
     }
@@ -135,6 +138,13 @@ class OrderCompleteEvent:
 
 
 @dataclass
+class EventAttendancePaymentCompletedEvent:
+    attendance_id: str
+    reference: str
+    amount_kobo: int
+
+
+@dataclass
 class MobileEvent:
     event_name: str
     payload: dict[str, Any]
@@ -171,6 +181,7 @@ async def dispatch_event(
                     progress=progress,
                     status=payload.event_name,
                     order_id=payload.payload.get("order_id"),
+                    user_id=payload.payload.get("user_id"),
                 )
 
         # Persist mobile events to DB notifications so they can be fetched later.
@@ -178,7 +189,11 @@ async def dispatch_event(
         user_id = payload.payload.get("user_id")
         if user_id:
             evt = str(payload.event_name or "")
-            if not evt.startswith("chat.") and not evt.startswith("match"):
+            if (
+                not evt.startswith("chat.")
+                and not evt.startswith("match")
+                and not evt.startswith("event.payment.")
+            ):
                 title, body = _default_title_body(evt)
                 await Notification.create(
                     data={
@@ -236,7 +251,11 @@ async def dispatch_event(
         # Persist push notifications to DB so they can be fetched later.
         # Avoid duplicating chat/match notifications that already write to DB.
         data_type = str((payload.data or {}).get("type") or "")
-        if not data_type.startswith("chat.") and not data_type.startswith("match."):
+        if (
+            not data_type.startswith("chat.")
+            and not data_type.startswith("match.")
+            and not data_type.startswith("event.payment.")
+        ):
             await Notification.create(
                 data={
                     "user_id": payload.user_id,
@@ -442,6 +461,55 @@ async def dispatch_event(
         if order.status != "delivered":
             order.status = "delivered"
             await order.save(db)
+        return
+
+    if event_name == EventNames.EVENT_ATTENDANCE_PAYMENT_COMPLETED:
+        from app.event_broadcast.models.attendance import UserEventAttendance
+        from app.utils.exception import ConflictException
+        from app.utils.money import naira_to_kobo
+
+        attendance = await UserEventAttendance.get_by_id_for_update(
+            db, payload.attendance_id
+        )
+        if attendance.payment_status == "successful":
+            return
+        if attendance.payment_reference != payload.reference:
+            raise ConflictException(message="Event payment reference mismatch")
+        if naira_to_kobo(attendance.total_amount) != int(payload.amount_kobo):
+            raise ConflictException(message="Event payment amount mismatch")
+
+        attendance.payment_status = "successful"
+        attendance.attendance_status = "confirmed"
+        await attendance.save(db)
+
+        if redis is not None:
+            event_payload = {
+                "user_id": str(attendance.user_id),
+                "attendance_id": str(attendance.id),
+                "event_id": str(attendance.event_id),
+                "reference": payload.reference,
+                "progress": 100,
+            }
+            await dispatch_event(
+                EventNames.MOBILE_EVENT,
+                MobileEvent(
+                    event_name="payment.success",
+                    payload=event_payload,
+                ),
+                db=db,
+                redis=redis,
+            )
+            await dispatch_event(
+                EventNames.PUSH_NOTIFICATION,
+                PushNotificationEvent(
+                    user_id=str(attendance.user_id),
+                    title="Event payment successful",
+                    body="Your event attendance has been confirmed.",
+                    data={"type": "event.payment.success", **event_payload},
+                ),
+                db=db,
+                redis=redis,
+            )
         return
 
     raise ValueError(f"Unsupported event: {event_name}")

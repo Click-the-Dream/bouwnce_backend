@@ -205,7 +205,7 @@ class EventService:
 
         if "date" in clean_data:
             try:
-                datetime.fromisoformat(clean_data["date"])
+                clean_data["date"] = datetime.fromisoformat(clean_data["date"])
             except (ValueError, TypeError):
                 raise BadRequestException(
                     "Invalid date format. Use ISO format (e.g. 2026-12-31T20:00:00)"
@@ -238,12 +238,8 @@ class EventService:
                 "Event link is required for Hybrid or Virtual event"
             )
 
-        if (
-            location_type in {"hybrid", "virtual"}
-            or "link" in clean_data
-            or "link" in clean_data
-        ) or "link" in clean_data:
-            clean_data["link"] = link
+        if location_type in {"hybrid", "virtual"} or "link" in clean_data:
+            clean_data["link"] = link or None
 
         if "banner_url" in clean_data and not clean_data["banner_url"].strip():
             raise BadRequestException("Banner URL cannot be empty")

@@ -34,10 +34,7 @@ PRESENCE_TTL_SECONDS = 75
 # Shared PubSub dispatcher — one psubscribe connection per app instance
 # ---------------------------------------------------------------------------
 
-_SEND_CALLBACK = Callable[
-    [str, dict, asyncio.Lock | None],
-    asyncio.Future[bool],
-]
+_SEND_CALLBACK = Callable[[dict, asyncio.Lock | None], Awaitable[bool]]
 
 
 class PubSubDispatcher:
@@ -70,7 +67,7 @@ class PubSubDispatcher:
         self._pubsub = None
         self._task: asyncio.Task[None] | None = None
         # user_id -> send callback
-        self._callbacks: dict[str, _SEND_CALLBACK] = {}
+        self._callbacks: dict[str, dict[str, _SEND_CALLBACK]] = {}
         self._register_lock = asyncio.Lock()
 
     async def start(self, redis) -> None:
@@ -106,6 +103,7 @@ class PubSubDispatcher:
         *,
         user_id: str,
         send_callback: _SEND_CALLBACK,
+        connection_id: str | None = None,
     ) -> None:
         """Register a send callback for ``user_id``.
 
@@ -114,12 +112,23 @@ class PubSubDispatcher:
         if the connection is dead.
         """
         async with self._register_lock:
-            self._callbacks[user_id] = send_callback
+            callbacks = self._callbacks.setdefault(user_id, {})
+            callbacks[connection_id or str(id(send_callback))] = send_callback
 
-    async def unregister(self, *, user_id: str) -> None:
+    async def unregister(
+        self, *, user_id: str, connection_id: str | None = None
+    ) -> None:
         """Remove the send callback for ``user_id``."""
         async with self._register_lock:
-            self._callbacks.pop(user_id, None)
+            if connection_id is None:
+                self._callbacks.pop(user_id, None)
+                return
+            callbacks = self._callbacks.get(user_id)
+            if callbacks is None:
+                return
+            callbacks.pop(connection_id, None)
+            if not callbacks:
+                self._callbacks.pop(user_id, None)
 
     async def _dispatch_loop(self) -> None:
         """Read from psubscribe and dispatch to registered callbacks."""
@@ -165,12 +174,13 @@ class PubSubDispatcher:
                 return
 
             async with self._register_lock:
-                callback = self._callbacks.get(target_user_id)
+                callbacks = list(self._callbacks.get(target_user_id, {}).values())
 
-            if callback is None:
+            if not callbacks:
                 return
 
-            asyncio.ensure_future(callback(payload, None))
+            for callback in callbacks:
+                asyncio.ensure_future(callback(payload, None))
         except Exception:
             return
 
@@ -565,12 +575,28 @@ class PresenceManager:
                     val = v.decode() if isinstance(v, (bytes, bytearray)) else v
                     decoded[key] = val
 
+                raw_payload = decoded.get("payload")
+                try:
+                    payload = (
+                        json.loads(raw_payload)
+                        if isinstance(raw_payload, str)
+                        else raw_payload
+                    )
+                except Exception:
+                    payload = None
+                if not isinstance(payload, dict) or str(payload.get("user_id")) != str(
+                    user_id
+                ):
+                    next_last_id = msg_id
+                    continue
                 items.append({"id": msg_id, **decoded})
                 next_last_id = msg_id
 
         return {"status": "success", "items": items, "next_last_id": next_last_id}
 
-    async def get_payment_progress(self, *, redis, reference: str) -> dict:
+    async def get_payment_progress(
+        self, *, redis, reference: str, user_id: str
+    ) -> dict:
         key = f"{PAYMENT_PROGRESS_KEY_PREFIX}{reference}"
         value = await redis.get(key)
         if not value:
@@ -581,6 +607,8 @@ class PresenceManager:
             data = json.loads(value)
         except Exception:
             data = {"raw": value}
+        if str(data.get("user_id") or "") != str(user_id):
+            raise NotFoundException("Payment progress not found (or expired)")
         return {"status": "success", "data": data}
 
     async def get_unread_summary(
@@ -604,10 +632,20 @@ class PresenceManager:
         conversations: list[Conversation] = []
         last_by_conversation_id: dict[str, Message] = {}
         if conv_ids:
+            latest_message_at = (
+                select(func.max(Message.created_at))
+                .where(Message.conversation_id == Conversation.id)
+                .correlate(Conversation)
+                .scalar_subquery()
+            )
             conv_result = await db.execute(
                 select(Conversation)
                 .where(Conversation.id.in_(conv_ids))
-                .order_by(Conversation.last_message_at.desc())
+                .order_by(
+                    latest_message_at.desc().nullslast(),
+                    Conversation.created_at.desc(),
+                    Conversation.id.desc(),
+                )
             )
             conversations = list(conv_result.scalars().all())
 

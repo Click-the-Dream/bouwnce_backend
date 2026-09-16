@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, status
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import dbSessionDep
+from app.api.dependencies import CurrentAdmin, dbSessionDep
 from app.service.newsletter import newsletter_service
 
 
@@ -23,6 +23,7 @@ async def broadcast_newsletter(
     newsletter_payload: NewletterBroadcastRequest,
     db: dbSessionDep,
     background_task: BackgroundTasks,
+    _: CurrentAdmin,
 ):
     return await newsletter_service.broadcast_newsletter(
         newsletter_payload.newsletter_id, db, background_task

@@ -1,8 +1,9 @@
+import asyncio
 from datetime import datetime
 from typing import Any
 
 from fastapi import status
-from sqlalchemy import or_, select, text
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.event_broadcast.models.attendance import UserEventAttendance
@@ -19,6 +20,11 @@ from app.utils.exception import (
 from app.utils.helper import is_valid_uuid
 from app.utils.money import naira_to_kobo
 from app.utils.responses import response_builder
+from app.worker.event_system import (
+    EventAttendancePaymentCompletedEvent,
+    EventNames,
+    dispatch_event,
+)
 
 
 def _serialize_attendance(attendance: UserEventAttendance) -> dict[str, Any]:
@@ -77,10 +83,8 @@ class AttendanceService:
 
         if date:
             try:
-                datetime.fromisoformat(date)
-                base_query = base_query.where(
-                    OutingEvent.date.cast(text("DATE")) == text(f"'{date}'")
-                )
+                event_date = datetime.fromisoformat(date).date()
+                base_query = base_query.where(func.date(OutingEvent.date) == event_date)
             except ValueError:
                 raise BadRequestException(
                     "Invalid date format. Use ISO format (YYYY-MM-DD)"
@@ -167,7 +171,7 @@ class AttendanceService:
             if not event_ticket_data:
                 raise BadRequestException(f"Event does not have Ticket: {ticket_name}")
 
-            user_select_tickets.append(event_ticket_data)
+            user_select_tickets.append({**event_ticket_data, "quantity": quantity})
 
             total_amount += event_ticket_data["price"] * quantity
             total_tickets += quantity
@@ -213,7 +217,7 @@ class AttendanceService:
         )
 
     async def verify_event_payment(
-        self, db: AsyncSession, current_user: User, attendance_id: str
+        self, db: AsyncSession, redis, current_user: User, attendance_id: str
     ) -> dict[str, Any]:
         attendance = await UserEventAttendance.get_by_id(attendance_id, db)
         if str(attendance.user_id) != str(current_user.id):
@@ -229,18 +233,60 @@ class AttendanceService:
 
         paid, payload = paystack_service.callback(attendance.payment_reference)
         if not paid:
-            attendance.payment_status = "failed"
-            await db.commit()
             raise BadRequestException("Event payment was not successful")
-        if int(payload.get("amount", 0)) != naira_to_kobo(attendance.total_amount):
-            raise BadRequestException("Event payment amount does not match attendance")
-
-        attendance.payment_status = "successful"
-        attendance.attendance_status = "confirmed"
-        await db.commit()
+        await dispatch_event(
+            EventNames.EVENT_ATTENDANCE_PAYMENT_COMPLETED,
+            EventAttendancePaymentCompletedEvent(
+                attendance_id=str(attendance.id),
+                reference=attendance.payment_reference,
+                amount_kobo=int(payload.get("amount", 0)),
+            ),
+            db=db,
+            redis=redis,
+        )
         return response_builder(
             status_code=status.HTTP_200_OK,
             message="Event payment verified successfully",
+            data=_serialize_attendance(attendance),
+        )
+
+    async def handle_paystack_webhook(
+        self, db: AsyncSession, redis, request
+    ) -> dict[str, Any] | None:
+        await paystack_service.verify_webhook_signature(request)
+        body = await request.json()
+        if body.get("event") != "charge.success":
+            return None
+        data = body.get("data") or {}
+        reference = str(data.get("reference") or "")
+        if not reference:
+            return None
+        attendance = await UserEventAttendance.get_by_payment_reference(db, reference)
+        if attendance is None:
+            return None
+        paid, verified_payment = await asyncio.to_thread(
+            paystack_service.callback, reference
+        )
+        if not paid:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Event payment is awaiting verification",
+            )
+        await dispatch_event(
+            EventNames.EVENT_ATTENDANCE_PAYMENT_COMPLETED,
+            EventAttendancePaymentCompletedEvent(
+                attendance_id=str(attendance.id),
+                reference=reference,
+                amount_kobo=int(verified_payment.get("amount") or 0),
+            ),
+            db=db,
+            redis=redis,
+        )
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Event payment processed",
             data=_serialize_attendance(attendance),
         )
 
@@ -250,6 +296,7 @@ class AttendanceService:
         current_user: User,
         page: int = 1,
         page_size: int = 10,
+        event_id: str | None = None,
         name: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
@@ -262,6 +309,8 @@ class AttendanceService:
 
         if event_type and event_type not in ("past", "upcoming"):
             raise BadRequestException("event_type must be 'past' or 'upcoming'")
+        if event_id and not is_valid_uuid(event_id):
+            raise BadRequestException("Invalid event ID format")
 
         if date_from:
             try:
@@ -284,6 +333,7 @@ class AttendanceService:
             user_id=current_user.id,
             page=page,
             page_size=page_size,
+            event_id=event_id,
             name=name,
             date_from=date_from,
             date_to=date_to,
@@ -345,7 +395,6 @@ class AttendanceService:
                     "id": str(attendance.user.id),
                     "username": attendance.user.username,
                     "full_name": attendance.user.full_name,
-                    "email": attendance.user.email,
                     "profile_image": attendance.user.profile_pic,
                 }
             serialized.append(attendance_dict)
@@ -374,12 +423,20 @@ class AttendanceService:
         if not event:
             raise NotFoundException("Event not found")
 
-        attendance = await UserEventAttendance.cancel_attendance(
+        attendance = await UserEventAttendance.check_existing_attendance(
             db, current_user.id, event_id
         )
 
         if not attendance:
             raise NotFoundException("Attendance record not found")
+        if attendance.payment_status == "successful":
+            raise BadRequestException(
+                "Paid event attendance cannot be cancelled without a refund"
+            )
+
+        attendance = await UserEventAttendance.cancel_attendance(
+            db, current_user.id, event_id
+        )
 
         await db.commit()
 

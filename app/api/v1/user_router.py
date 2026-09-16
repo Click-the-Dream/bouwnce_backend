@@ -27,6 +27,7 @@ async def get_me(current_user: CurrentUser, db: dbSessionDep) -> UserResponse:
 async def get_user_by_id(
     user_id: str,
     db: dbSessionDep,
+    _: CurrentActiveUser,
 ) -> UserResponse:
 
     return await user_service.get_user_by_id(user_id, db)

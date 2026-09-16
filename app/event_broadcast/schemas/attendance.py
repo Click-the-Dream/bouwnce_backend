@@ -19,13 +19,18 @@ class ClaimAttendanceSchema(BaseModel):
     ]
 
 
+class PurchasedTicketSchema(TicketSchema):
+    quantity: int = Field(default=1, gt=0)
+
+
 class AttendanceResponseSchema(BaseModel):
+    id: Annotated[str, Field(..., description="Attendance id")]
     user_id: Annotated[str, Field(..., description="User id")]
     event_id: Annotated[str, Field(..., description="Event Id")]
     ticket_info: Annotated[
-        list[TicketSchema], Field(description="List of user purchased tickets")
+        list[PurchasedTicketSchema], Field(description="List of user purchased tickets")
     ]
-    total_amount: Annotated[int, Field(ge=0, description="total cost of the ticket")]
+    total_amount: Annotated[float, Field(ge=0, description="total cost of the ticket")]
     total_tickets: Annotated[
         int, Field(ge=0, description="Total number of ticket purchased")
     ]
@@ -57,7 +62,6 @@ class UserSchema(BaseModel):
     id: Annotated[str, Field(description="User Id")]
     username: Annotated[str, Field(description="User username")]
     full_name: Annotated[str, Field(description="User full name")]
-    email: Annotated[str, Field(description="User email address")]
     profile_image: dict | None = Field(
         default=None, description="User profile image, when one has been uploaded"
     )

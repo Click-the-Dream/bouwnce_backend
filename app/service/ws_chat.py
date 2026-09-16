@@ -370,6 +370,10 @@ class ChatDelivery:
                         "type": "chat.message.created",
                         "conversation_id": conversation_id,
                         "message_id": message_id,
+                        "sender": chat_service._serialize_user(sender),
+                        "sender_profile_image": chat_service._serialize_profile_pic(
+                            sender
+                        ),
                     },
                 }
                 if media_type:

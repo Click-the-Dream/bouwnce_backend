@@ -9,18 +9,17 @@ This file stays ~600 lines: send_message, send_media_message, list, get, partner
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import status
-from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CHAT_EVENTS_STREAM_KEY_PREFIX, settings
-from app.matching_ground.model.notification import Notification
+from app.matching_ground.repositories.chat_repository import chat_repository
 from app.matching_ground.service.chat_read import ChatReadOps
-from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.utils.chat_utils import ChatSerializers
 from app.utils.exception import ForbiddenException, NotFoundException
-from app.utils.message_insert import insert_message
 from app.utils.responses import response_builder
 from app.worker.event_system import (
     EventNames,
@@ -28,6 +27,9 @@ from app.worker.event_system import (
     PushNotificationEvent,
     dispatch_event,
 )
+
+if TYPE_CHECKING:
+    from app.models.chat import Conversation
 
 
 class ChatService(ChatSerializers, ChatReadOps):
@@ -38,11 +40,8 @@ class ChatService(ChatSerializers, ChatReadOps):
     ) -> Conversation:
         if str(user1_id) == str(user2_id):
             raise ForbiddenException("You can't chat with yourself")
-        return await Conversation.get_or_create_between(db, user1_id, user2_id)
+        return await chat_repository.get_or_create_conversation(db, user1_id, user2_id)
 
-    # ------------------------------------------------------------------
-    # send_message
-    # ------------------------------------------------------------------
     async def send_message(
         self,
         *,
@@ -58,10 +57,9 @@ class ChatService(ChatSerializers, ChatReadOps):
         notify_side_effects: bool = True,
         publish_redis_fanout: bool = True,
     ) -> dict:
-        recipient_users = await User.get_chat_users_by_ids([str(recipient_id)], db)
-        if not recipient_users:
+        recipient = await chat_repository.get_user(db, str(recipient_id))
+        if not recipient:
             raise NotFoundException("Recipient not found")
-        recipient = recipient_users[0]
         recipient_is_bouwnce = (
             settings.BOUWNCE_SYSTEM_EMAIL
             and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
@@ -82,7 +80,7 @@ class ChatService(ChatSerializers, ChatReadOps):
             db=db, user1_id=str(sender.id), user2_id=str(recipient.id)
         )
 
-        msg = await insert_message(
+        msg = await chat_repository.create_message(
             db=db,
             conversation_id=conversation.id,
             sender_id=sender.id,
@@ -92,8 +90,9 @@ class ChatService(ChatSerializers, ChatReadOps):
         )
 
         if persist_notification:
-            await Notification.create(
-                data={
+            await chat_repository.create_notification(
+                db,
+                {
                     "user_id": recipient.id,
                     "title": sender.full_name or sender.username or "New message",
                     "body": body[:120],
@@ -105,22 +104,19 @@ class ChatService(ChatSerializers, ChatReadOps):
                         "sender": self._serialize_user(sender),
                     },
                 },
-                db=db,
             )
 
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
-            reply_row = (
-                await db.execute(
-                    select(Message).where(Message.id == msg.reply_to_message_id)
-                )
-            ).scalar_one_or_none()
+            reply_row = await chat_repository.find_message(
+                db, str(msg.reply_to_message_id)
+            )
             if reply_row is not None:
                 reply_user_ids = [
                     str(reply_row.sender_id),
                     str(reply_row.recipient_id),
                 ]
-                reply_users = await User.get_chat_users_by_ids(reply_user_ids, db)
+                reply_users = await chat_repository.get_users(db, reply_user_ids)
                 reply_users_map = {str(u.id): u for u in reply_users}
                 reply_payload = reply_row.to_dict()
                 reply_payload["sender"] = self._serialize_user(
@@ -167,6 +163,8 @@ class ChatService(ChatSerializers, ChatReadOps):
                         "type": "chat.message.created",
                         "conversation_id": str(conversation.id),
                         "message_id": str(msg.id),
+                        "sender": self._serialize_user(sender),
+                        "sender_profile_image": self._serialize_profile_pic(sender),
                     },
                 ),
                 db=db,
@@ -210,9 +208,6 @@ class ChatService(ChatSerializers, ChatReadOps):
 
         return result
 
-    # ------------------------------------------------------------------
-    # send_media_message
-    # ------------------------------------------------------------------
     async def send_media_message(
         self,
         *,
@@ -231,10 +226,9 @@ class ChatService(ChatSerializers, ChatReadOps):
         notify_side_effects: bool = True,
         publish_redis_fanout: bool = True,
     ) -> dict:
-        recipient_users = await User.get_chat_users_by_ids([str(recipient_id)], db)
-        if not recipient_users:
+        recipient = await chat_repository.get_user(db, str(recipient_id))
+        if not recipient:
             raise NotFoundException("Recipient not found")
-        recipient = recipient_users[0]
         recipient_is_bouwnce = (
             settings.BOUWNCE_SYSTEM_EMAIL
             and recipient.email == settings.BOUWNCE_SYSTEM_EMAIL
@@ -259,7 +253,7 @@ class ChatService(ChatSerializers, ChatReadOps):
         seen: set[str] = set()
         urls = [u for u in urls if not (u in seen or seen.add(u))]
 
-        msg = await insert_message(
+        msg = await chat_repository.create_message(
             db=db,
             conversation_id=conversation.id,
             sender_id=sender.id,
@@ -276,8 +270,9 @@ class ChatService(ChatSerializers, ChatReadOps):
         )
 
         if persist_notification:
-            await Notification.create(
-                data={
+            await chat_repository.create_notification(
+                db,
+                {
                     "user_id": recipient.id,
                     "title": sender.full_name or sender.username or "New message",
                     "body": (msg.body or "")[:120],
@@ -292,22 +287,19 @@ class ChatService(ChatSerializers, ChatReadOps):
                         "media_name": msg.media_name,
                     },
                 },
-                db=db,
             )
 
         reply_obj: dict | bool = False
         if msg.reply_to_message_id:
-            reply_row = (
-                await db.execute(
-                    select(Message).where(Message.id == msg.reply_to_message_id)
-                )
-            ).scalar_one_or_none()
+            reply_row = await chat_repository.find_message(
+                db, str(msg.reply_to_message_id)
+            )
             if reply_row is not None:
                 reply_user_ids = [
                     str(reply_row.sender_id),
                     str(reply_row.recipient_id),
                 ]
-                reply_users = await User.get_chat_users_by_ids(reply_user_ids, db)
+                reply_users = await chat_repository.get_users(db, reply_user_ids)
                 reply_users_map = {str(u.id): u for u in reply_users}
                 reply_payload = reply_row.to_dict()
                 reply_payload["sender"] = self._serialize_user(
@@ -384,9 +376,6 @@ class ChatService(ChatSerializers, ChatReadOps):
 
         return result
 
-    # ------------------------------------------------------------------
-    # list_conversations
-    # ------------------------------------------------------------------
     async def list_conversations(
         self,
         *,
@@ -396,50 +385,16 @@ class ChatService(ChatSerializers, ChatReadOps):
         page_size: int = 20,
         as_response: bool = False,
     ) -> dict:
-        offset = (page - 1) * page_size
-        stmt = (
-            select(Conversation)
-            .where(
-                (Conversation.user_a_id == user_id)
-                | (Conversation.user_b_id == user_id)
-            )
-            .order_by(desc(Conversation.last_message_at))
-            .offset(offset)
-            .limit(page_size)
+        rows, total = await chat_repository.list_conversations(
+            db, user_id, page, page_size
         )
-        result = await db.execute(stmt)
-        rows = list(result.scalars().all())
-
-        last_by_conversation_id: dict[str, Message] = {}
-        unread_by_conversation_id: dict[str, int] = {}
-        if rows:
-            conv_ids = [c.id for c in rows]
-            last_stmt = (
-                select(Message)
-                .where(Message.conversation_id.in_(conv_ids))
-                .order_by(Message.conversation_id, desc(Message.created_at))
-                .distinct(Message.conversation_id)
-            )
-            last_result = await db.execute(last_stmt)
-            last_msgs = list(last_result.scalars().all())
-            last_by_conversation_id = {str(m.conversation_id): m for m in last_msgs}
-
-            unread_stmt = (
-                select(
-                    Message.conversation_id,
-                    func.count().label("unread_count"),
-                )
-                .where(
-                    Message.conversation_id.in_(conv_ids),
-                    Message.recipient_id == user_id,
-                    Message.read_at.is_(None),
-                )
-                .group_by(Message.conversation_id)
-            )
-            unread_result = await db.execute(unread_stmt)
-            unread_by_conversation_id = {
-                str(conv_id): int(count or 0) for conv_id, count in unread_result.all()
-            }
+        conversation_ids = [conversation.id for conversation in rows]
+        last_by_conversation_id = await chat_repository.get_latest_messages(
+            db, conversation_ids
+        )
+        unread_by_conversation_id = await chat_repository.get_unread_counts(
+            db, conversation_ids, user_id
+        )
 
         users_by_id = await self._load_users_for_conversations(db, rows)
 
@@ -447,7 +402,7 @@ class ChatService(ChatSerializers, ChatReadOps):
             "items": [],
             "page": page,
             "page_size": page_size,
-            "total": len(rows),
+            "total": total,
         }
 
         for conv in rows:
@@ -478,19 +433,7 @@ class ChatService(ChatSerializers, ChatReadOps):
         Return ids of users that have a conversation with ``user_id``.
         Used for presence fanout (online/offline).
         """
-        stmt = select(Conversation.user_a_id, Conversation.user_b_id).where(
-            (Conversation.user_a_id == user_id) | (Conversation.user_b_id == user_id)
-        )
-        result = await db.execute(stmt)
-        partner_ids: set[str] = set()
-        for a_id, b_id in result.all():
-            a = str(a_id)
-            b = str(b_id)
-            if a != str(user_id):
-                partner_ids.add(a)
-            if b != str(user_id):
-                partner_ids.add(b)
-        return partner_ids
+        return await chat_repository.get_partner_ids(db, user_id)
 
     # ------------------------------------------------------------------
     # list_messages
@@ -505,28 +448,14 @@ class ChatService(ChatSerializers, ChatReadOps):
         page_size: int = 30,
         as_response: bool = False,
     ) -> dict:
-        conv = await Conversation.get_by_id(str(conversation_id), db)
+        conv = await chat_repository.get_conversation(db, str(conversation_id))
         current_id = str(current_user_id)
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
-        offset = (page - 1) * page_size
-        total_stmt = (
-            select(func.count())
-            .select_from(Message)
-            .where(Message.conversation_id == conv.id)
+        msgs, total = await chat_repository.list_messages(
+            db, conv.id, page, page_size
         )
-        total = int((await db.execute(total_stmt)).scalar() or 0)
-
-        stmt = (
-            select(Message)
-            .where(Message.conversation_id == conv.id)
-            .order_by(desc(Message.created_at))
-            .offset(offset)
-            .limit(page_size)
-        )
-        result = await db.execute(stmt)
-        msgs = list(result.scalars().all())
 
         reply_ids: set[str] = set()
         user_ids: set[str] = set()
@@ -536,20 +465,17 @@ class ChatService(ChatSerializers, ChatReadOps):
             if m.reply_to_message_id:
                 reply_ids.add(str(m.reply_to_message_id))
 
-        reply_by_id: dict[str, Message] = {}
+        reply_by_id = {}
         if reply_ids:
-            reply_result = await db.execute(
-                select(Message).where(Message.id.in_(list(reply_ids)))
-            )
-            reply_rows = list(reply_result.scalars().all())
+            reply_rows = await chat_repository.get_messages_by_ids(db, reply_ids)
             reply_by_id = {str(r.id): r for r in reply_rows}
             for r in reply_rows:
                 user_ids.add(str(r.sender_id))
                 user_ids.add(str(r.recipient_id))
 
-        users_by_id: dict[str, User] = {}
+        users_by_id = {}
         if user_ids:
-            users = await User.get_chat_users_by_ids(list(user_ids), db)
+            users = await chat_repository.get_users(db, list(user_ids))
             users_by_id = {str(u.id): u for u in users}
 
         items: list[dict] = []
@@ -597,7 +523,7 @@ class ChatService(ChatSerializers, ChatReadOps):
         messages_page_size: int = 30,
         as_response: bool = False,
     ) -> dict:
-        conv = await Conversation.get_by_id(str(conversation_id), db)
+        conv = await chat_repository.get_conversation(db, str(conversation_id))
         current_id = str(current_user_id)
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise NotFoundException("Conversation not found")

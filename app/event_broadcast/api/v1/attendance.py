@@ -61,6 +61,20 @@ async def claim_attendance(
     )
 
 
+@router.post(
+    "/attendance/{attendance_id}/payment/verify",
+    status_code=status.HTTP_200_OK,
+    response_model=AttendanceResponse,
+    summary="Verify a paid event attendance with Paystack",
+)
+async def verify_event_payment(
+    attendance_id: str, db: dbSessionDep, current_user: CurrentUser
+):
+    return await attendance_service.verify_event_payment(
+        db=db, current_user=current_user, attendance_id=attendance_id
+    )
+
+
 @router.get(
     "/my-attendance",
     status_code=status.HTTP_200_OK,

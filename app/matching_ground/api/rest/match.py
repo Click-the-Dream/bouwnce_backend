@@ -102,6 +102,15 @@ async def list_sent_match_requests(
     return await service.list_user_sent_requests(db, current_user.id, page, page_size)
 
 
+@router.get("/requests/{request_id}", summary="Get status of a match request")
+async def get_match_request_status(
+    request_id: uuid.UUID, db: dbSessionDep, current_user: CurrentUser
+) -> dict:
+    return await MatchLifecycleService().get_request_status(
+        session=db, request_id=request_id, user_id=current_user.id
+    )
+
+
 @router.get("/")
 async def list_matches(
     db: dbSessionDep,

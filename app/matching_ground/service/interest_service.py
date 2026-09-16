@@ -68,6 +68,19 @@ class InterestService:
             message="Successfully add user interest",
         )
 
+    async def update_user_interests(
+        self, db: AsyncSession, user_id: str, interest_names: list[str]
+    ) -> dict[str, Any]:
+        if not is_valid_uuid(user_id):
+            raise BadRequestException("Invalid user id")
+
+        await UserInterest.replace_user_interests(db, user_id, interest_names)
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            status="success",
+            message="Successfully updated user interests",
+        )
+
     async def remove_user_interest(
         self, db: AsyncSession, user_id: str, interest_ids: list[str]
     ) -> dict[str, Any]:

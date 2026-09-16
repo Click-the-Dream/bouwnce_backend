@@ -567,6 +567,25 @@ class MatchLifecycleService:
             "total": len(rows),
         }
 
+    async def get_request_status(
+        self, *, session: AsyncSession, request_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict:
+        request = await MatchRequest.get_by_id(str(request_id), session)
+        if request is None:
+            raise NotFoundException("Match request not found")
+        if user_id not in {request.requester_id, request.target_user_id}:
+            raise ForbiddenException("You cannot access this match request")
+        return {
+            "request_id": str(request.id),
+            "status": request.status,
+            "expires_at": (
+                request.expires_at.isoformat() if request.expires_at else None
+            ),
+            "responded_at": (
+                request.responded_at.isoformat() if request.responded_at else None
+            ),
+        }
+
     async def list_matches_for_user(
         self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int
     ) -> dict:

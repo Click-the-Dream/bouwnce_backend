@@ -48,7 +48,7 @@ async def get_user_interest_by_id(user_id: UUID, db: dbSessionDep, _: CurrentUse
 async def update_user_interests(
     db: dbSessionDep, current_user: CurrentUser, interest_lists: UserInterestCreate
 ):
-    return await interest_service.add_user_interests(
+    return await interest_service.update_user_interests(
         db, str(current_user.id), interest_lists.interests
     )
 

@@ -10,12 +10,14 @@ from app.event_broadcast.models.events import EventState, OutingEvent
 from app.event_broadcast.schemas.attendance import AttendanceSchema
 from app.matching_ground.model.user_interest import UserInterest
 from app.models.user import User
+from app.service.payment.paystack import paystack_service
 from app.utils.exception import (
     BadRequestException,
     ConflictException,
     NotFoundException,
 )
 from app.utils.helper import is_valid_uuid
+from app.utils.money import naira_to_kobo
 from app.utils.responses import response_builder
 
 
@@ -185,15 +187,60 @@ class AttendanceService:
             "total_amount": total_amount,
             "total_tickets": total_tickets,
             "payment_status": "pending",
-            "attendance_status": "confirmed",
+            "attendance_status": "pending_payment",
         }
 
         attendance = await UserEventAttendance.create_attendance(db, attendance_data)
+
+        if total_amount > 0:
+            try:
+                payment_url, payment_reference = paystack_service.create_payment_intent(
+                    {"email": current_user.email, "amount": naira_to_kobo(total_amount)}
+                )
+            except Exception as exc:
+                raise BadRequestException("Unable to initialize event payment") from exc
+            attendance.payment_url = payment_url
+            attendance.payment_reference = payment_reference
+        else:
+            attendance.payment_status = "successful"
+            attendance.attendance_status = "confirmed"
         await db.commit()
 
         return response_builder(
             status_code=status.HTTP_201_CREATED,
             message="Attendance claimed successfully",
+            data=_serialize_attendance(attendance),
+        )
+
+    async def verify_event_payment(
+        self, db: AsyncSession, current_user: User, attendance_id: str
+    ) -> dict[str, Any]:
+        attendance = await UserEventAttendance.get_by_id(attendance_id, db)
+        if str(attendance.user_id) != str(current_user.id):
+            raise BadRequestException("You cannot verify this event payment")
+        if attendance.payment_status == "successful":
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                message="Event payment already verified",
+                data=_serialize_attendance(attendance),
+            )
+        if not attendance.payment_reference:
+            raise BadRequestException("This attendance has no pending payment")
+
+        paid, payload = paystack_service.callback(attendance.payment_reference)
+        if not paid:
+            attendance.payment_status = "failed"
+            await db.commit()
+            raise BadRequestException("Event payment was not successful")
+        if int(payload.get("amount", 0)) != naira_to_kobo(attendance.total_amount):
+            raise BadRequestException("Event payment amount does not match attendance")
+
+        attendance.payment_status = "successful"
+        attendance.attendance_status = "confirmed"
+        await db.commit()
+        return response_builder(
+            status_code=status.HTTP_200_OK,
+            message="Event payment verified successfully",
             data=_serialize_attendance(attendance),
         )
 
@@ -293,13 +340,13 @@ class AttendanceService:
         serialized = []
         for attendance in result["attendances"]:
             attendance_dict = _serialize_attendance(attendance)
-            print(attendance.user)
             if attendance.user:
                 attendance_dict["user"] = {
                     "id": str(attendance.user.id),
                     "username": attendance.user.username,
                     "full_name": attendance.user.full_name,
                     "email": attendance.user.email,
+                    "profile_image": attendance.user.profile_pic,
                 }
             serialized.append(attendance_dict)
 

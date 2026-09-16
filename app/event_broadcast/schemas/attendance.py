@@ -32,6 +32,8 @@ class AttendanceResponseSchema(BaseModel):
     payment_status: Annotated[
         str, Field(default="pending", description="Status of payment")
     ]
+    payment_reference: str | None = None
+    payment_url: str | None = None
     attendance_status: Annotated[
         str, Field(default="confirmed", description="Event Attendance status")
     ]
@@ -56,6 +58,9 @@ class UserSchema(BaseModel):
     username: Annotated[str, Field(description="User username")]
     full_name: Annotated[str, Field(description="User full name")]
     email: Annotated[str, Field(description="User email address")]
+    profile_image: dict | None = Field(
+        default=None, description="User profile image, when one has been uploaded"
+    )
 
 
 class UserAttendanceResponseSchema(AttendanceResponseSchema):

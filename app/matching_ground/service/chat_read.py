@@ -5,17 +5,15 @@ Extracted from chat_service.py to keep file sizes manageable.
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.matching_ground.repositories.chat_repository import chat_repository
 from app.matching_ground.schema.chat import (
     ChatReadUpdatedData,
     ChatReadUpdatedEvent,
 )
-from app.models.chat import Conversation, Message
 from app.utils.exception import ForbiddenException, NotFoundException
 from app.utils.responses import response_builder
 
@@ -33,24 +31,18 @@ class ChatReadOps:
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
-        conv = await Conversation.get_by_id(str(conversation_id), db)
+        conv = await chat_repository.get_conversation(db, str(conversation_id))
         current_id = str(current_user_id)
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
         read_at = datetime.now(UTC)
-        stmt = (
-            update(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_user_id,
-                Message.read_at.is_(None),
-            )
-            .values(read_at=read_at)
-            .returning(text("1"))
+        updated = await chat_repository.mark_messages_read(
+            db=db,
+            conversation_id=conv.id,
+            recipient_id=current_user_id,
+            read_at=read_at,
         )
-        result = await db.execute(stmt)
-        updated = len(result.all())
 
         data = {
             "conversation_id": str(conv.id),
@@ -94,30 +86,24 @@ class ChatReadOps:
         commit: bool = False,
         as_response: bool = False,
     ) -> dict:
-        conv = await Conversation.get_by_id(str(conversation_id), db)
+        conv = await chat_repository.get_conversation(db, str(conversation_id))
         current_id = str(current_user_id)
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
-        target = await Message.get_by_id(str(message_id), db)
+        target = await chat_repository.get_message(db, str(message_id))
         if str(target.conversation_id) != str(conv.id):
             raise NotFoundException("Message not found")
         if str(target.recipient_id) != current_id:
             raise ForbiddenException("You can only mark received messages as read")
 
         read_at = datetime.now(UTC)
-        stmt = (
-            update(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-            .values(read_at=read_at)
-            .returning(text("1"))
+        updated = await chat_repository.mark_messages_read(
+            db=db,
+            conversation_id=conv.id,
+            recipient_id=current_id,
+            read_at=read_at,
         )
-        result = await db.execute(stmt)
-        updated = len(result.all())
 
         data = {
             "conversation_id": str(conv.id),
@@ -170,9 +156,7 @@ class ChatReadOps:
         if current_id == other_id:
             raise ForbiddenException("You can't mark messages with yourself")
 
-        conv = await Conversation.get_between(
-            db, uuid.UUID(current_id), uuid.UUID(other_id)
-        )
+        conv = await chat_repository.get_conversation_between(db, current_id, other_id)
         if conv is None:
             data = {
                 "conversation_id": False,
@@ -192,11 +176,7 @@ class ChatReadOps:
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
-        target = (
-            await db.execute(
-                select(Message).where(Message.id == uuid.UUID(str(message_id)))
-            )
-        ).scalar_one_or_none()
+        target = await chat_repository.find_message(db, str(message_id))
         if target is None or str(target.conversation_id) != str(conv.id):
             data = {
                 "conversation_id": str(conv.id),
@@ -217,18 +197,12 @@ class ChatReadOps:
             raise ForbiddenException("You can only mark received messages as read")
 
         read_at = datetime.now(UTC)
-        stmt = (
-            update(Message)
-            .where(
-                Message.conversation_id == conv.id,
-                Message.recipient_id == current_id,
-                Message.read_at.is_(None),
-            )
-            .values(read_at=read_at)
-            .returning(text("1"))
+        updated = await chat_repository.mark_messages_read(
+            db=db,
+            conversation_id=conv.id,
+            recipient_id=current_id,
+            read_at=read_at,
         )
-        result = await db.execute(stmt)
-        updated = len(result.all())
 
         data = {
             "conversation_id": str(conv.id),

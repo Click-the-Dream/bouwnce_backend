@@ -30,6 +30,10 @@ class UserEventAttendance(BaseModel):
     payment_status: Mapped[str] = mapped_column(
         String, nullable=False, default="pending"
     )
+    payment_reference: Mapped[str | None] = mapped_column(
+        String, unique=True, nullable=True, index=True
+    )
+    payment_url: Mapped[str | None] = mapped_column(String, nullable=True)
     attendance_status: Mapped[str] = mapped_column(
         String, nullable=False, default="confirmed"
     )

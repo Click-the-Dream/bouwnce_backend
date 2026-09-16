@@ -74,6 +74,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             return
 
         redis = await get_redis_client()
+        await pubsub_dispatcher.start(redis)
 
         await websocket.accept()
         send_lock = asyncio.Lock()

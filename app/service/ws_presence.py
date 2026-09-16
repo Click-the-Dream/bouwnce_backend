@@ -161,9 +161,7 @@ class PubSubDispatcher:
             try:
                 payload = json.loads(data)
             except Exception:
-                print(
-                    f"Error parsing pubsub payload for user {target_user_id}: {data}"
-                )
+                print(f"Error parsing pubsub payload for user {target_user_id}: {data}")
                 return
 
             async with self._register_lock:

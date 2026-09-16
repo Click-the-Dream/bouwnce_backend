@@ -453,9 +453,7 @@ class ChatService(ChatSerializers, ChatReadOps):
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
-        msgs, total = await chat_repository.list_messages(
-            db, conv.id, page, page_size
-        )
+        msgs, total = await chat_repository.list_messages(db, conv.id, page, page_size)
 
         reply_ids: set[str] = set()
         user_ids: set[str] = set()

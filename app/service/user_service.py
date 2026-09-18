@@ -98,7 +98,7 @@ class UserService:
     async def activate_user(self, user: User, db: AsyncSession) -> dict[str, Any]:
 
         user.is_active = True
-        await user.save()
+        await user.save(db)
 
         return response_builder(
             status_code=status.HTTP_200_OK,
@@ -202,7 +202,7 @@ class UserService:
                 banner_result = await upload_image(banner_path[0], str(user.id))
                 data["profile_banner"] = banner_result
 
-            if user.profile_pic:
+            if user.profile_pic and data.get("profile_pic"):
                 previous_profile_id = user.profile_pic["public_id"]
                 delete_images([previous_profile_id])
 

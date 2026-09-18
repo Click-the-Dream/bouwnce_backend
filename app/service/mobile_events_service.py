@@ -18,6 +18,7 @@ from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
+from app.core.logger import logger
 from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
@@ -44,10 +45,10 @@ from app.service.ws_chat import ACTIVE_CHAT_CONNECTIONS, ChatDelivery  # noqa: F
 from app.service.ws_presence import (
     PRESENCE_KEY_PREFIX,
     PresenceManager,
+    pubsub_dispatcher,
 )
 from app.utils.exception import (
     BadRequestException,
-    ForbiddenException,
     InternalServerErrorException,
     NotFoundException,
 )
@@ -72,18 +73,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             await websocket.close(code=1008)
             return
 
-        pubsub = None
-        try:
-            redis = await get_redis_client()
-            pubsub = redis.pubsub()
-            await pubsub.subscribe(f"chat:user:{user_id}")
-        except Exception:
-            if pubsub is not None:
-                with contextlib.suppress(Exception):
-                    await pubsub.aclose()
-            with contextlib.suppress(Exception):
-                await websocket.close(code=1013)
-            return
+        redis = await get_redis_client()
 
         await websocket.accept()
         send_lock = asyncio.Lock()
@@ -94,25 +84,17 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             send_lock,
             chat_queue,
         )
-        chat_stream_ready = asyncio.Event()
-        pubsub_task = asyncio.create_task(
-            self._forward_pubsub(
-                websocket=websocket,
-                pubsub=pubsub,
-                redis=redis,
-                user_id=str(user_id),
-                send_lock=send_lock,
-            )
+
+        # Register this WebSocket with the shared PubSubDispatcher so it
+        # receives fanout messages via the single psubscribe connection.
+        await pubsub_dispatcher.register(
+            user_id=str(user_id),
+            connection_id=connection_id,
+            send_callback=lambda payload, lock: self._send_json_safe(
+                websocket, payload, send_lock=send_lock
+            ),
         )
-        chat_stream_task = asyncio.create_task(
-            self._forward_chat_stream(
-                websocket=websocket,
-                redis=redis,
-                user_id=str(user_id),
-                ready_event=chat_stream_ready,
-                send_lock=send_lock,
-            )
-        )
+
         bootstrap_task = asyncio.create_task(
             self._bootstrap_connection(
                 websocket=websocket,
@@ -134,11 +116,22 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             self._presence_heartbeat(redis=redis, user_id=str(user_id))
         )
 
-        # Wait for bootstrap + stream ready before sending chat.ready
+        # One-time stream catch-up: deliver any missed messages from Redis
+        catchup_task = asyncio.create_task(
+            self._catchup_chat_stream(
+                websocket=websocket,
+                redis=redis,
+                user_id=str(user_id),
+                send_lock=send_lock,
+                ready_event=None,
+            )
+        )
+
+        # Wait for bootstrap + catchup before sending chat.ready
         with contextlib.suppress(Exception):
             await bootstrap_task
         with contextlib.suppress(Exception):
-            await asyncio.wait_for(chat_stream_ready.wait(), timeout=5)
+            await catchup_task
 
         await self._send_model_safe(
             websocket,
@@ -157,7 +150,6 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     ConnectionClosedOK,
                 ):
                     break
-
                 try:
                     incoming = None
                     with contextlib.suppress(Exception):
@@ -213,7 +205,11 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 except Exception:
                     # Safety net: a single event handler bug must never
                     # kill the WebSocket connection.
-                    pass
+                    logger.warning(
+                        "Failed to process incoming event for user %s",
+                        user_id,
+                        exc_info=True,
+                    )
         finally:
             user_connections = ACTIVE_CHAT_CONNECTIONS.get(str(user_id))
             if user_connections is not None:
@@ -221,26 +217,28 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 if not user_connections:
                     ACTIVE_CHAT_CONNECTIONS.pop(str(user_id), None)
             bootstrap_task.cancel()
-            pubsub_task.cancel()
-            chat_stream_task.cancel()
             chat_queue_task.cancel()
             presence_task.cancel()
-            with contextlib.suppress(Exception):
-                await pubsub.unsubscribe(f"chat:user:{user_id}")
-            with contextlib.suppress(Exception):
-                await pubsub.aclose()
+            catchup_task.cancel()
+            # Unregister from shared pubsub dispatcher
+            await pubsub_dispatcher.unregister(
+                user_id=str(user_id), connection_id=connection_id
+            )
             await asyncio.gather(
                 bootstrap_task,
-                pubsub_task,
-                chat_stream_task,
                 chat_queue_task,
                 presence_task,
+                catchup_task,
                 return_exceptions=True,
             )
-            with contextlib.suppress(Exception):
+            try:
                 await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
                 await self._publish_presence(
                     redis=redis, user_id=str(user_id), online=False
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to clean up presence for user %s", user_id, exc_info=True
                 )
 
     # ------------------------------------------------------------------

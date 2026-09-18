@@ -15,9 +15,21 @@ module.exports = {
       },
     },
     {
-      name: "production-api",
+      name: "celery-beat",
       cwd: baseDir,
-      script: "bin/start-api.sh",
+      script: "bin/start-celery-beat.sh",
+      interpreter: "bash",
+      autorestart: true,
+      watch: false,
+      max_restarts: 10,
+      env: {
+        PYTHONUNBUFFERED: "1",
+      },
+    },
+    {
+      name: "celery-worker",
+      cwd: baseDir,
+      script: "bin/start-celery-worker.sh",
       interpreter: "bash",
       autorestart: true,
       watch: false,

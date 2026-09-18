@@ -7,6 +7,7 @@ from app.api.dependencies import (
     redisSessionDep,
 )
 from app.core.config import settings
+from app.event_broadcast.services.attendance import attendance_service
 from app.service.order_srevice import order_service
 
 router = APIRouter(prefix="/payment", tags=["Payments"])
@@ -20,6 +21,11 @@ class SimulatePaystackChargeSuccessRequest(BaseModel):
 
 @router.post("/paystack/webhook", summary="Paystack Webhook to verify payment")
 async def paystack_webhook(request: Request, db: dbSessionDep, redis: redisSessionDep):
+    event_payment_response = await attendance_service.handle_paystack_webhook(
+        db, redis, request
+    )
+    if event_payment_response is not None:
+        return event_payment_response
     return await order_service.handle_successful_payment(request, db, redis)
 
 
@@ -41,4 +47,5 @@ async def simulate_paystack_charge_success(
         event_id=payload.event_id,
         db=db,
         redis=redis,
+        verify_provider=False,
     )

@@ -26,6 +26,18 @@ async def list_notifications(
 
 
 @router.patch(
+    "/read-all",
+    summary="Mark all current user's notifications as read",
+    status_code=status.HTTP_200_OK,
+    response_model=dict,
+)
+async def mark_all_notifications_read(
+    db: dbSessionDep, current_user: CurrentActiveUser
+) -> dict:
+    return await notification_service.mark_all_read(db=db, user_id=str(current_user.id))
+
+
+@router.patch(
     "/{notification_id}/read",
     summary="Mark a notification as read",
     status_code=status.HTTP_200_OK,

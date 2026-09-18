@@ -415,6 +415,10 @@ class MatchLifecycleService:
         page: int = 1,
         page_size: int = 10,
     ) -> dict:
+        # Fetch the requester's gender for opposite-gender prioritization
+        requester = await User.get_by_id(str(requester_id), session)
+        requester_gender = getattr(requester, "gender", None) if requester else None
+
         buddy_search_service = BuddySearchService()
         result = await buddy_search_service.search(
             session=session,
@@ -422,6 +426,7 @@ class MatchLifecycleService:
             radius_km=radius_km,
             interest_hints=interest_hints,
             target_user_ids=target_user_ids,
+            requester_gender=requester_gender,
             page=page,
             page_size=page_size,
         )
@@ -439,6 +444,7 @@ class MatchLifecycleService:
                     "user_id": item.user_id,
                     "username": item.username,
                     "full_name": item.full_name,
+                    "gender": item.gender,
                     "distance_km": item.distance_km,
                     "profile_pic": item.profile_pic,
                     "banner_url": item.profile_banner,
@@ -559,6 +565,25 @@ class MatchLifecycleService:
             "page": page,
             "page_size": page_size,
             "total": len(rows),
+        }
+
+    async def get_request_status(
+        self, *, session: AsyncSession, request_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict:
+        request = await MatchRequest.get_by_id(str(request_id), session)
+        if request is None:
+            raise NotFoundException("Match request not found")
+        if user_id not in {request.requester_id, request.target_user_id}:
+            raise ForbiddenException("You cannot access this match request")
+        return {
+            "request_id": str(request.id),
+            "status": request.status,
+            "expires_at": (
+                request.expires_at.isoformat() if request.expires_at else None
+            ),
+            "responded_at": (
+                request.responded_at.isoformat() if request.responded_at else None
+            ),
         }
 
     async def list_matches_for_user(

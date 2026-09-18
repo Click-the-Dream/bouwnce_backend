@@ -10,7 +10,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.orm import Mapped, mapped_column, selectinload
-from sqlalchemy.sql import text
 
 from app.db.postgres_db_conn import Base
 from app.utils.exception import BadRequestException, NotFoundException
@@ -83,12 +82,13 @@ class BaseModel(Base):
         if not is_valid_uuid(str(id)):
             raise BadRequestException(message="id not a valid uuid")
 
+        filters = [cls.id == id, cls.is_deleted.is_(False)]
         if hasattr(cls, "is_active"):
             result = await db.execute(
-                select(cls).where(and_(cls.is_active.is_(True), cls.id == id))
+                select(cls).where(and_(cls.is_active.is_(True), *filters))
             )
         else:
-            result = await db.execute(select(cls).where(cls.id == id))
+            result = await db.execute(select(cls).where(*filters))
 
         obj = result.scalar_one_or_none()
         if not obj:
@@ -99,7 +99,7 @@ class BaseModel(Base):
 
     @classmethod
     async def get_by_ids(cls, ids: list[str], db: AsyncSession) -> Sequence[Self]:
-        stmt = select(cls).where(cls.id.in_(ids))
+        stmt = select(cls).where(cls.id.in_(ids), cls.is_deleted.is_(False))
         result = await db.execute(stmt)
 
         return result.scalars().all()
@@ -113,7 +113,7 @@ class BaseModel(Base):
         if not obj:
             raise NotFoundException(message=f"{cls.__name__} not found")
 
-        obj.is_deleted = False
+        obj.is_deleted = True
         obj.deleted_at = datetime.now(UTC)
 
         await obj.save(db)
@@ -163,7 +163,7 @@ class BaseModel(Base):
     @classmethod
     async def get_one(cls, db: AsyncSession, filter: dict | None = None) -> Self | None:
 
-        query = select(cls)
+        query = select(cls).where(cls.is_deleted.is_(False))
 
         if filter:
             for key, value in filter.items():
@@ -187,7 +187,10 @@ class BaseModel(Base):
         all: bool = False,
     ) -> dict:
 
-        query = select(cls)
+        query = select(cls).where(cls.is_deleted.is_(False))
+        count_query = (
+            select(func.count()).select_from(cls).where(cls.is_deleted.is_(False))
+        )
         or_condition = []
 
         if filter:
@@ -203,14 +206,28 @@ class BaseModel(Base):
 
         if or_condition and hasattr(cls, "is_active"):
             query = query.filter(and_(cls.is_active.is_(True), or_(*or_condition)))
+            count_query = count_query.where(
+                and_(cls.is_active.is_(True), or_(*or_condition))
+            )
         elif or_condition:
             query = query.where(or_(*or_condition))
+            count_query = count_query.where(or_(*or_condition))
 
         if hasattr(cls, "created_at"):
             if date_from:
-                query = query.where(cls.created_at >= text(f"'{date_from}'"))
+                try:
+                    from_date = datetime.fromisoformat(date_from)
+                except ValueError as exc:
+                    raise BadRequestException("Invalid date_from format") from exc
+                query = query.where(cls.created_at >= from_date)
+                count_query = count_query.where(cls.created_at >= from_date)
             if date_to:
-                query = query.where(cls.created_at <= text(f"'{date_to}'"))
+                try:
+                    to_date = datetime.fromisoformat(date_to)
+                except ValueError as exc:
+                    raise BadRequestException("Invalid date_to format") from exc
+                query = query.where(cls.created_at <= to_date)
+                count_query = count_query.where(cls.created_at <= to_date)
 
         if order_by:
             descending = order_by.startswith("-")
@@ -223,7 +240,6 @@ class BaseModel(Base):
         if not all:
             query = query.offset(offset).limit(page_size)
 
-        count_query = select(func.count()).select_from(cls)
         count_result = await db.execute(count_query)
 
         result = await db.execute(query)
@@ -255,7 +271,9 @@ class BaseModel(Base):
 
     @classmethod
     async def whoami(cls, id: str, user_type: str, db: AsyncSession):
-        query = select(cls).where(cls.id == id, cls.role == user_type)
+        query = select(cls).where(
+            cls.id == id, cls.role == user_type, cls.is_deleted.is_(False)
+        )
         result = await db.execute(query)
         user = result.scalar_one_or_none()
 
@@ -277,7 +295,7 @@ class BaseModel(Base):
         if preload is True:
             preload = [relation.key for relation in cls.__mapper__.relationships]
 
-        query = select(cls)
+        query = select(cls).where(cls.is_deleted.is_(False))
         if isinstance(preload, list):
             for relation in preload:
                 if hasattr(cls, relation):

@@ -1,8 +1,9 @@
 from enum import Enum
 
-from qstash import QStash
+from qstash import QStash, Receiver
 
 from app.core.config import settings
+from app.utils.exception import UnAuthorizedException
 
 
 class AvailableJobs(Enum):
@@ -10,6 +11,18 @@ class AvailableJobs(Enum):
 
 
 qstash = QStash(token=settings.QSTASH_TOKEN)
+
+
+def verify_qstash_request(*, signature: str | None, body: str) -> None:
+    if not signature:
+        raise UnAuthorizedException("Missing QStash signature")
+    try:
+        Receiver(
+            current_signing_key=settings.QSTASH_CURRENT_SIGNING_KEY,
+            next_signing_key=settings.QSTASH_NEXT_SIGNING_KEY,
+        ).verify(signature=signature, body=body)
+    except Exception as exc:
+        raise UnAuthorizedException("Invalid QStash signature") from exc
 
 
 def enqueue_job(payload: dict, type: AvailableJobs):

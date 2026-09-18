@@ -44,9 +44,8 @@ async def get_payment_progress(
     current_user: CurrentActiveUser,
     reference: str = Query(..., min_length=3),
 ) -> dict:
-    _ = current_user
     return await mobile_events_service.get_payment_progress(
-        redis=redis, reference=reference
+        redis=redis, reference=reference, user_id=str(current_user.id)
     )
 
 

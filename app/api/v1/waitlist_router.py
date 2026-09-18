@@ -1,6 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, Query, status
 
-from app.api.dependencies import dbSessionDep
+from app.api.dependencies import CurrentAdmin, dbSessionDep
 from app.schemas.waitlist import (
     PaginatedWaitlistResponse,
     WaitlistCreate,
@@ -34,6 +34,7 @@ async def create(
 )
 async def get_all(
     db: dbSessionDep,
+    _: CurrentAdmin,
     name: str | None = Query(default=None, description="Search with name"),
     institution: str | None = Query(
         default=None, description="Search with institution"
@@ -61,6 +62,7 @@ async def get_all(
 )
 async def get_today_count(
     db: dbSessionDep,
+    _: CurrentAdmin,
     page: int = Query(default=1, description="The page number to fetch"),
     page_size: int = Query(default=10, description="Number of resources per page"),
 ):

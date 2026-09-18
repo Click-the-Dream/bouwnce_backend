@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.matching_ground.model.notification import Notification
@@ -78,6 +78,29 @@ class NotificationService:
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Notification marked as read",
+                data=data,
+            )
+        return data
+
+    async def mark_all_read(
+        self, *, db: AsyncSession, user_id: str, as_response: bool = True
+    ) -> dict:
+        result = await db.execute(
+            update(Notification)
+            .where(
+                Notification.user_id == uuid.UUID(str(user_id)),
+                Notification.read_at.is_(None),
+                Notification.is_deleted.is_(False),
+            )
+            .values(read_at=datetime.now(UTC))
+        )
+        await db.commit()
+        data = {"marked_read": result.rowcount or 0}
+        if as_response:
+            return response_builder(
+                status_code=status.HTTP_200_OK,
+                status="success",
+                message="Notifications marked as read",
                 data=data,
             )
         return data

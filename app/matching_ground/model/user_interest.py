@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
 from app.matching_ground.model.interest import Interest
 from app.models.basemodel import BaseModel
+from app.utils.exception import BadRequestException
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -67,12 +68,41 @@ class UserInterest(BaseModel):
         return True
 
     @classmethod
+    async def replace_user_interests(
+        cls, db: AsyncSession, user_id: str, interests: list[str]
+    ) -> bool:
+        normalized = list(
+            dict.fromkeys(name.strip() for name in interests if name.strip())
+        )
+        result = await db.execute(
+            select(Interest.id, Interest.name).where(Interest.name.in_(normalized))
+        )
+        rows = result.all()
+        found_names = {name for _, name in rows}
+        unknown = sorted(set(normalized) - found_names)
+        if unknown:
+            raise BadRequestException(f"Unknown interests: {', '.join(unknown)}")
+
+        await db.execute(delete(cls).where(cls.user_id == user_id))
+        if rows:
+            await db.execute(
+                insert(cls).values(
+                    [
+                        {"user_id": user_id, "interest_id": interest_id}
+                        for interest_id, _ in rows
+                    ]
+                )
+            )
+        await db.commit()
+        return True
+
+    @classmethod
     async def remove_user_interests(
         cls, db: AsyncSession, user_id: str, interest_ids: list[str]
     ) -> bool:
 
         query = delete(cls).where(
-            cls.user_id == user_id, cls.insterest_id.in_(interest_ids)
+            cls.user_id == user_id, cls.interest_id.in_(interest_ids)
         )
 
         await db.execute(query)

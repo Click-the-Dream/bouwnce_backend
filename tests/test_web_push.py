@@ -252,49 +252,42 @@ class FakeSession:
         return None
 
 
+class FakeSessionContextFactory:
+    def __init__(self) -> None:
+        self.session = FakeSession()
+
+    def __call__(self):
+        return self.session
+
+
 def _payload(user_id: str, **extra) -> str:
     data = {"user_id": user_id, "title": "T", "body": "B", **extra}
     return json.dumps(data)
 
 
 class TestDrainOnce:
-    def _patch_env(self, redis: FakeRedis):
-        stack = [
-            patch(
-                "app.worker.tasks.web_push.get_redis_client",
-                AsyncMock(return_value=redis),
-            ),
-            patch(
-                "app.worker.tasks.web_push.get_async_session",
-                lambda: FakeSession(),
-            ),
-        ]
-        return stack
-
     async def _run(
         self, redis: FakeRedis, **classmethod_sides
     ) -> tuple[int, AsyncMock, AsyncMock]:
-        stacks = self._patch_env(redis)
+        session_context_factory = FakeSessionContextFactory()
         list_mock = AsyncMock()
         delete_mock = AsyncMock()
         list_mock.side_effect = classmethod_sides.get("list_for_user", [])
         delete_mock.side_effect = classmethod_sides.get("delete_by_endpoint", [True])
-        stacks.append(
+        stacks = [
             patch(
                 "app.worker.tasks.web_push.WebPushSubscription.list_for_user",
                 list_mock,
-            )
-        )
-        stacks.append(
+            ),
             patch(
                 "app.worker.tasks.web_push.WebPushSubscription.delete_by_endpoint",
                 delete_mock,
-            )
-        )
+            ),
+        ]
         for s in stacks:
             s.start()
         try:
-            processed = await _drain_once()
+            processed = await _drain_once(redis, session_context_factory)
         finally:
             for s in stacks:
                 s.stop()
@@ -444,7 +437,7 @@ class TestDrainOnce:
 class TestDrainTask:
     def test_returns_processed_count(self) -> None:
         with patch(
-            "app.worker.tasks.web_push._drain_once",
+            "app.worker.tasks.web_push._drain_once_with_client",
             new_callable=AsyncMock,
             return_value=3,
         ):
@@ -452,7 +445,7 @@ class TestDrainTask:
 
     def test_returns_zero_when_drain_raises(self) -> None:
         with patch(
-            "app.worker.tasks.web_push._drain_once",
+            "app.worker.tasks.web_push._drain_once_with_client",
             new_callable=AsyncMock,
             side_effect=RuntimeError("redis down"),
         ):
@@ -476,6 +469,27 @@ class TestBeatSchedule:
 
         assert (
             celery_app.tasks.get("app.worker.tasks.web_push.drain_push_queue")
+            is not None
+        )
+
+    def test_beat_schedule_wires_event_payment_reconciliation(self) -> None:
+        from app.worker.celery_app import celery_app
+
+        entry = celery_app.conf.beat_schedule["reconcile-event-payments"]
+        assert (
+            entry["task"] == "app.worker.tasks.event_payment_reconciliation.reconcile"
+        )
+        assert entry["schedule"] == 300.0
+
+    def test_event_payment_reconciliation_task_is_registered(self) -> None:
+        from app.worker.celery_app import celery_app
+        from app.worker.tasks.event_payment_reconciliation import reconcile
+
+        assert reconcile is not None
+        assert (
+            celery_app.tasks.get(
+                "app.worker.tasks.event_payment_reconciliation.reconcile"
+            )
             is not None
         )
 

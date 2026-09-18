@@ -30,6 +30,10 @@ class UserEventAttendance(BaseModel):
     payment_status: Mapped[str] = mapped_column(
         String, nullable=False, default="pending"
     )
+    payment_reference: Mapped[str | None] = mapped_column(
+        String, unique=True, nullable=True, index=True
+    )
+    payment_url: Mapped[str | None] = mapped_column(String, nullable=True)
     attendance_status: Mapped[str] = mapped_column(
         String, nullable=False, default="confirmed"
     )
@@ -54,12 +58,37 @@ class UserEventAttendance(BaseModel):
         return new_attendance
 
     @classmethod
+    async def get_by_payment_reference(
+        cls, db: AsyncSession, payment_reference: str
+    ) -> Self | None:
+        result = await db.execute(
+            select(cls).where(
+                cls.payment_reference == payment_reference,
+                cls.is_deleted.is_(False),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def get_by_id_for_update(cls, db: AsyncSession, attendance_id: str) -> Self:
+        result = await db.execute(
+            select(cls)
+            .where(cls.id == attendance_id, cls.is_deleted.is_(False))
+            .with_for_update()
+        )
+        attendance = result.scalar_one_or_none()
+        if attendance is None:
+            raise ValueError("Event attendance not found")
+        return attendance
+
+    @classmethod
     async def get_user_attendance(
         cls,
         db: AsyncSession,
         user_id,
         page: int,
         page_size: int,
+        event_id: str | None = None,
         name: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
@@ -75,6 +104,8 @@ class UserEventAttendance(BaseModel):
 
         if name:
             query = query.where(OutingEvent.name.ilike(f"%{name}%"))
+        if event_id:
+            query = query.where(cls.event_id == event_id)
 
         if date_from:
             query = query.where(OutingEvent.date >= date_from)
@@ -100,6 +131,8 @@ class UserEventAttendance(BaseModel):
 
         if name:
             count_query = count_query.where(OutingEvent.name.ilike(f"%{name}%"))
+        if event_id:
+            count_query = count_query.where(cls.event_id == event_id)
         if date_from:
             count_query = count_query.where(OutingEvent.date >= date_from)
         if date_to:

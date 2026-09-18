@@ -63,6 +63,9 @@ class User(BaseModel):
     role: Mapped[str] = mapped_column(
         Enum("user", "vendor", "admin", name="user_role_enum"), default="user"
     )
+    gender: Mapped[str | None] = mapped_column(
+        Enum("male", "female", "other", name="user_gender_enum"), nullable=True
+    )
     otp: Mapped[str | None] = mapped_column(String(6))
     otp_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

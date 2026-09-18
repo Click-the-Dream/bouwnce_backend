@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query, status
 
-from app.api.dependencies import CurrentUser, dbSessionDep
+from app.api.dependencies import CurrentUser, dbSessionDep, redisSessionDep
 from app.event_broadcast.schemas.attendance import (
     AttendanceResponse,
     ClaimAttendanceSchema,
@@ -61,6 +61,23 @@ async def claim_attendance(
     )
 
 
+@router.post(
+    "/attendance/{attendance_id}/payment/verify",
+    status_code=status.HTTP_200_OK,
+    response_model=AttendanceResponse,
+    summary="Verify a paid event attendance with Paystack",
+)
+async def verify_event_payment(
+    attendance_id: str,
+    db: dbSessionDep,
+    redis: redisSessionDep,
+    current_user: CurrentUser,
+):
+    return await attendance_service.verify_event_payment(
+        db=db, redis=redis, current_user=current_user, attendance_id=attendance_id
+    )
+
+
 @router.get(
     "/my-attendance",
     status_code=status.HTTP_200_OK,
@@ -90,6 +107,28 @@ async def get_my_attendance(
         date_from=date_from,
         date_to=date_to,
         event_type=event_type,
+    )
+
+
+@router.get(
+    "/my-payment-status",
+    status_code=status.HTTP_200_OK,
+    response_model=PaginatedAttendanceListResponse,
+    summary="Get current user's event payment statuses",
+)
+async def get_my_event_payment_statuses(
+    db: dbSessionDep,
+    current_user: CurrentUser,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+    event_id: str | None = Query(None, description="Event ID to filter by"),
+):
+    return await attendance_service.get_user_attendance(
+        db=db,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+        event_id=event_id,
     )
 
 

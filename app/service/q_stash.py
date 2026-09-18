@@ -21,5 +21,6 @@ def enqueue_job(payload: dict, type: AvailableJobs):
     else:
         raise ValueError("Invalid job Type")
 
+    print(f"The is the url: {url}")
     res = qstash.message.publish_json(url=url, body=payload, retries=3, delay=0)
     print(res)

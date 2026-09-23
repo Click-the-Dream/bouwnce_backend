@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.newsletter import NewsLetter
 from app.models.user import User
+from app.models.waitlist import Waitlist
 from app.service.q_stash import AvailableJobs, enqueue_job
 from app.utils.emails import generate_email_content, send_email
 from app.utils.exception import (
@@ -29,30 +30,26 @@ class NewsLetterStatusEnum(Enum):
 
 class NewsLetterService:
     @staticmethod
-    def _parse_test_recipients(value: str) -> list[tuple[str, str]]:
-        items: list[tuple[str, str]] = []
+    def _parse_test_recipients(value: str) -> dict[str, str]:
+        items: dict[str, str] = {}
+
         for raw in (value or "").split(","):
             chunk = raw.strip()
             if not chunk:
                 continue
+
             if ":" in chunk:
                 email, name = chunk.split(":", 1)
                 email = email.strip()
                 name = name.strip() or "there"
             else:
-                email = chunk.strip()
+                email = chunk
                 name = "there"
-            if email:
-                items.append((email, name))
-        # de-dupe by email (keep first)
-        seen: set[str] = set()
-        out: list[tuple[str, str]] = []
-        for email, name in items:
-            if email in seen:
-                continue
-            seen.add(email)
-            out.append((email, name))
-        return out
+
+            if email and email not in items:
+                items[email] = name
+
+        return items
 
     @staticmethod
     def _display_name_for_user(user: User) -> str:
@@ -191,21 +188,45 @@ class NewsLetterService:
                     "NEWSLETTER_TEST_RECIPIENTS is empty but NEWSLETTER_USE_TEST_RECIPIENTS=true"
                 )
         else:
-            rows = await db.execute(
+            user_rows = await db.execute(
                 select(User.email, User.full_name, User.username).where(
-                    User.is_active.is_(True), User.is_deleted.is_(False)
+                    User.is_active.is_(True),
+                    User.is_deleted.is_(False),
                 )
             )
-            recipients = [
-                (email, (full_name or username or "there"))
-                for email, full_name, username in rows.all()
-                if email
-            ]
+            user_recipients = {}
+            for user_ in user_rows.all():
+                email = user_.email.strip().lower() if user_.email else None
+                full_name = (
+                    user_.full_name.strip().split()[0] if user_.full_name else None
+                )
+                username = user_.username.strip() if user_.username else None
+                if email:
+                    name = full_name or username or "Dear"
+                    user_recipients[email] = name
+
+            waitlist_role = await db.execute(
+                select(Waitlist.email, Waitlist.full_name).where(
+                    Waitlist.is_active.is_(True),
+                    Waitlist.is_deleted.is_(False),
+                )
+            )
+            waitlist_recipients = {}
+            for newsletter_ in waitlist_role.all():
+                name = (
+                    newsletter_.full_name.strip().split()[0]
+                    if newsletter_.full_name
+                    else "Dear"
+                )
+                waitlist_recipients = {newsletter_.email.strip().lower(): name}
+
+            # User recipients take precedence if an email exists in both sources.
+            recipients = waitlist_recipients | user_recipients
 
         newsletter.status = NewsLetterStatusEnum.SENDING.value
         await newsletter.save(db)
 
-        for email, name in recipients:
+        for email, name in recipients.items():
             email_content = generate_email_content(
                 subject=newsletter.subject,
                 template_name="newsletter.html",
@@ -213,7 +234,7 @@ class NewsLetterService:
                     "subject": newsletter.subject,
                     "user_name": name,
                     "body": newsletter.content,
-                    "year": datetime.now(UTC).year,
+                    "year": str(datetime.now(UTC).year),
                 },
             )
             background_task.add_task(

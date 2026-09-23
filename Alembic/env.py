@@ -18,7 +18,6 @@ config = context.config
 
 DATABASE_URL = settings.SQLALCHEMY_DATABASE_URL
 
-
 if DATABASE_URL is None:
     raise ValueError("SQLALCHEMY_DATABASE_URL is not set in .env file")
 

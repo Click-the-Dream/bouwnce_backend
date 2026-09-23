@@ -517,7 +517,7 @@ class ChatDelivery:
                     as_response=False,
                     persist_notification=False,
                     notify_side_effects=False,
-                    publish_redis_fanout=True,  # FIXED: Enable Redis fan-out for multi-device sync
+                    publish_redis_fanout=True,
                 )
         except (
             NotFoundException,
@@ -594,7 +594,7 @@ class ChatDelivery:
                     as_response=False,
                     persist_notification=False,
                     notify_side_effects=False,
-                    publish_redis_fanout=True,  # FIXED: Enable Redis fan-out for multi-device sync
+                    publish_redis_fanout=True,
                 )
         except (
             NotFoundException,

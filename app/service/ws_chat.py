@@ -182,7 +182,7 @@ class ChatDelivery:
                 await redis.set(
                     delivered_key,
                     "1",
-                    ex=75 * 48,  # PRESENCE_TTL_SECONDS * 48
+                    ex=30 * 24 * 60 * 60,
                     nx=True,
                 )
             )
@@ -257,7 +257,7 @@ class ChatDelivery:
                     if delivered_key_pair is not None:
                         dk, _ = delivered_key_pair
                         with contextlib.suppress(Exception):
-                            await redis.set(dk, "1", ex=75 * 48, nx=True)
+                            await redis.set(dk, "1", ex=30 * 24 * 60 * 60, nx=True)
                 else:
                     # Send failed — invalidate dedup so other paths can retry.
                     if delivered_key_pair is not None:
@@ -517,7 +517,7 @@ class ChatDelivery:
                     as_response=False,
                     persist_notification=False,
                     notify_side_effects=False,
-                    publish_redis_fanout=False,
+                    publish_redis_fanout=True,
                 )
         except (
             NotFoundException,
@@ -594,7 +594,7 @@ class ChatDelivery:
                     as_response=False,
                     persist_notification=False,
                     notify_side_effects=False,
-                    publish_redis_fanout=False,
+                    publish_redis_fanout=True,
                 )
         except (
             NotFoundException,

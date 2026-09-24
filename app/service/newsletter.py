@@ -41,10 +41,10 @@ class NewsLetterService:
             if ":" in chunk:
                 email, name = chunk.split(":", 1)
                 email = email.strip()
-                name = name.strip() or "there"
+                name = name.strip() or "Dear"
             else:
                 email = chunk
-                name = "there"
+                name = "Dear"
 
             if email and email not in items:
                 items[email] = name
@@ -229,7 +229,7 @@ class NewsLetterService:
         for email, name in recipients.items():
             email_content = generate_email_content(
                 subject=newsletter.subject,
-                template_name="newsletter.html",
+                template_name="newsletter_template.html",
                 context={
                     "subject": newsletter.subject,
                     "user_name": name,

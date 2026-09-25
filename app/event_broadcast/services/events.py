@@ -89,12 +89,14 @@ class EventService:
         if ticket_info is not None:
             if not isinstance(ticket_info, list):
                 raise BadRequestException("ticket_info must be a list")
+            seen_names: set[str] = set()
             for i, ticket in enumerate(ticket_info):
                 if isinstance(ticket, dict):
                     ticket_info[i] = {
                         "ticket_name": ticket.get("ticket_name", ""),
                         "price": ticket.get("price", 0),
                         "ticket_description": ticket.get("ticket_description"),
+                        "capacity": ticket.get("capacity"),
                     }
                     if not ticket_info[i]["ticket_name"]:
                         raise BadRequestException(
@@ -104,6 +106,19 @@ class EventService:
                         raise BadRequestException(
                             f"Ticket at index {i} must have a non-negative price"
                         )
+                    capacity = ticket_info[i]["capacity"]
+                    if capacity is not None and (
+                        not isinstance(capacity, int) or capacity < 1
+                    ):
+                        raise BadRequestException(
+                            f"Ticket at index {i} must have a capacity of at least 1"
+                        )
+                    name_key = ticket_info[i]["ticket_name"].strip().lower()
+                    if name_key in seen_names:
+                        raise BadRequestException(
+                            f"Duplicate ticket name: {ticket_info[i]['ticket_name']}"
+                        )
+                    seen_names.add(name_key)
             event_data["ticket_info"] = ticket_info
 
         interests = event_data.get("interests")
@@ -248,6 +263,7 @@ class EventService:
             ticket_info = clean_data["ticket_info"]
             if not isinstance(ticket_info, list):
                 raise BadRequestException("ticket_info must be a list")
+            seen_names: set[str] = set()
             for i, ticket in enumerate(ticket_info):
                 if isinstance(ticket, dict):
                     if not ticket.get("ticket_name"):
@@ -258,6 +274,19 @@ class EventService:
                         raise BadRequestException(
                             f"Ticket at index {i} must have a non-negative price"
                         )
+                    capacity = ticket.get("capacity")
+                    if capacity is not None and (
+                        not isinstance(capacity, int) or capacity < 1
+                    ):
+                        raise BadRequestException(
+                            f"Ticket at index {i} must have a capacity of at least 1"
+                        )
+                    name_key = ticket["ticket_name"].strip().lower()
+                    if name_key in seen_names:
+                        raise BadRequestException(
+                            f"Duplicate ticket name: {ticket['ticket_name']}"
+                        )
+                    seen_names.add(name_key)
 
         if "interests" in clean_data:
             if not isinstance(clean_data["interests"], list):

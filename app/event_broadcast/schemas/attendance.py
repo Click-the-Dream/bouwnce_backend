@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, Field
@@ -82,3 +83,86 @@ class PaginatedUserAttendanceListResponse(BaseResponse):
     total_attendees: Annotated[
         int, Field(description="Total number of user attending event")
     ]
+
+
+class EventSummarySchema(BaseModel):
+    id: Annotated[str, Field(description="Event id")]
+    name: Annotated[str, Field(description="Event name")]
+    date: Annotated[datetime, Field(description="Event date")]
+    location: Annotated[str, Field(description="Event location")]
+    banner_url: Annotated[str, Field(description="Event banner image URL")]
+
+
+class EventTicketSchema(BaseModel):
+    id: Annotated[str, Field(description="Ticket id")]
+    code: Annotated[str, Field(description="Unique 10-digit ticket code")]
+    qr_code_url: Annotated[
+        str | None,
+        Field(description="Cloudinary URL of the QR image, when generated"),
+    ]
+    status: Annotated[str, Field(description="Ticket status: valid, used, or void")]
+    ticket_name: Annotated[str, Field(description="Name of the ticket tier")]
+    unit_amount: Annotated[float, Field(description="Price paid for this ticket unit")]
+    used_at: Annotated[
+        datetime | None, Field(description="When the ticket was verified, if used")
+    ]
+    created_at: Annotated[datetime, Field(description="Purchase date")]
+    event: Annotated[EventSummarySchema, Field(description="Event summary")]
+
+
+class TicketVerificationSchema(BaseModel):
+    code: Annotated[
+        str,
+        Field(
+            description=(
+                "10-digit ticket code or the decoded QR URI " "(verify://ticket/<code>)"
+            )
+        ),
+    ]
+
+
+class AttendeeInfoSchema(BaseModel):
+    id: Annotated[str, Field(description="Attendee user id")]
+    username: Annotated[str, Field(description="Attendee username")]
+    full_name: Annotated[str, Field(description="Attendee full name")]
+    email: Annotated[str, Field(description="Attendee email")]
+    profile_image: dict | None = Field(
+        default=None, description="Attendee profile image, when one has been uploaded"
+    )
+    ticket_name: Annotated[str, Field(description="Name of the ticket tier")]
+    quantity: Annotated[int, Field(default=1, description="Tickets on this scan")]
+
+
+class TicketVerificationDataSchema(BaseModel):
+    code: Annotated[str, Field(description="The verified 10-digit ticket code")]
+    status: Annotated[str, Field(description="Ticket status after the scan")]
+    used_at: Annotated[
+        datetime | None, Field(description="When the ticket was first verified")
+    ]
+    used_by: Annotated[str | None, Field(description="Verifier user id")]
+    ticket_name: Annotated[str, Field(description="Name of the ticket tier")]
+    unit_amount: Annotated[
+        float | None, Field(description="Price paid for this ticket unit")
+    ]
+    attendee: Annotated[
+        AttendeeInfoSchema | None,
+        Field(description="Attendee info, when available for door staff"),
+    ]
+
+
+class TicketVerificationResponse(BaseResponse):
+    data: Annotated[
+        TicketVerificationDataSchema,
+        Field(description="Verified ticket and attendee info"),
+    ]
+
+
+class PaginatedTicketListResponse(BaseResponse):
+    data: Annotated[
+        list[EventTicketSchema],
+        Field(description="Paginated list of the user's event tickets"),
+    ]
+    page: Annotated[int, Field(description="Current page number")]
+    page_size: Annotated[int, Field(description="Number of tickets per page")]
+    total_pages: Annotated[int, Field(description="Total number of pages")]
+    total_tickets: Annotated[int, Field(description="Total number of tickets")]

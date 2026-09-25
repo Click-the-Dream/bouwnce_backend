@@ -138,6 +138,30 @@ class OutingEvent(BaseModel):
         }
 
     @classmethod
+    async def count_issued_by_type(
+        cls, db: AsyncSession, event_id: str
+    ) -> dict[str, int]:
+        """Issued (non-voided) ticket count per ticket_type for one event.
+
+        Backs per-ticket-type capacity checks at claim time and at payment
+        fulfillment. Derived from ``event_tickets`` rather than a cached
+        counter column so voids automatically free capacity and no second
+        source of truth can drift out of sync.
+        """
+        from app.event_broadcast.models.event_ticket import EventTicket
+
+        result = await db.execute(
+            select(EventTicket.ticket_type, func.count())
+            .where(
+                EventTicket.event_id == event_id,
+                EventTicket.is_deleted.is_(False),
+                EventTicket.status != "void",
+            )
+            .group_by(EventTicket.ticket_type)
+        )
+        return {row[0]: row[1] for row in result.all()}
+
+    @classmethod
     async def get_event_by_id(cls, db: AsyncSession, event_id) -> Self | None:
         stmt = select(cls).where(
             cls.id == event_id, cls.is_deleted.is_(False)

@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     PAYSTACK_WEBHOOK_VERIFY_SIGNATURE: bool = True
     ALLOW_TEST_PAYSTACK_WEBHOOK: bool = False
 
+    MAX_EVENT_TICKETS_PER_CLAIM: int = 10
+    # Cloudinary folder for generated event-ticket QR images.
+    EVENT_TICKET_QR_FOLDER: str = "event_tickets"
+
     CELERY_ALWAYS_EAGER: bool = False
 
     # =========================

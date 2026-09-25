@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
 
 from app.api.dependencies import CurrentUser, dbSessionDep, redisSessionDep
 from app.event_broadcast.schemas.attendance import (
     AttendanceResponse,
     ClaimAttendanceSchema,
     PaginatedAttendanceListResponse,
+    PaginatedTicketListResponse,
     PaginatedUserAttendanceListResponse,
+    TicketVerificationResponse,
+    TicketVerificationSchema,
 )
 from app.event_broadcast.schemas.events import PaginatedEventListResponse
 from app.event_broadcast.services.attendance import attendance_service
@@ -49,6 +52,7 @@ async def explore_events(
 )
 async def claim_attendance(
     event_id: str,
+    request: Request,
     db: dbSessionDep,
     current_user: CurrentUser,
     attendance_data: ClaimAttendanceSchema,
@@ -58,6 +62,7 @@ async def claim_attendance(
         current_user=current_user,
         event_id=event_id,
         ticket_info=attendance_data.ticket_info,
+        idempotency_key=request.headers.get("Idempotent-key"),
     )
 
 
@@ -129,6 +134,52 @@ async def get_my_event_payment_statuses(
         page=page,
         page_size=page_size,
         event_id=event_id,
+    )
+
+
+@router.get(
+    "/my-tickets",
+    status_code=status.HTTP_200_OK,
+    response_model=PaginatedTicketListResponse,
+    summary="Get current user's event tickets",
+)
+async def get_my_tickets(
+    db: dbSessionDep,
+    current_user: CurrentUser,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(10, ge=1, le=100, description="Tickets per page"),
+    event_id: str | None = Query(None, description="Filter by event ID"),
+    status: str | None = Query(
+        None, description="Filter by ticket status (valid/used/void)"
+    ),
+):
+    return await attendance_service.get_user_tickets(
+        db=db,
+        current_user=current_user,
+        page=page,
+        page_size=page_size,
+        event_id=event_id,
+        ticket_status=status,
+    )
+
+
+@router.post(
+    "/{event_id}/tickets/verify",
+    status_code=status.HTTP_200_OK,
+    response_model=TicketVerificationResponse,
+    summary="Verify a ticket for an event (event owner only)",
+)
+async def verify_ticket(
+    event_id: str,
+    db: dbSessionDep,
+    current_user: CurrentUser,
+    verify_data: TicketVerificationSchema,
+):
+    return await attendance_service.verify_ticket(
+        db=db,
+        current_user=current_user,
+        event_id=event_id,
+        raw_code=verify_data.code,
     )
 
 

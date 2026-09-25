@@ -18,9 +18,19 @@ class PaystackGateWay:
 
         amount: Naira for now
         """
-        response = self.paystack.transaction.initialize(
-            email=data["email"], amount=int(data["amount"])
-        )
+        initialize_kwargs: dict[str, Any] = {
+            "email": data["email"],
+            "amount": int(data["amount"]),
+        }
+        # Optional passthrough (e.g. event checkout): our unique reference and a
+        # metadata dict. The SDK posts the body as JSON, so a dict metadata is
+        # serialized verbatim by Paystack and echoed back on the webhook.
+        if data.get("reference"):
+            initialize_kwargs["reference"] = data["reference"]
+        if data.get("metadata"):
+            initialize_kwargs["metadata"] = data["metadata"]
+
+        response = self.paystack.transaction.initialize(**initialize_kwargs)
         if response["status"]:
             return response["data"]["authorization_url"], response["data"]["reference"]
         else:

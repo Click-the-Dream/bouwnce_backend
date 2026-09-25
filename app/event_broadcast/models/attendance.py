@@ -30,6 +30,9 @@ class UserEventAttendance(BaseModel):
     payment_status: Mapped[str] = mapped_column(
         String, nullable=False, default="pending"
     )
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
     payment_reference: Mapped[str | None] = mapped_column(
         String, unique=True, nullable=True, index=True
     )
@@ -56,6 +59,18 @@ class UserEventAttendance(BaseModel):
         await db.flush()
         await db.refresh(new_attendance)
         return new_attendance
+
+    @classmethod
+    async def get_by_idempotency_key(
+        cls, db: AsyncSession, idempotency_key: str
+    ) -> Self | None:
+        result = await db.execute(
+            select(cls).where(
+                cls.idempotency_key == idempotency_key,
+                cls.is_deleted.is_(False),
+            )
+        )
+        return result.scalar_one_or_none()
 
     @classmethod
     async def get_by_payment_reference(

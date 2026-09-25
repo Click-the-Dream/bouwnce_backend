@@ -11,6 +11,17 @@ class TicketSchema(BaseModel):
     ticket_description: Annotated[
         str | None, Field(default=None, description="Description of the ticket")
     ]
+    capacity: Annotated[
+        int | None,
+        Field(
+            default=None,
+            ge=1,
+            description=(
+                "Optional sellable quantity for this ticket type. "
+                "Omit for unlimited availability"
+            ),
+        ),
+    ]
 
 
 class CreateEventSchema(BaseModel):

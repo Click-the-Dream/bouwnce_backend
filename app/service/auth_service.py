@@ -168,7 +168,6 @@ class AuthService:
             status_code=status.HTTP_200_OK,
             status="success",
             message="A verification code is sent to the specified email",
-            data={"otp": otp},  # Temporarily for before email service works perfectly
         )
 
     async def logout_user(

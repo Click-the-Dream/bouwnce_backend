@@ -478,38 +478,28 @@ async def dispatch_event(
         if naira_to_kobo(attendance.total_amount) != int(payload.amount_kobo):
             raise ConflictException(message="Event payment amount mismatch")
 
-        attendance.payment_status = "successful"
-        attendance.attendance_status = "confirmed"
-        await attendance.save(db)
+        # Fulfillment (capacity decrement, ticket issuance, email,
+        # notifications) lives in the attendance service so this consumer and
+        # the webhook path share one code path.
+        from app.event_broadcast.services.attendance import attendance_service
 
         if redis is not None:
-            event_payload = {
-                "user_id": str(attendance.user_id),
-                "attendance_id": str(attendance.id),
-                "event_id": str(attendance.event_id),
-                "reference": payload.reference,
-                "progress": 100,
-            }
             await dispatch_event(
                 EventNames.MOBILE_EVENT,
                 MobileEvent(
                     event_name="payment.success",
-                    payload=event_payload,
+                    payload={
+                        "user_id": str(attendance.user_id),
+                        "attendance_id": str(attendance.id),
+                        "event_id": str(attendance.event_id),
+                        "reference": payload.reference,
+                        "progress": 100,
+                    },
                 ),
                 db=db,
                 redis=redis,
             )
-            await dispatch_event(
-                EventNames.PUSH_NOTIFICATION,
-                PushNotificationEvent(
-                    user_id=str(attendance.user_id),
-                    title="Event payment successful",
-                    body="Your event attendance has been confirmed.",
-                    data={"type": "event.payment.success", **event_payload},
-                ),
-                db=db,
-                redis=redis,
-            )
+        await attendance_service.fulfill_event_tickets(db, redis, attendance)
         return
 
     raise ValueError(f"Unsupported event: {event_name}")

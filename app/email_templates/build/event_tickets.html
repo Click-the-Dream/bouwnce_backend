@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your event tickets</title>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background-color: #f4f5f7;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #1f2937;
+    "
+  >
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      style="background-color: #f4f5f7; padding: 24px 0"
+    >
+      <tr>
+        <td align="center">
+          <table
+            role="presentation"
+            width="600"
+            cellpadding="0"
+            cellspacing="0"
+            style="
+              background-color: #ffffff;
+              border-radius: 8px;
+              overflow: hidden;
+            "
+          >
+            <tr>
+              <td
+                style="
+                  padding: 24px 32px;
+                  background-color: #4f46e5;
+                  color: #ffffff;
+                "
+              >
+                <h1 style="margin: 0; font-size: 22px">{{ project_name }}</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 32px">
+                <h2 style="margin: 0 0 8px; font-size: 20px">
+                  Your tickets are ready 🎟️
+                </h2>
+                <p style="margin: 0 0 16px; font-size: 14px; line-height: 20px">
+                  Hi {{ user_name }}, your purchase for
+                  <strong>{{ event_name }}</strong>
+                  is confirmed. Your ticket{{ "s" if total_tickets != 1 }}{{ "
+                  codes are" if total_tickets != 1 else " code is" }} below —
+                  present {{ "them" if total_tickets != 1 else "it" }} at the
+                  venue for verification.
+                </p>
+                {% if event_date %}
+                <p style="margin: 0 0 24px; font-size: 14px; color: #6b7280">
+                  Event date: {{ event_date }}
+                </p>
+                {% endif %} {% for ticket in tickets %}
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  style="
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    margin-bottom: 16px;
+                  "
+                >
+                  <tr>
+                    <td style="padding: 16px">
+                      <p
+                        style="
+                          margin: 0 0 4px;
+                          font-size: 12px;
+                          color: #6b7280;
+                          text-transform: uppercase;
+                        "
+                      >
+                        {{ ticket.ticket_name }}
+                      </p>
+                      <p
+                        style="
+                          margin: 0 0 12px;
+                          font-size: 24px;
+                          letter-spacing: 4px;
+                          font-weight: bold;
+                          color: #111827;
+                        "
+                      >
+                        {{ ticket.code }}
+                      </p>
+                      {% if ticket.qr_code_url %}
+                      <img
+                        src="{{ ticket.qr_code_url }}"
+                        alt="Ticket QR code"
+                        width="140"
+                        height="140"
+                        style="
+                          display: block;
+                          border: 1px solid #e5e7eb;
+                          border-radius: 4px;
+                        "
+                      />
+                      {% endif %}
+                    </td>
+                  </tr>
+                </table>
+                {% endfor %}
+                <p style="margin: 0 0 24px; font-size: 13px; color: #6b7280">
+                  Keep this email safe — your ticket codes are required for
+                  entry.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td
+                style="
+                  padding: 16px 32px;
+                  background-color: #f9fafb;
+                  color: #9ca3af;
+                  font-size: 12px;
+                "
+              >
+                © {{ year }} {{ project_name }}. All rights reserved.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

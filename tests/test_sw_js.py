@@ -116,6 +116,55 @@ function fire(type, event) {
   assert.strictEqual(n3.options.tag, "bouwnce-push", "default tag");
   assert.deepStrictEqual(n3.options.data, { url: "/", type: "" }, "default data");
 
+  // --- push with sender avatar but no explicit icon -> avatar fallback ----------
+  await fire("push", {
+    data: {
+      json: () => ({
+        title: "Jane",
+        body: "hey",
+        data: {
+          type: "chat.message.created",
+          sender_profile_image: { url: "https://res.cloudinary.com/demo/c_fill,w_192,h_192/jane.jpg" },
+        },
+      }),
+    },
+  });
+  const n4 = calls.shown[3];
+  assert.strictEqual(
+    n4.options.icon,
+    "https://res.cloudinary.com/demo/c_fill,w_192,h_192/jane.jpg",
+    "sender avatar used when data.icon is absent",
+  );
+
+  // --- push with explicit icon AND sender avatar -> explicit icon wins ---------
+  await fire("push", {
+    data: {
+      json: () => ({
+        title: "Both",
+        body: "b",
+        data: {
+          icon: "/explicit.png",
+          sender_profile_image: { url: "/avatar.jpg" },
+        },
+      }),
+    },
+  });
+  const n5 = calls.shown[4];
+  assert.strictEqual(n5.options.icon, "/explicit.png", "explicit icon wins over avatar");
+
+  // --- push with empty avatar url -> app logo -----------------------------------
+  await fire("push", {
+    data: {
+      json: () => ({
+        title: "NoPic",
+        body: "b",
+        data: { sender_profile_image: null },
+      }),
+    },
+  });
+  const n6 = calls.shown[5];
+  assert.strictEqual(n6.options.icon, "/static/icon-192.png", "null avatar falls back to logo");
+
   // --- notificationclick with an open window client -----------------------------
   const win = {
     focus: async () => { calls.focused += 1; },

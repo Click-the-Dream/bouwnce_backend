@@ -165,6 +165,9 @@ class ChatService(ChatSerializers, ChatReadOps):
                         "message_id": str(msg.id),
                         "sender": self._serialize_user(sender),
                         "sender_profile_image": self._serialize_profile_pic(sender),
+                        # Browser-notification icon (sender avatar); None -> app
+                        # logo fallback in the service worker.
+                        "icon": self.notification_icon_url(sender),
                     },
                 ),
                 db=db,

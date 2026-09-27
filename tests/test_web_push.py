@@ -8,11 +8,13 @@ These tests run without a live database or Redis: the consumer tests mock
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import ValidationError
 
+from app.core.config import settings
 from app.models.web_push_subscription import WebPushSubscription
 from app.schemas.push_notification import PushSubscriptionIn, PushUnsubscribeIn
 from app.service.web_push_service import (
@@ -20,6 +22,7 @@ from app.service.web_push_service import (
     send_web_push,
     subscription_is_expired,
 )
+from app.utils.chat_utils import ChatSerializers
 from app.worker.event_system import EventNames, PushNotificationEvent, dispatch_event
 from app.worker.tasks.web_push import (
     DLQ_KEY,
@@ -27,6 +30,85 @@ from app.worker.tasks.web_push import (
     _drain_once,
     drain_push_queue,
 )
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Producer helper: notification_icon_url (sender avatar -> push icon URL)
+# ---------------------------------------------------------------------------
+
+
+CLOUD_BASE = "https://res.cloudinary.com/demo/image/upload/"
+
+
+class TestNotificationIconUrl:
+    """`notification_icon_url` builds square push-ready avatar URLs."""
+
+    @pytest.fixture(autouse=True)
+    def _cloudinary_name(self, monkeypatch: pytest.MonkeyPatch):
+        # Test env has no .env loaded, so CLOUDINARY_NAME defaults to empty.
+        monkeypatch.setattr(settings, "CLOUDINARY_NAME", "demo")
+
+    @staticmethod
+    def _user(profile_pic) -> SimpleNamespace:
+        return SimpleNamespace(profile_pic=profile_pic)
+
+    def test_applies_square_crop_transform(self) -> None:
+        user = self._user({"url": f"{CLOUD_BASE}v1712345/avatar.jpg"})
+        url = ChatSerializers.notification_icon_url(user)
+        assert url == (
+            "https://res.cloudinary.com/demo/image/upload/"
+            "c_fill,w_192,h_192/v1712345/avatar.jpg"
+        )
+
+    def test_existing_transform_served_asis(self) -> None:
+        # Without a Cloudinary API call we cannot safely split transform
+        # components from folder names, so non-canonical URLs are untouched.
+        user = self._user(
+            {"url": f"{CLOUD_BASE}w_512,h_512,c_limit/v1712345/avatar.jpg"}
+        )
+        assert ChatSerializers.notification_icon_url(user) == (
+            f"{CLOUD_BASE}w_512,h_512,c_limit/v1712345/avatar.jpg"
+        )
+
+    def test_folder_path_without_version_served_asis(self) -> None:
+        user = self._user({"url": f"{CLOUD_BASE}users_2024/avatar.jpg"})
+        assert ChatSerializers.notification_icon_url(user) == (
+            f"{CLOUD_BASE}users_2024/avatar.jpg"
+        )
+
+    def test_non_cloudinary_url_returns_none(self) -> None:
+        user = self._user({"url": "https://some-cdn.example.com/a.jpg"})
+        assert ChatSerializers.notification_icon_url(user) is None
+
+    def test_empty_pic_returns_none(self) -> None:
+        assert ChatSerializers.notification_icon_url(self._user(None)) is None
+        assert ChatSerializers.notification_icon_url(self._user({})) is None
+        assert ChatSerializers.notification_icon_url(self._user("")) is None
+
+    def test_non_image_delivery_type_served_asis(self) -> None:
+        user = self._user({"url": "https://res.cloudinary.com/demo/raw/upload/doc.pdf"})
+        assert ChatSerializers.notification_icon_url(user) == (
+            "https://res.cloudinary.com/demo/raw/upload/doc.pdf"
+        )
+
+    def test_profile_pic_string_shorthand(self) -> None:
+        user = self._user(f"{CLOUD_BASE}v1712345/avatar.jpg")
+        url = ChatSerializers.notification_icon_url(user)
+        assert url == (
+            "https://res.cloudinary.com/demo/image/upload/"
+            "c_fill,w_192,h_192/v1712345/avatar.jpg"
+        )
+
+    def test_cloudinary_fetch_type_served_asis(self) -> None:
+        user = self._user({"url": "https://res.cloudinary.com/demo/image/fetch/x.jpg"})
+        assert ChatSerializers.notification_icon_url(user) == (
+            "https://res.cloudinary.com/demo/image/fetch/x.jpg"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Schemas

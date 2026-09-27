@@ -5,8 +5,11 @@ Extracted from chat_service.py to keep file sizes manageable.
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.matching_ground.schema.chat import (
     ChatMessageData,
     ChatMessageEvent,
@@ -14,9 +17,60 @@ from app.matching_ground.schema.chat import (
 from app.models.chat import Conversation
 from app.models.user import User
 
+# ``v<positive integer>`` — Cloudinary's version segment that starts the
+# identity part of a delivery URL (before it: transforms; after it: folders/public_id).
+_CLOUDINARY_VERSION_RE = re.compile(r"v\d+")
+
 
 class ChatSerializers:
     """Serialization helpers and batch user loaders."""
+
+    @staticmethod
+    def notification_icon_url(user: User) -> str | None:
+        """CDN URL for a square, notification-sized avatar for browser pushes.
+
+        Returns ``None`` when the user has no profile pic or the pic is not
+        hosted on this project's Cloudinary CDN (e.g. signed/expiring URLs
+        would break after sitting in the push queue) — callers should then
+        leave ``data.icon`` unset so the service worker falls back to the
+        app logo.
+        """
+        url = ChatSerializers._extract_profile_pic_url(user)
+        if not url:
+            return None
+        url = str(url)
+        cloud_base = f"https://res.cloudinary.com/{settings.CLOUDINARY_NAME}/"
+        if not url.startswith(cloud_base):
+            return None
+        upload_segment = "/image/upload/"
+        if upload_segment not in url:
+            # Unknown Cloudinary delivery type (raw/fetch/...): serve as-is
+            # rather than guessing at a transformation that may not apply.
+            return url
+        # Cloudinary transformation: square center-crop at the service
+        # worker's fallback icon size so the browser fetches a small asset.
+        #
+        # Only applied to the canonical untransformed shape
+        # ``.../image/upload/v<version>/<public_id>``. Anything else (an
+        # existing transform chain, folders before the version segment, or no
+        # version at all) is served as-is: without a Cloudinary API call we
+        # cannot distinguish a transform component from a folder name, and a
+        # mis-split URL would return 401/404 — a broken icon is worse than a
+        # full-size one.
+        transform = "c_fill,w_192,h_192"
+        head, _, tail = url.partition(upload_segment)
+        segments = tail.split("/")
+        version_idx = next(
+            (
+                i
+                for i, seg in enumerate(segments)
+                if _CLOUDINARY_VERSION_RE.fullmatch(seg)
+            ),
+            None,
+        )
+        if version_idx != 0:
+            return url
+        return f"{head}{upload_segment}{transform}/{'/'.join(segments)}"
 
     @staticmethod
     def _extract_profile_pic_url(user: User) -> str | None:

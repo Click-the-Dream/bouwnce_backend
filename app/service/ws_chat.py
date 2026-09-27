@@ -374,6 +374,10 @@ class ChatDelivery:
                         "sender_profile_image": chat_service._serialize_profile_pic(
                             sender
                         ),
+                        # Browser-notification icon (sender avatar). None when
+                        # the user has no usable CDN pic -> the service worker
+                        # falls back to the app logo.
+                        "icon": chat_service.notification_icon_url(sender),
                     },
                 }
                 if media_type:

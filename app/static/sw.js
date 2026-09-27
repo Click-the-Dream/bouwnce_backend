@@ -19,7 +19,9 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Bouwnce";
   const options = {
     body: payload.body || "",
-    icon: data.icon || "/static/icon-192.png",
+    // Explicit icon wins, then the chat sender's avatar, then the app logo.
+    // The badge must stay the app logo (monochrome status-bar icon on Android).
+    icon: data.icon || data.sender_profile_image?.url || "/static/icon-192.png",
     badge: "/static/icon-192.png",
     tag: data.tag || "bouwnce-push",
     renotify: true,

@@ -82,6 +82,31 @@ class EventTicket(BaseModel):
         return result.scalar_one_or_none()
 
     @classmethod
+    async def get_for_attendance_ids(
+        cls, db: AsyncSession, attendance_ids: list[str]
+    ) -> dict[str, list[Self]]:
+        """Ticket rows for several attendances, keyed by ``attendance_id``.
+
+        Backs paginated attendance listings that embed per-ticket data (code,
+        QR URL): one query for the whole page instead of one per row — the
+        page size is bounded (≤ 100), so an IN-list is the right tool here.
+        """
+        grouped: dict[str, list[Self]] = {}
+        if not attendance_ids:
+            return grouped
+        result = await db.execute(
+            select(cls)
+            .where(
+                cls.attendance_id.in_(attendance_ids),
+                cls.is_deleted.is_(False),
+            )
+            .order_by(cls.created_at.asc())
+        )
+        for ticket in result.scalars().all():
+            grouped.setdefault(str(ticket.attendance_id), []).append(ticket)
+        return grouped
+
+    @classmethod
     async def get_by_attendance_id(
         cls, db: AsyncSession, attendance_id: str
     ) -> list[Self]:

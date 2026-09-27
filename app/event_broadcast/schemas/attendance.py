@@ -24,6 +24,17 @@ class PurchasedTicketSchema(TicketSchema):
     quantity: int = Field(default=1, gt=0)
 
 
+class IssuedTicketSchema(BaseModel):
+    id: Annotated[str, Field(description="Ticket unit id")]
+    code: Annotated[str, Field(description="Unique ticket code")]
+    qr_code_url: Annotated[
+        str | None,
+        Field(description="Cloudinary URL of the QR image, when generated"),
+    ]
+    status: Annotated[str, Field(description="Ticket status: valid, used, or void")]
+    ticket_name: Annotated[str, Field(description="Name of the ticket tier")]
+
+
 class AttendanceResponseSchema(BaseModel):
     id: Annotated[str, Field(..., description="Attendance id")]
     user_id: Annotated[str, Field(..., description="User id")]
@@ -42,6 +53,17 @@ class AttendanceResponseSchema(BaseModel):
     payment_url: str | None = None
     attendance_status: Annotated[
         str, Field(default="confirmed", description="Event Attendance status")
+    ]
+    tickets: Annotated[
+        list[IssuedTicketSchema],
+        Field(
+            default_factory=list,
+            description="Issued ticket units, each with its code and QR URL",
+        ),
+    ]
+    total_tickets_issued: Annotated[
+        int,
+        Field(default=0, ge=0, description="Number of ticket units issued"),
     ]
 
 

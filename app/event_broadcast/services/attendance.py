@@ -695,8 +695,23 @@ class AttendanceService:
         )
 
         serialized = []
+        ticket_groups = await EventTicket.get_for_attendance_ids(
+            db, [str(a.id) for a in result["attendances"]]
+        )
         for attendance in result["attendances"]:
             attendance_dict = _serialize_attendance(attendance)
+            tickets = ticket_groups.get(str(attendance.id), [])
+            attendance_dict["tickets"] = [
+                {
+                    "id": str(ticket.id),
+                    "code": ticket.code,
+                    "qr_code_url": ticket.qr_code_url,
+                    "status": ticket.status,
+                    "ticket_name": ticket.ticket_name,
+                }
+                for ticket in tickets
+            ]
+            attendance_dict["total_tickets_issued"] = len(tickets)
             serialized.append(attendance_dict)
 
         response = response_builder(

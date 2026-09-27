@@ -16,6 +16,10 @@ from app.event_broadcast.services.ticket_issuance import (
     create_tickets_with_qr,
     normalize_ticket_code,
 )
+from app.event_broadcast.services.ticket_pdf import (
+    build_tickets_pdf,
+    ticket_pdf_filename,
+)
 from app.matching_ground.model.user_interest import UserInterest
 from app.models.user import User
 from app.service.payment.paystack import paystack_service
@@ -594,10 +598,45 @@ class AttendanceService:
                     "year": datetime.now(UTC).year,
                 },
             )
+            # PDF attachment is best-effort exactly like the QR images: a
+            # generation failure degrades to a codes-only email, never to a
+            # lost delivery — the codes in the body remain authoritative.
+            try:
+                pdf_bytes = build_tickets_pdf(
+                    event_name=event.name,
+                    event_date=event.date,
+                    event_location=event.location,
+                    owner_name=user.full_name or user.username or "",
+                    owner_email=user.email,
+                    tickets=[
+                        {
+                            "ticket_name": ticket.ticket_name,
+                            "code": ticket.code,
+                            "user_id": str(ticket.user_id),
+                        }
+                        for ticket in tickets
+                    ],
+                )
+                attachments: list[dict] | None = [
+                    {
+                        "filename": ticket_pdf_filename(event.name),
+                        "content_type": "application/pdf",
+                        "data": pdf_bytes,
+                    }
+                ]
+            except Exception:
+                logger.exception(
+                    "Ticket PDF generation failed; sending codes-only email "
+                    "attendance_id=%s",
+                    attendance.id,
+                )
+                attachments = None
+
             return await send_email(
                 email_to=user.email,
                 subject=email_data.subject,
                 html_content=email_data.html_content,
+                attachments=attachments,
             )
         except Exception:
             logger.exception(

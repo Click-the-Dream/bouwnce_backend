@@ -1,11 +1,13 @@
 import smtplib
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import resend
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
 from jinja2 import Template
+from starlette.datastructures import Headers, UploadFile
 
 from app.core.config import settings
 
@@ -14,6 +16,13 @@ from app.core.config import settings
 class EmailData:
     html_content: str
     subject: str
+
+
+# Internal attachment contract: a dict of ``filename`` (str), ``content_type``
+# (str) and ``data`` (bytes). Each mail backend maps this to its SDK's shape;
+# attachments are optional and default to None so existing callers are
+# untouched.
+Attachment = dict
 
 
 def _get_valid_mail_from() -> str:
@@ -74,7 +83,11 @@ def render_email_templates(*, template_name: str, context: dict[str, Any]) -> st
 
 
 async def send_email_using_resend(
-    *, email_to: str, subject: str = "", html_content: str = ""
+    *,
+    email_to: str,
+    subject: str = "",
+    html_content: str = "",
+    attachments: list[Attachment] | None = None,
 ) -> bool:
 
     params: resend.Emails.SendParams = {
@@ -83,6 +96,18 @@ async def send_email_using_resend(
         "subject": subject,
         "html": html_content,
     }
+    if attachments:
+        params["attachments"] = [
+            {
+                # Resend wants raw bytes as a list of ints.
+                "content": list(attachment["data"]),
+                "filename": attachment["filename"],
+                "content_type": attachment.get(
+                    "content_type", "application/octet-stream"
+                ),
+            }
+            for attachment in attachments
+        ]
 
     try:
         print("📧sending email to: ", email_to)
@@ -97,11 +122,36 @@ async def send_email_using_resend(
 
 
 async def send_email_using_smtp(
-    *, email_to: str, subject: str = "", html_content: str = ""
+    *,
+    email_to: str,
+    subject: str = "",
+    html_content: str = "",
+    attachments: list[Attachment] | None = None,
 ) -> bool:
 
+    attachments_param: list[UploadFile] = []
+    if attachments:
+        for attachment in attachments:
+            attachments_param.append(
+                UploadFile(
+                    filename=attachment["filename"],
+                    file=BytesIO(attachment["data"]),
+                    headers=Headers(
+                        {
+                            "content-type": attachment.get(
+                                "content_type", "application/octet-stream"
+                            )
+                        }
+                    ),
+                )
+            )
+
     message = MessageSchema(
-        subject=subject, recipients=[email_to], body=html_content, subtype="html"
+        subject=subject,
+        recipients=[email_to],
+        body=html_content,
+        subtype="html",
+        attachments=attachments_param,
     )
     try:
         conf = _get_smtp_conf()
@@ -124,16 +174,26 @@ async def send_email_using_smtp(
 
 # Dynamically send email using different service depending on the environment
 async def send_email(
-    *, email_to: str, subject: str = "", html_content: str = ""
+    *,
+    email_to: str,
+    subject: str = "",
+    html_content: str = "",
+    attachments: list[Attachment] | None = None,
 ) -> bool:
 
     if settings.FASTAPI_ENV == "staging":
         return await send_email_using_resend(
-            email_to=email_to, subject=subject, html_content=html_content
+            email_to=email_to,
+            subject=subject,
+            html_content=html_content,
+            attachments=attachments,
         )
     elif settings.FASTAPI_ENV == "dev":
         return await send_email_using_smtp(
-            email_to=email_to, subject=subject, html_content=html_content
+            email_to=email_to,
+            subject=subject,
+            html_content=html_content,
+            attachments=attachments,
         )
     else:
         print("No email service configured for production yet.")

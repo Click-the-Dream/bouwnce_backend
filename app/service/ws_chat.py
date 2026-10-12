@@ -164,6 +164,84 @@ class ChatDelivery:
         with contextlib.suppress(Exception):
             await redis.delete(delivered_key)
 
+    async def _is_notification_already_read(
+        self,
+        *,
+        redis,
+        user_id: str,
+        payload: ChatMessageEvent | dict,
+    ) -> bool:
+
+        try:
+            # Extract data from payload
+            data = payload.get("data") if isinstance(payload, dict) else None
+            if not isinstance(data, dict):
+                return False
+
+            conversation_id = data.get("conversation_id")
+            message_id = data.get("message_id")
+
+            if not conversation_id or not message_id:
+                return False
+
+            return await self._check_notification_read_status(
+                user_id=user_id,
+                conversation_id=str(conversation_id),
+                message_id=str(message_id),
+            )
+        except Exception:
+
+            return False
+
+    async def _check_notification_read_status(
+        self, *, user_id: str, conversation_id: str, message_id: str
+    ) -> bool:
+        """Check if a notification for the given user/conversation/message has been read."""
+        try:
+            async with get_async_session() as db:
+                from sqlalchemy import select
+
+                from app.matching_ground.model.notification import Notification
+
+                stmt = select(Notification.id).where(
+                    Notification.user_id == user_id,
+                    Notification.event_type == "chat_message",
+                    Notification.read_at.isnot(None),
+                )
+
+                result = await db.execute(stmt)
+                notification_ids = [str(row[0]) for row in result.fetchall()]
+
+                for note_id in notification_ids:
+                    note_stmt = select(Notification.payload).where(
+                        Notification.id == note_id
+                    )
+                    note_result = await db.execute(note_stmt)
+                    note_payload_row = note_result.fetchone()
+
+                    if note_payload_row and note_payload_row[0]:
+                        try:
+                            import json
+
+                            payload = (
+                                json.loads(note_payload_row[0])
+                                if isinstance(note_payload_row[0], str)
+                                else note_payload_row[0]
+                            )
+                            if (
+                                isinstance(payload, dict)
+                                and payload.get("conversation_id") == conversation_id
+                                and payload.get("message_id") == message_id
+                            ):
+                                return True  # Found a matching read notification
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+
+                return False
+        except Exception:
+
+            return False
+
     async def _should_deliver_chat_message(
         self,
         *,
@@ -177,12 +255,19 @@ class ChatDelivery:
         delivered_key, _ = key
         if not self._claim_local_chat_delivery(delivered_key):
             return False
+
+        # ENHANCED: Check if this corresponds to a read notification first
+        # This prevents replays of notifications that the user has already read
+        if await self._is_notification_already_read(redis, user_id, payload):
+            return False
+
+        # FALL BACK to time-based deduplication for performance
         with contextlib.suppress(Exception):
             return bool(
                 await redis.set(
                     delivered_key,
                     "1",
-                    ex=30 * 24 * 60 * 60,
+                    ex=30 * 24 * 60 * 60,  # 30 days in seconds
                     nx=True,
                 )
             )

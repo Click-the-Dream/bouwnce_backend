@@ -21,13 +21,11 @@ def upgrade() -> None:
         sa.Column("media_urls", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     )
     # Backfill: if media_url exists, set media_urls=[media_url]
-    op.execute(
-        """
+    op.execute("""
         UPDATE messages
         SET media_urls = jsonb_build_array(media_url)
         WHERE media_urls IS NULL AND media_url IS NOT NULL
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

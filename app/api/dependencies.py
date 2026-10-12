@@ -10,7 +10,7 @@ from app.core.security import verify_token
 
 # from app.db.mongo import mongo_session
 from app.db.postgres_db_conn import get_async_session
-from app.db.redis import get_redis_client
+from app.db.redis import get_blocking_redis_client, get_redis_client
 from app.models.store import Store
 from app.models.user import User
 from app.utils.exception import (
@@ -43,8 +43,15 @@ async def get_redis():
         pass
 
 
+async def get_blocking_redis():
+    """Redis client on a dedicated pool for long-blocking reads."""
+    redis_client = await get_blocking_redis_client()
+    yield redis_client
+
+
 dbSessionDep = Annotated[AsyncSession, Depends(get_postgres_db)]
 redisSessionDep = Annotated[Redis, Depends(get_redis)]
+blockingRedisSessionDep = Annotated[Redis, Depends(get_blocking_redis)]
 
 
 async def get_current_user(

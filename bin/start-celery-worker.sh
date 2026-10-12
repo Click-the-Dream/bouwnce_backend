@@ -8,4 +8,4 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # --pool=solo: required for asyncio tasks. The default prefork pool forks
 # child processes, which breaks asyncio event loops created before the fork.
 # Solo runs tasks in the main process (no forking), so asyncio.run() works.
-exec "$PROJECT_ROOT/.venv/bin/python" -m celery -A app.worker.celery_app.celery_app worker --loglevel=info --concurrency=1 --pool=solo
+exec "${PROJECT_ROOT}/.venv/bin/python" -m celery -A app.worker.celery_app.celery_app worker --loglevel=info --concurrency=1 --pool=solo

@@ -241,8 +241,12 @@ class TestCatchupChatStream:
     """Verify the one-time stream catch-up behaves correctly."""
 
     @pytest.mark.asyncio
-    async def test_catchup_reads_with_block_zero(self):
-        """_catchup_chat_stream must use block=0 (non-blocking)."""
+    async def test_catchup_reads_non_blocking(self):
+        """_catchup_chat_stream must omit BLOCK so it returns immediately.
+
+        Passing ``block=0`` to redis-py emits ``XREAD ... BLOCK 0``, which
+        blocks forever on an empty stream and would stall ``chat.ready``.
+        """
         from app.service.ws_presence import PresenceManager
 
         manager = PresenceManager()
@@ -263,7 +267,7 @@ class TestCatchupChatStream:
 
         redis.xread.assert_called_once()
         call_kwargs = redis.xread.call_args.kwargs
-        assert call_kwargs["block"] == 0
+        assert call_kwargs["block"] is None
         assert call_kwargs["count"] == 100
 
     @pytest.mark.asyncio
@@ -441,3 +445,143 @@ class TestMobileEventPrivacy:
 
         assert [item["id"] for item in result["items"]] == ["2-0"]
         assert result["next_last_id"] == "2-0"
+
+
+class TestBlockingMobileReadIsolation:
+    """The long-poll must never hold more pool connections than it has slots."""
+
+    @pytest.mark.asyncio
+    async def test_uses_block_when_a_slot_is_available(self):
+        from app.service.ws_presence import PresenceManager
+
+        manager = PresenceManager()
+        redis = AsyncMock()
+        redis.xread.return_value = []
+
+        await manager.read_mobile_events(
+            redis=redis,
+            user_id="current-user",
+            last_id="0-0",
+            block_ms=25000,
+            count=50,
+        )
+
+        assert redis.xread.call_args.kwargs["block"] == 25000
+
+    @pytest.mark.asyncio
+    async def test_saturated_slots_fall_back_to_non_blocking(self, monkeypatch):
+        """When every blocking slot is taken, the read must not block."""
+        from app.service import ws_presence
+        from app.service.ws_presence import PresenceManager
+
+        exhausted = asyncio.Semaphore(1)
+        await exhausted.acquire()
+        monkeypatch.setattr(ws_presence, "_BLOCKING_READ_SLOTS", exhausted)
+
+        manager = PresenceManager()
+        redis = AsyncMock()
+        redis.xread.return_value = []
+
+        await manager.read_mobile_events(
+            redis=redis,
+            user_id="current-user",
+            last_id="0-0",
+            block_ms=25000,
+            count=50,
+        )
+
+        assert redis.xread.call_args.kwargs["block"] is None
+
+    @pytest.mark.asyncio
+    async def test_pool_exhaustion_returns_empty_not_an_error(self):
+        """A saturated Redis pool must degrade to an empty batch, not raise."""
+        from redis.exceptions import ConnectionError as RedisConnectionError
+
+        from app.service.ws_presence import PresenceManager
+
+        manager = PresenceManager()
+        redis = AsyncMock()
+        redis.xread.side_effect = RedisConnectionError("Too many connections")
+
+        result = await manager.read_mobile_events(
+            redis=redis,
+            user_id="current-user",
+            last_id="5-0",
+            block_ms=25000,
+            count=50,
+        )
+
+        assert result == {"status": "success", "items": [], "next_last_id": "5-0"}
+
+
+class TestRedisConnectionBudget:
+    """The two Redis pools must never exceed the provider's connection cap."""
+
+    def test_limit_zero_leaves_pools_untouched(self):
+        from app.core.config import Settings
+
+        s = Settings(
+            REDIS_CONNECTION_LIMIT=0,
+            REDIS_MAX_CONNECTIONS=50,
+            REDIS_BLOCKING_MAX_CONNECTIONS=20,
+        )
+        assert (s.REDIS_MAX_CONNECTIONS, s.REDIS_BLOCKING_MAX_CONNECTIONS) == (50, 20)
+
+    def test_limit_shrinks_pools_to_fit(self):
+        from app.core.config import Settings
+
+        s = Settings(
+            REDIS_CONNECTION_LIMIT=10,
+            REDIS_MAX_CONNECTIONS=50,
+            REDIS_BLOCKING_MAX_CONNECTIONS=20,
+        )
+        assert s.REDIS_MAX_CONNECTIONS + s.REDIS_BLOCKING_MAX_CONNECTIONS == 10
+        assert s.REDIS_MAX_CONNECTIONS >= 1
+        assert s.REDIS_BLOCKING_MAX_CONNECTIONS >= 1
+        # Blocking pool is trimmed first; the shared pool gets the remainder.
+        assert s.REDIS_BLOCKING_MAX_CONNECTIONS == 2
+        assert s.REDIS_MAX_CONNECTIONS == 8
+
+    def test_minimum_limit_of_two(self):
+        from app.core.config import Settings
+
+        s = Settings(
+            REDIS_CONNECTION_LIMIT=2,
+            REDIS_MAX_CONNECTIONS=50,
+            REDIS_BLOCKING_MAX_CONNECTIONS=20,
+        )
+        assert (s.REDIS_MAX_CONNECTIONS, s.REDIS_BLOCKING_MAX_CONNECTIONS) == (1, 1)
+
+    def test_limit_of_one_warns(self):
+        from app.core.config import Settings
+
+        with pytest.warns(UserWarning):
+            s = Settings(
+                REDIS_CONNECTION_LIMIT=1,
+                REDIS_MAX_CONNECTIONS=50,
+                REDIS_BLOCKING_MAX_CONNECTIONS=20,
+            )
+        assert (s.REDIS_MAX_CONNECTIONS, s.REDIS_BLOCKING_MAX_CONNECTIONS) == (1, 1)
+
+    def test_config_that_already_fits_is_unchanged(self):
+        from app.core.config import Settings
+
+        s = Settings(
+            REDIS_CONNECTION_LIMIT=10,
+            REDIS_MAX_CONNECTIONS=6,
+            REDIS_BLOCKING_MAX_CONNECTIONS=4,
+        )
+        assert (s.REDIS_MAX_CONNECTIONS, s.REDIS_BLOCKING_MAX_CONNECTIONS) == (6, 4)
+
+    @pytest.mark.asyncio
+    async def test_limit_of_one_shares_the_main_client(self, monkeypatch):
+        from app.db import redis as redis_db
+
+        sentinel = object()
+
+        async def fake_main_client():
+            return sentinel
+
+        monkeypatch.setattr(redis_db.settings, "REDIS_CONNECTION_LIMIT", 1)
+        monkeypatch.setattr(redis_db, "get_redis_client", fake_main_client)
+        assert await redis_db.get_blocking_redis_client() is sentinel

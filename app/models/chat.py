@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Self
 from uuid import UUID as UUID_Type
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     UniqueConstraint,
     func,
@@ -134,4 +137,154 @@ class Message(BaseModel):
             "recipient_id",
             postgresql_where=text("read_at IS NULL"),
         ),
+    )
+
+
+class Group(BaseModel):
+    """Group chat model for many-to-many conversations."""
+
+    __tablename__ = "groups"
+
+    id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(String(500))
+    created_by: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    creator: Mapped[User] = relationship(foreign_keys=[created_by], lazy="joined")
+    members: Mapped[list[GroupMember]] = relationship(
+        "GroupMember",
+        back_populates="group",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    messages: Mapped[list[GroupMessage]] = relationship(
+        "GroupMessage",
+        back_populates="group",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        Index("ix_groups_name", "name"),
+        Index("ix_groups_created_by", "created_by"),
+    )
+
+    @property
+    def member_count(self) -> int:
+        """Get current number of members in the group."""
+        return len(self.members) if self.members else 0
+
+    @property
+    def member_list(self) -> list[UUID_Type]:
+        """Get list of member user IDs."""
+        return [member.user_id for member in self.members] if self.members else []
+
+
+class GroupMember(BaseModel):
+    """Many-to-many relationship between Users and Groups."""
+
+    __tablename__ = "group_members"
+
+    id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    group_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(
+        String(20), default="member", nullable=False
+    )  # owner, admin, member, moderator
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    invited_by: Mapped[UUID_Type | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    group: Mapped[Group] = relationship(
+        foreign_keys=[group_id], back_populates="members"
+    )
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    inviter: Mapped[User] = relationship(foreign_keys=[invited_by])
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", name="uix_group_member"),
+        Index("ix_group_members_group_id", "group_id"),
+        Index("ix_group_members_user_id", "user_id"),
+        Index("ix_group_members_role", "role"),
+    )
+
+
+class GroupMessage(BaseModel):
+    """Message model for group chats."""
+
+    __tablename__ = "group_messages"
+
+    id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    group_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
+    )
+    sender_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Timestamp and metadata
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=func.now(), nullable=False
+    )
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Message features
+    media_type: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )  # image|video|file|audio
+    media_urls: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    media_names: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    reply_to_message_id: Mapped[UUID_Type | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("group_messages.id"), nullable=True
+    )
+
+    # Mentions/tags - stores mentioned user IDs
+    mentioned_user_ids: Mapped[list[UUID_Type] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+
+    # Read receipts tracking (simplified - could be expanded to per-user tracking)
+    read_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Relationships
+    group: Mapped[Group] = relationship(
+        foreign_keys=[group_id], back_populates="messages"
+    )
+    sender: Mapped[User] = relationship(foreign_keys=[sender_id])
+    reply_to: Mapped[GroupMessage] = relationship(foreign_keys=[reply_to_message_id])
+
+    __table_args__ = (
+        Index("ix_group_messages_group_id", "group_id"),
+        Index("ix_group_messages_sender_id", "sender_id"),
+        Index("ix_group_messages_created_at", "created_at"),
+        Index("ix_group_messages_reply_to", "reply_to_message_id"),
     )

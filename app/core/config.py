@@ -1,3 +1,5 @@
+import warnings
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -45,6 +47,13 @@ class Settings(BaseSettings):
     # Budget: API ~3, Celery worker ~3, Celery beat ~1, WebSocket ~3.
     # Each WebSocket user holds 1-2 connections (pubsub + xread).
     REDIS_MAX_CONNECTIONS: int = 50
+    # Separate cap for long-blocking reads (XREAD BLOCK on /events/mobile).
+    # Kept small so long-poll bursts can never drain the shared pool.
+    REDIS_BLOCKING_MAX_CONNECTIONS: int = 20
+    # Max concurrent connections the provider allows for this process's pools
+    # (0 = unknown / not enforced). When set, the two pools above are shrunk so
+    # their sum never exceeds it. Upstash Free is ~10.
+    REDIS_CONNECTION_LIMIT: int = 0
     REDIS_HEALTH_CHECK_INTERVAL: int = 30
 
     SECRET_KEY: str = ""
@@ -180,6 +189,46 @@ class Settings(BaseSettings):
         else:
             self.SQLALCHEMY_DATABASE_URL = self.SQLALCHEMY_DATABASE_DEV_URL
 
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_redis_connection_budget(self) -> "Settings":
+        """Clamp the two Redis pools so they fit the provider's connection cap.
+
+        ``REDIS_MAX_CONNECTIONS`` + ``REDIS_BLOCKING_MAX_CONNECTIONS`` is the
+        worst-case number of sockets this process opens.  On a provider with a
+        hard per-account limit (e.g. Upstash Free ~10) an over-sized default
+        would exhaust the provider rather than the pool.  When
+        ``REDIS_CONNECTION_LIMIT`` is set we shrink the blocking pool first —
+        its reads already degrade to non-blocking — and give the shared pool the
+        remainder, while keeping at least one connection for each.
+        """
+        limit = int(getattr(self, "REDIS_CONNECTION_LIMIT", 0) or 0)
+        if limit <= 0:
+            return self
+
+        main = max(int(self.REDIS_MAX_CONNECTIONS), 1)
+        blocking = max(int(self.REDIS_BLOCKING_MAX_CONNECTIONS), 1)
+        if main + blocking <= limit:
+            return self
+
+        if limit == 1:
+            # No headroom to isolate: blocking reads share the single pooled
+            # connection (get_blocking_redis_client() returns the main client).
+            self.REDIS_MAX_CONNECTIONS = 1
+            self.REDIS_BLOCKING_MAX_CONNECTIONS = 1
+            warnings.warn(
+                "REDIS_CONNECTION_LIMIT=1 cannot host separate shared and "
+                "blocking pools; they will share a single connection.",
+                stacklevel=2,
+            )
+            return self
+
+        # Keep blocking to ~a quarter of the budget (never above its configured
+        # value); the shared pool gets the rest.
+        blocking = min(blocking, max(limit // 4, 1))
+        self.REDIS_BLOCKING_MAX_CONNECTIONS = blocking
+        self.REDIS_MAX_CONNECTIONS = max(limit - blocking, 1)
         return self
 
 

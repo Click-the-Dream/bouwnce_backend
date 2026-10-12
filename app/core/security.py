@@ -5,14 +5,17 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import bcrypt
 import jwt
 from fastapi import HTTPException
-from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.utils.helper import parse_duration
 
-crytp = CryptContext(schemes=["bcrypt"], deprecated=["auto"])
+# bcrypt only hashes the first 72 bytes of input. Truncating here (instead of
+# raising) preserves the behaviour of the previous passlib/os-crypt backend.
+_BCRYPT_MAX_BYTES = 72
+_BCRYPT_ROUNDS = 12
 
 
 def create_token(
@@ -73,12 +76,25 @@ def verify_hashed_token(new_token: str, hashed_token: str) -> bool:
     return new_hashed_token == hashed_token
 
 
+def _bcrypt_bytes(data: str) -> bytes:
+    return str(data).encode("utf-8")[:_BCRYPT_MAX_BYTES]
+
+
 def hash_password(data: str) -> str:
-    return crytp.hash(data)
+    """Hash a password with bcrypt (``$2b$`` format)."""
+    return bcrypt.hashpw(
+        _bcrypt_bytes(data), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)
+    ).decode("utf-8")
 
 
 def verify_password(plain_data: str, hashed_data: str) -> bool:
-    return crytp.verify(plain_data, hashed_data)
+    """Verify a password against a bcrypt hash; False for bad input/hash."""
+    try:
+        return bcrypt.checkpw(
+            _bcrypt_bytes(plain_data), str(hashed_data).encode("utf-8")
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def set_cookies(response, key: str, value: str, max_age: int) -> None:

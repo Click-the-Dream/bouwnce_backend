@@ -30,6 +30,8 @@ The project also uses **`uv`** as the Python package manager and several Python 
 - [Database Migrations](#database-migrations)
 - [Pre-commit Hooks](#pre-commit-hooks)
 - [Notes](#notes)
+- [Realtime / WebSocket Contract](#realtime--websocket-contract)
+- [Web Push Notifications](#web-push-notifications)
 
 ---
 
@@ -40,10 +42,10 @@ The project uses **`uv`** as the package manager.
 ### Installing dependencies
 
 ```bash
-uv install
+uv sync
 ```
 
-This will install all dependencies listed in uv.lock.
+This installs the project and its locked dependencies from `uv.lock`.
 
 ---
 
@@ -55,13 +57,13 @@ This will install all dependencies listed in uv.lock.
 uv add <package_name>
 ```
 
-- To add package to development
+- To add a package to development:
 
 ```bash
 uv add <package_name> --dev
 ```
 
-- To sync you environment with the application
+- To sync your environment with the application:
 
 ```bash
 uv sync
@@ -71,7 +73,6 @@ uv sync
 
 ```bash
 uv remove <package_name>
-
 ```
 
 - To update dependencies:
@@ -90,13 +91,12 @@ The project uses the following Python tools:
 
 ```bash
 uv run black .
-
 ```
 
 - **Ruff**: For linting and code quality checks.
 
 ```bash
-ruff check .
+uv run ruff check .
 ```
 
 - **Alembic**: For PostgreSQL database migrations.
@@ -112,16 +112,16 @@ uv run pre-commit install
 uv run pre-commit run --all-files
 ```
 
-Whenever you want to commit, ruff and black will run, if they pass, you commit will become successful otherwise it will fail, ruff will automatically fix the issues, all you might want to do is
+Before each commit, Ruff and Black will run. If they pass, the commit can proceed. If they fail, fix the issues and retry.
 
 ```bash
 git add .
-git commit -m "You commit message"
+git commit -m "Your commit message"
 ```
 
 ### Databases
 
-This Projct uses three databases:
+This project uses three databases:
 
 1. **PostgreSQL**
    - Used for relational, schema-based storage.
@@ -142,42 +142,42 @@ This Projct uses three databases:
 
 The project follows a **layered architecture**:
 
-```graphql
+```text
 ├── Alembic
-│   ├── env.py                   # Alembic environment configuration
-│   ├── README                   # Alembic instructions
-│   ├── script.py.mako           # Alembic template script
-│   └── versions                 # Auto-generated migration scripts
-├── alembic.ini                   # Alembic configuration
+│   ├── env.py                   # Alembic environment configuration
+│   ├── README                   # Alembic instructions
+│   ├── script.py.mako           # Alembic template script
+│   └── versions                 # Auto-generated migration scripts
+├── alembic.ini                  # Alembic configuration
 ├── app
-│   ├── api                       # API layer
-│   │   ├── dependencies.py       # FastAPI dependency injection
-│   │   └── v1                    # API versioning
-│   │       └── __init__.py
-│   ├── core                      # Core configuration and utilities
-│   │   ├── config.py             # Environment configuration
-│   │   ├── logging.py            # Logging configuration
-│   │   └── security.py           # Security utilities (JWT, hashing)
-│   ├── db                        # Database connections
-│   │   ├── mongo.py              # MongoDB client and session
-│   │   ├── postgres.py           # PostgreSQL engine and session
-│   │   └── redis.py              # Redis client
-│   ├── email_templates           # Email templates for notifications
-│   ├── main.py                   # FastAPI application entry point
-│   ├── models                    # SQLAlchemy ORM models
-│   ├── schemas                   # Pydantic schemas for request/response
-│   ├── service                   # Business logic layer
-│   ├── test                      # Unit and integration tests
-│   └── utils                     # Utility functions
-├── main.py                       # Project entry point
-├── migrations                    # Project-specific migrations
-│   ├── __init__.py
-│   ├── mongodb                   # MongoDB migration scripts
-│   └── postgres
-│       └── Alembic -> ../../Alembic  # Symlink to Alembic migrations
-├── pyproject.toml                # Python project configuration
-├── README.md                     # Project setup documentation
-└── uv.lock                       # Dependency lockfile managed by uv
+│   ├── api                      # API layer
+│   │   ├── dependencies.py     # FastAPI dependency injection
+│   │   └── v1                   # API versioning
+│   │       └── __init__.py
+│   ├── core                     # Core configuration and utilities
+│   │   ├── config.py            # Environment configuration
+│   │   ├── logging.py           # Logging configuration
+│   │   └── security.py          # Security utilities (JWT, hashing)
+│   ├── db                       # Database connections
+│   │   ├── mongo.py             # MongoDB client and session
+│   │   ├── postgres.py          # PostgreSQL engine and session
+│   │   └── redis.py             # Redis client
+│   ├── email_templates          # Email templates for notifications
+│   ├── main.py                  # FastAPI application entry point
+│   ├── models                   # SQLAlchemy ORM models
+│   ├── schemas                  # Pydantic schemas for request/response
+│   ├── service                  # Business logic layer
+│   ├── test                     # Unit and integration tests
+│   └── utils                   # Utility functions
+├── main.py                      # Project entry point
+├── migrations                   # Project-specific migrations
+│   ├── __init__.py
+│   ├── mongodb                  # MongoDB migration scripts
+│   └── postgres
+│       └── Alembic -> ../../Alembic  # Symlink to Alembic migrations
+├── pyproject.toml               # Python project configuration
+├── README.md                    # Project setup documentation
+└── uv.lock                      # Dependency lockfile managed by uv
 ```
 
 ---
@@ -260,6 +260,24 @@ Ensures **code formatting, linting, and other checks** before commits.
 - Logging and security utilities are centralized in `app/core`.
 
 - Unit tests are placed under `app/test`.
+
+---
+
+### Realtime / WebSocket Contract
+
+The realtime chat contract for the frontend team lives in
+**[`docs/websocket-contract.md`](docs/websocket-contract.md)**. It documents both
+sockets end-to-end:
+
+| Chat                  | Endpoint                                                                  |
+| --------------------- | ------------------------------------------------------------------------- |
+| Direct messages (1:1) | `wss://<host>/api/v1/events/ws?token=<access_token>`                      |
+| Group chat            | `wss://<host>/api/v1/groups/ws/chat?token=<access_token>&group_id=<uuid>` |
+
+It covers authentication, connection lifecycle and close behaviour, every inbound
+and outbound frame with field tables and JSON examples, delivery/dedup and
+reconnect catch-up semantics, error frames, and the related push/notification
+side effects. Treat it as the source of truth when integrating the client.
 
 ---
 

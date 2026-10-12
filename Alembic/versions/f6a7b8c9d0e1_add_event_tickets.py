@@ -46,9 +46,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     # Global uniqueness of the 10-digit code is the verify-by-code anchor.
-    op.create_index(
-        "ix_event_tickets_code", "event_tickets", ["code"], unique=True
-    )
+    op.create_index("ix_event_tickets_code", "event_tickets", ["code"], unique=True)
     op.create_index(
         "ix_event_tickets_attendance_id", "event_tickets", ["attendance_id"]
     )

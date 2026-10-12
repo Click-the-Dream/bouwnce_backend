@@ -29,6 +29,13 @@ class PaystackGateWay:
             initialize_kwargs["reference"] = data["reference"]
         if data.get("metadata"):
             initialize_kwargs["metadata"] = data["metadata"]
+        # ``callback_url`` is Paystack's post-payment redirect target. It can
+        # be overridden per transaction so e.g. an event checkout can land on
+        # a different page than a store order; when neither is supplied the
+        # payer uses Paystack's default in-page completion flow.
+        callback_url = data.get("callback_url") or settings.PAYSTACK_REDIRECT_URL
+        if callback_url:
+            initialize_kwargs["callback_url"] = callback_url
 
         response = self.paystack.transaction.initialize(**initialize_kwargs)
         if response["status"]:

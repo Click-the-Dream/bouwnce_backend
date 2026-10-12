@@ -13,10 +13,13 @@ dependencies = [
   "jinja2>=3.1.6",
   "bcrypt>=4.1.0",
   "psycopg2-binary>=2.9.10",
-  "pydantic-settings>=2.10.1",
-  "pyjwt>=2.10.1",
+  "pydantic-settings>=2.15.0",
+  # >=2.14.0 fixes the PyJWT BOM/HMAC/redirect JWK advisories (2026)
+  "pyjwt>=2.14.0",
   "cryptography>=50.0.0",
-  "pymongo==4.11.3",
+  # >=4.18.1 fixes the GridFS exact-match, .sock KMS injection, BSON heap
+  # overflow, and connection-string host-injection advisories (2026)
+  "pymongo>=4.18.1",
   "python-decouple>=3.8",
   "redis>=6.4.0",
   "sqlalchemy>=2.0.43",
@@ -24,7 +27,8 @@ dependencies = [
   "beanie[odm]==1.30.0",
   "motor>=3.7.1",
   "cloudinary>=1.44.1",
-  "python-multipart>=0.0.20",
+  # >=0.0.31 fixes the multipart form/querystring smuggling + DoS advisories
+  "python-multipart>=0.0.31",
   "paystackapi>=2.1.3",
   "resend>=2.17.0",
   "apscheduler[asyncio]>=3.11.1",

@@ -12,12 +12,15 @@ import json
 from collections.abc import Awaitable, Callable
 
 from fastapi import WebSocket
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app.core.config import (
     CHAT_EVENTS_LAST_ID_KEY_PREFIX,
     CHAT_EVENTS_STREAM_KEY_PREFIX,
     MOBILE_EVENTS_STREAM_KEY,
     PAYMENT_PROGRESS_KEY_PREFIX,
+    settings,
 )
 from app.db.postgres_db_conn import get_async_session
 from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
@@ -29,6 +32,13 @@ from app.utils.exception import NotFoundException
 
 PRESENCE_KEY_PREFIX = "presence:user:"
 PRESENCE_TTL_SECONDS = 75
+
+# Bound the number of simultaneous blocking long-polls so they can never queue
+# up waiting for a pooled connection.  Requests that miss a slot take the
+# non-blocking path and return immediately; the client simply polls again.
+_BLOCKING_READ_SLOTS = asyncio.Semaphore(
+    max(int(getattr(settings, "REDIS_BLOCKING_MAX_CONNECTIONS", 20)), 1)
+)
 
 # ---------------------------------------------------------------------------
 # Shared PubSub dispatcher — one psubscribe connection per app instance
@@ -42,8 +52,12 @@ class PubSubDispatcher:
 
     Instead of each WebSocket creating its own ``pubsub.subscribe()`` (which
     consumes one Redis connection per user forever), a single background task
-    does ``psubscribe("chat:user:*")`` and dispatches messages to the
-    registered send callback for the target user.
+    does ``psubscribe(*patterns)`` (defaults to ``chat:user:*``) and dispatches
+    messages to the registered send callback for the target user.
+
+    A separate instance can be created with a different pattern namespace
+    (e.g. ``PubSubDispatcher(patterns=("group:user:*",))``) so chat and group
+    frames are routed by independent dispatchers.
 
     Usage::
 
@@ -62,10 +76,16 @@ class PubSubDispatcher:
         await dispatcher.unregister(user_id)
     """
 
-    def __init__(self) -> None:
+    #: Channel patterns subscribed by the default (DM chat) dispatcher.
+    DEFAULT_PATTERNS: tuple[str, ...] = ("chat:user:*",)
+
+    def __init__(self, patterns: tuple[str, ...] | None = None) -> None:
         self._redis = None
         self._pubsub = None
         self._task: asyncio.Task[None] | None = None
+        # A separate dispatcher instance is used per channel namespace (chat,
+        # group, ...) so frames never leak onto sockets from another namespace.
+        self._patterns = tuple(patterns) if patterns else self.DEFAULT_PATTERNS
         # user_id -> send callback
         self._callbacks: dict[str, dict[str, _SEND_CALLBACK]] = {}
         self._register_lock = asyncio.Lock()
@@ -79,7 +99,7 @@ class PubSubDispatcher:
         self._pubsub = redis.pubsub()
         if inspect.isawaitable(self._pubsub):
             self._pubsub = await self._pubsub
-        await self._pubsub.psubscribe("chat:user:*")
+        await self._pubsub.psubscribe(*self._patterns)
         self._task = asyncio.create_task(self._dispatch_loop())
 
     async def stop(self) -> None:
@@ -480,8 +500,13 @@ class PresenceManager:
         if ready_event is not None:
             ready_event.set()
 
-        # Non-blocking read — returns immediately even if no messages
-        streams = await redis.xread(streams={stream_key: last_id}, count=100, block=0)
+        # Non-blocking read — ``block=None`` omits BLOCK entirely and returns
+        # immediately.  ``block=0`` would emit ``BLOCK 0`` and block forever
+        # (until a new message arrives), delaying ``chat.ready`` forever on a
+        # fresh connection.
+        streams = await redis.xread(
+            streams={stream_key: last_id}, count=100, block=None
+        )
 
         async def default_should_deliver(payload: dict) -> bool:
             handler = getattr(self, "_should_deliver_chat_message", None)
@@ -558,10 +583,8 @@ class PresenceManager:
         block_ms: int,
         count: int,
     ) -> dict:
-        streams = await redis.xread(
-            streams={MOBILE_EVENTS_STREAM_KEY: last_id},
-            count=count,
-            block=block_ms if block_ms > 0 else None,
+        streams = await self._read_mobile_stream(
+            redis=redis, last_id=last_id, block_ms=block_ms, count=count
         )
 
         items: list[dict] = []
@@ -593,6 +616,37 @@ class PresenceManager:
                 next_last_id = msg_id
 
         return {"status": "success", "items": items, "next_last_id": next_last_id}
+
+    @staticmethod
+    async def _read_mobile_stream(
+        *, redis, last_id: str, block_ms: int, count: int
+    ) -> list:
+        """Read the mobile-events stream, holding a pool connection only briefly.
+
+        The endpoint is a long-poll: ``XREAD ... BLOCK`` keeps one connection busy
+        for the whole window.  To stop a burst of those from exhausting Redis, the
+        blocking read only runs when a slot is free; otherwise (and on any pool /
+        network error) it falls back to an immediate non-blocking read.  A client
+        that gets an empty result just polls again.
+        """
+
+        async def _xread(block):
+            return await redis.xread(
+                streams={MOBILE_EVENTS_STREAM_KEY: last_id},
+                count=count,
+                block=block,
+            )
+
+        try:
+            if block_ms > 0 and not _BLOCKING_READ_SLOTS.locked():
+                async with _BLOCKING_READ_SLOTS:
+                    return await _xread(block_ms)
+            return await _xread(None)
+        except (RedisConnectionError, RedisTimeoutError):
+            # The Redis pool is saturated (or Redis blipped).  Returning an
+            # empty batch keeps the HTTP request cheap and lets the client
+            # retry, instead of cascading failures into the shared pool.
+            return []
 
     async def get_payment_progress(
         self, *, redis, reference: str, user_id: str

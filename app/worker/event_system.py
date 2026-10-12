@@ -192,6 +192,7 @@ async def dispatch_event(
             if (
                 not evt.startswith("chat.")
                 and not evt.startswith("match")
+                and not evt.startswith("group.")
                 and not evt.startswith("event.payment.")
             ):
                 title, body = _default_title_body(evt)
@@ -254,6 +255,7 @@ async def dispatch_event(
         if (
             not data_type.startswith("chat.")
             and not data_type.startswith("match.")
+            and not data_type.startswith("group.")
             and not data_type.startswith("event.payment.")
         ):
             await Notification.create(

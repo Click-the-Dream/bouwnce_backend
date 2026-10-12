@@ -20,8 +20,7 @@ def upgrade() -> None:
     op.add_column("messages", sa.Column("media_type", sa.String(), nullable=True))
 
     # Backfill from old columns if they exist
-    op.execute(
-        """
+    op.execute("""
         UPDATE messages
         SET media_url = COALESCE(image_url, video_url, file_url),
             media_type = CASE
@@ -31,8 +30,7 @@ def upgrade() -> None:
                 ELSE media_type
             END
         WHERE media_url IS NULL
-        """
-    )
+        """)
 
     # Drop expanded columns
     op.drop_column("messages", "image_url")
@@ -51,14 +49,12 @@ def downgrade() -> None:
     op.add_column("messages", sa.Column("video_url", sa.String(), nullable=True))
     op.add_column("messages", sa.Column("image_url", sa.String(), nullable=True))
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE messages
         SET image_url = CASE WHEN media_type = 'image' THEN media_url ELSE NULL END,
             video_url = CASE WHEN media_type = 'video' THEN media_url ELSE NULL END,
             file_url  = CASE WHEN media_type = 'file'  THEN media_url ELSE NULL END
-        """
-    )
+        """)
 
     op.drop_column("messages", "media_type")
     op.drop_column("messages", "media_url")

@@ -6,16 +6,16 @@ Create Date: 2026-05-10 16:08:43.751100
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "fcd5de1a1e10"
-down_revision: Union[str, Sequence[str], None] = "8ab6e03fb2c6"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "8ab6e03fb2c6"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _table_exists(table_name: str) -> bool:
@@ -35,8 +35,7 @@ def _constraint_exists(table_name: str, constraint_name: str) -> bool:
     schema = bind.dialect.default_schema_name
     return (
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 SELECT 1
                 FROM pg_constraint c
                 JOIN pg_class t ON t.oid = c.conrelid
@@ -45,8 +44,7 @@ def _constraint_exists(table_name: str, constraint_name: str) -> bool:
                   AND t.relname = :table_name
                   AND c.conname = :constraint_name
                 LIMIT 1
-                """
-            ),
+                """),
             {
                 "schema": schema,
                 "table_name": table_name,

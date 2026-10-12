@@ -16,21 +16,18 @@ depends_on = None
 
 def upgrade() -> None:
     # If media_urls is null but media_url exists, backfill list first.
-    op.execute(
-        """
+    op.execute("""
         UPDATE messages
         SET media_urls = jsonb_build_array(media_url)
         WHERE media_urls IS NULL AND media_url IS NOT NULL
-        """
-    )
+        """)
     op.drop_column("messages", "media_url")
 
 
 def downgrade() -> None:
     op.add_column("messages", sa.Column("media_url", sa.String(), nullable=True))
     # Best-effort: copy first item into media_url
-    op.execute(
-        """
+    op.execute("""
         UPDATE messages
         SET media_url = CASE
             WHEN media_urls IS NULL THEN NULL
@@ -38,5 +35,4 @@ def downgrade() -> None:
             WHEN jsonb_array_length(media_urls) = 0 THEN NULL
             ELSE (media_urls->>0)
         END
-        """
-    )
+        """)

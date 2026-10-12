@@ -39,13 +39,11 @@ def upgrade() -> None:
     email, username, full_name = _bouwnce_identity()
 
     bind = op.get_bind()
-    stmt = sa.text(
-        """
+    stmt = sa.text("""
         UPDATE users
         SET profile_pic = :profile_pic
         WHERE email = :email OR username = :username OR full_name = :full_name
-        """
-    ).bindparams(
+        """).bindparams(
         sa.bindparam("profile_pic", type_=sa.JSON),
         sa.bindparam("email", type_=sa.String),
         sa.bindparam("username", type_=sa.String),
@@ -66,12 +64,10 @@ def downgrade() -> None:
     email, username, full_name = _bouwnce_identity()
     bind = op.get_bind()
     bind.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE users
             SET profile_pic = NULL
             WHERE email = :email OR username = :username OR full_name = :full_name
-            """
-        ),
+            """),
         {"email": email, "username": username, "full_name": full_name},
     )

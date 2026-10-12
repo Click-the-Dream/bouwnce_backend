@@ -26,8 +26,7 @@ BOUWNCE_FULL_NAME = settings.BOUWNCE_SYSTEM_FULL_NAME
 def upgrade() -> None:
     op.execute(sa.text('CREATE EXTENSION IF NOT EXISTS "pgcrypto"'))
     op.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO users (
                 id,
                 email,
@@ -54,8 +53,7 @@ def upgrade() -> None:
                 NULL,
                 FALSE
             WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = :email)
-            """
-        ).bindparams(
+            """).bindparams(
             email=BOUWNCE_EMAIL,
             full_name=BOUWNCE_FULL_NAME,
             username=BOUWNCE_USERNAME,

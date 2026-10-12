@@ -16,23 +16,19 @@ depends_on = None
 
 def upgrade() -> None:
     # Backfill: if body is empty, use caption as body
-    op.execute(
-        """
+    op.execute("""
         UPDATE messages
         SET body = caption
         WHERE (body IS NULL OR body = '') AND caption IS NOT NULL
-        """
-    )
+        """)
     op.drop_column("messages", "caption")
 
 
 def downgrade() -> None:
     op.add_column("messages", sa.Column("caption", sa.String(), nullable=True))
     # Best-effort: copy body into caption for media messages
-    op.execute(
-        """
+    op.execute("""
         UPDATE messages
         SET caption = body
         WHERE caption IS NULL AND body IS NOT NULL AND body <> ''
-        """
-    )
+        """)

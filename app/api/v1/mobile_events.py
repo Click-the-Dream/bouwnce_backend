@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, WebSocket, status
 
-from app.api.dependencies import CurrentActiveUser, dbSessionDep, redisSessionDep
+from app.api.dependencies import (
+    CurrentActiveUser,
+    blockingRedisSessionDep,
+    dbSessionDep,
+    redisSessionDep,
+)
 from app.service.mobile_events_service import mobile_events_service
 
 router = APIRouter(prefix="/events", tags=["Events"])
@@ -15,7 +20,7 @@ router = APIRouter(prefix="/events", tags=["Events"])
     response_model=dict,
 )
 async def read_mobile_events(
-    redis: redisSessionDep,
+    redis: blockingRedisSessionDep,
     current_user: CurrentActiveUser,
     last_id: str = Query(
         "0-0",

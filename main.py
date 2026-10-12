@@ -18,6 +18,7 @@ from app.core.rate_limiter import rate_limiter
 from app.db.mongo import mongo_conn
 from app.db.postgres_db_conn import engine
 from app.db.redis import close_redis_client, get_redis_client
+from app.service.group_ws_service import group_pubsub_dispatcher
 from app.service.ws_presence import pubsub_dispatcher
 from app.worker.jobs import (
     call_health_endpoint_cron_task,
@@ -39,6 +40,7 @@ async def fastapi_lifespan(app: FastAPI):
 
     redis = await get_redis_client()
     await pubsub_dispatcher.start(redis)
+    await group_pubsub_dispatcher.start(redis)
     print("✅ PubSub Dispatcher started")
 
     client = await mongo_conn()
@@ -60,6 +62,7 @@ async def fastapi_lifespan(app: FastAPI):
     print("✅ succeffully shutdown mongo client")
 
     await pubsub_dispatcher.stop()
+    await group_pubsub_dispatcher.stop()
     print("✅ PubSub Dispatcher stopped")
 
     await close_redis_client()

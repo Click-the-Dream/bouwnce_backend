@@ -9,17 +9,17 @@ Revises: 061687c6dc2a
 Create Date: 2026-07-21 15:52:05.096109
 
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '3c7915e9c904'
-down_revision: Union[str, Sequence[str], None] = '061687c6dc2a'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "3c7915e9c904"
+down_revision: str | Sequence[str] | None = "061687c6dc2a"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _table_exists(table_name: str) -> bool:
@@ -31,7 +31,9 @@ def _column_exists(table_name: str, column_name: str) -> bool:
     if not _table_exists(table_name):
         return False
     inspector = sa.inspect(op.get_bind())
-    return any(column["name"] == column_name for column in inspector.get_columns(table_name))
+    return any(
+        column["name"] == column_name for column in inspector.get_columns(table_name)
+    )
 
 
 def _constraint_exists(table_name: str, constraint_name: str) -> bool:
@@ -41,8 +43,7 @@ def _constraint_exists(table_name: str, constraint_name: str) -> bool:
     schema = bind.dialect.default_schema_name
     return (
         bind.execute(
-            sa.text(
-                """
+            sa.text("""
                 SELECT 1
                 FROM pg_constraint c
                 JOIN pg_class t ON t.oid = c.conrelid
@@ -51,8 +52,7 @@ def _constraint_exists(table_name: str, constraint_name: str) -> bool:
                   AND t.relname = :table_name
                   AND c.conname = :constraint_name
                 LIMIT 1
-                """
-            ),
+                """),
             {
                 "schema": schema,
                 "table_name": table_name,
@@ -101,9 +101,7 @@ def upgrade() -> None:
     if _column_exists("suborders", "track_id") and not _unique_on_column_exists(
         "suborders", "track_id"
     ):
-        op.create_unique_constraint(
-            "suborders_track_id_key", "suborders", ["track_id"]
-        )
+        op.create_unique_constraint("suborders_track_id_key", "suborders", ["track_id"])
 
 
 def downgrade() -> None:

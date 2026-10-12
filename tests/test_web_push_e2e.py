@@ -28,7 +28,11 @@ from app.db.redis import close_redis_client, get_redis_client
 from app.models.user import User
 from app.models.web_push_subscription import WebPushSubscription
 from app.service.web_push_service import DeliveryOutcome
-from app.worker.tasks.web_push import DLQ_KEY, PUSH_QUEUE_KEY, _drain_once
+from app.worker.tasks.web_push import (
+    DLQ_KEY,
+    PUSH_QUEUE_KEY,
+    _drain_once_with_client,
+)
 from main import app
 
 API = "/api/v1/push"
@@ -442,7 +446,7 @@ class TestPushQueueE2E(E2EBase):
                 "app.worker.tasks.web_push.send_web_push",
                 return_value=DeliveryOutcome(delivered=True),
             ):
-                processed = await _drain_once()
+                processed = await _drain_once_with_client()
             assert processed == 1
             assert await redis.llen(PUSH_QUEUE_KEY) == 0
             assert await redis.llen(DLQ_KEY) == 0
@@ -527,7 +531,7 @@ class TestPushQueueE2E(E2EBase):
                 "app.worker.tasks.web_push.send_web_push",
                 side_effect=send_side_effect,
             ):
-                processed = await _drain_once()
+                processed = await _drain_once_with_client()
 
             assert processed == 7  # 5 valid payloads + malformed + bad uuid
             # the retry payload was requeued once at the tail

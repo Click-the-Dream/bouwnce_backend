@@ -151,6 +151,7 @@ class AttendanceService:
         event_id: str,
         ticket_info: list[AttendanceSchema],
         idempotency_key: str | None = None,
+        redis=None,
     ) -> dict[str, Any]:
         """Claim attendance (event checkout).
 
@@ -160,6 +161,10 @@ class AttendanceService:
         is still ``pending`` (e.g. abandoned checkout) may retry; the retry
         replays the stored Paystack reference/URL so the charge and the row
         stay 1:1. Only a ``successful`` claim is final.
+
+        Free checkouts (a zero-amount selection) skip Paystack entirely:
+        no payment URL is generated and the submission goes straight through
+        full fulfillment — tickets are issued and delivered immediately.
         """
         if not is_valid_uuid(event_id):
             raise BadRequestException("Invalid event ID format")
@@ -339,8 +344,13 @@ class AttendanceService:
             attendance.idempotency_key = idempotency_key
 
         if total_amount == 0:
-            attendance.payment_status = "successful"
-            attendance.attendance_status = "confirmed"
+            # Free checkout: no Paystack transaction, no payment URL, and the
+            # caller gets the confirmed attendance straight back. Run the
+            # same fulfillment pipeline as a paid webhook (binding capacity
+            # check, ticket issuance + QR codes, delivery email) so free
+            # attendees receive their tickets like paid ones. A fulfillment
+            # failure raises and rolls the whole claim back with the session.
+            await self.fulfill_event_tickets(db, redis, attendance)
 
         await db.commit()
         await db.refresh(attendance)

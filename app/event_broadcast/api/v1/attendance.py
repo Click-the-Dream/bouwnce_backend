@@ -54,6 +54,7 @@ async def claim_attendance(
     event_id: str,
     request: Request,
     db: dbSessionDep,
+    redis: redisSessionDep,
     current_user: CurrentUser,
     attendance_data: ClaimAttendanceSchema,
 ):
@@ -63,6 +64,7 @@ async def claim_attendance(
         event_id=event_id,
         ticket_info=attendance_data.ticket_info,
         idempotency_key=request.headers.get("Idempotent-key"),
+        redis=redis,
     )
 
 

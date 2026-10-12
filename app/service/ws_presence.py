@@ -19,6 +19,7 @@ from app.core.config import (
     MOBILE_EVENTS_STREAM_KEY,
     PAYMENT_PROGRESS_KEY_PREFIX,
 )
+from app.core.logger import logger
 from app.db.postgres_db_conn import get_async_session
 from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
 from app.matching_ground.service.chat_service import chat_service
@@ -62,6 +63,9 @@ class PubSubDispatcher:
         await dispatcher.unregister(user_id)
     """
 
+    _MAX_RESTART_ATTEMPTS = 5
+    _RESTART_BACKOFF_SECONDS = 5.0
+
     def __init__(self) -> None:
         self._redis = None
         self._pubsub = None
@@ -69,18 +73,30 @@ class PubSubDispatcher:
         # user_id -> send callback
         self._callbacks: dict[str, dict[str, _SEND_CALLBACK]] = {}
         self._register_lock = asyncio.Lock()
+        # Serialises the check => create => assign sequence in start().
+        # Without this, concurrent callers race past the "already running"
+        # check before self._task is assigned and each creates its own
+        # pubsub connection (the leak we saw in production).
+        self._start_lock = asyncio.Lock()
+        self._supervisor_lock = asyncio.Lock()
 
     async def start(self, redis) -> None:
-        """Start the dispatch loop.  Safe to call multiple times — idempotent."""
-        if self._task is not None and not self._task.done():
-            return  # already running
+        """Start the dispatch loop.
 
-        self._redis = redis
-        self._pubsub = redis.pubsub()
-        if inspect.isawaitable(self._pubsub):
-            self._pubsub = await self._pubsub
-        await self._pubsub.psubscribe("chat:user:*")
-        self._task = asyncio.create_task(self._dispatch_loop())
+        Genuinely idempotent: the task-liveness check runs inside a lock so
+        concurrent callers cannot race past it between the check and the
+        assignment of self._task.
+        """
+        async with self._start_lock:
+            if self._task is not None and not self._task.done():
+                return  # already running
+
+            self._redis = redis
+            self._pubsub = redis.pubsub()
+            if inspect.isawaitable(self._pubsub):
+                self._pubsub = await self._pubsub
+            await self._pubsub.psubscribe("chat:user:*")
+            self._task = asyncio.create_task(self._dispatch_loop())
 
     async def stop(self) -> None:
         """Stop the dispatch loop and close the pubsub connection."""
@@ -131,7 +147,13 @@ class PubSubDispatcher:
                 self._callbacks.pop(user_id, None)
 
     async def _dispatch_loop(self) -> None:
-        """Read from psubscribe and dispatch to registered callbacks."""
+        """Read from psubscribe and dispatch to registered callbacks.
+
+        Errors are logged loudly, never silently swallowed. If the listen
+        connection dies we close the pubsub to avoid leaking the Redis
+        connection, then supervised-restart with bounded backoff so a brief
+        Redis blip self-heals instead of permanently silencing chat fanout.
+        """
         try:
             messages = self._pubsub.listen()
             while inspect.isawaitable(messages):
@@ -143,9 +165,54 @@ class PubSubDispatcher:
                 for msg in messages:
                     await self._dispatch_message(msg)
         except asyncio.CancelledError:
-            return
+            raise
         except Exception:
-            return
+            logger.exception("Chat PubSub dispatch loop crashed")
+            asyncio.get_running_loop().create_task(self._supervised_restart())
+        finally:
+            # Close the pubsub we were listening on, whichever way we exit,
+            # so a crashed loop never leaks its Redis connection.
+            if self._pubsub is not None and self._task_is_current():
+                with contextlib.suppress(Exception):
+                    await self._pubsub.aclose()
+                if self._task_is_current():
+                    self._pubsub = None
+
+    def _task_is_current(self) -> bool:
+        """True if self._task refers to *this* loop invocation."""
+        current = asyncio.current_task()
+        return self._task is None or self._task is current
+
+    async def _supervised_restart(self) -> None:
+        """Reconnect the dispatcher with bounded backoff after a crash."""
+        async with self._supervisor_lock:
+            for attempt in range(1, self._MAX_RESTART_ATTEMPTS + 1):
+                await asyncio.sleep(self._RESTART_BACKOFF_SECONDS)
+                try:
+                    redis = self._redis
+                    if redis is None:
+                        logger.error(
+                            "PubSub restart aborted: no redis handle available"
+                        )
+                        return
+                    logger.warning(
+                        "Restarting chat PubSub dispatcher (attempt %d/%d)",
+                        attempt,
+                        self._MAX_RESTART_ATTEMPTS,
+                    )
+                    await self.start(redis)
+                    return
+                except Exception:
+                    logger.exception(
+                        "PubSub restart attempt %d/%d failed",
+                        attempt,
+                        self._MAX_RESTART_ATTEMPTS,
+                    )
+            logger.critical(
+                "Chat PubSub dispatcher failed to restart after %d attempts; "
+                "chat fanout is DOWN until the app is restarted.",
+                self._MAX_RESTART_ATTEMPTS,
+            )
 
     async def _dispatch_message(self, msg) -> None:
         try:
@@ -170,7 +237,11 @@ class PubSubDispatcher:
             try:
                 payload = json.loads(data)
             except Exception:
-                print(f"Error parsing pubsub payload for user {target_user_id}: {data}")
+                logger.warning(
+                    "Skipping unparseable pubsub payload for user %s: %r",
+                    target_user_id,
+                    data[:200] if isinstance(data, (str, bytes)) else data,
+                )
                 return
 
             async with self._register_lock:
@@ -180,9 +251,18 @@ class PubSubDispatcher:
                 return
 
             for callback in callbacks:
-                asyncio.ensure_future(callback(payload, None))
+                task = asyncio.ensure_future(callback(payload, None))
+                task.add_done_callback(self._log_failed_callback)
         except Exception:
+            logger.exception("Error dispatching pubsub message")
+
+    @staticmethod
+    def _log_failed_callback(task: asyncio.Task) -> None:
+        if task.cancelled():
             return
+        exc = task.exception()
+        if exc is not None:
+            logger.exception("Chat send callback failed", exc_info=exc)
 
 
 # Module-level singleton — one dispatcher per app instance

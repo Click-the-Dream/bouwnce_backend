@@ -122,9 +122,7 @@ class Settings(BaseSettings):
     PAYSTACK_WEBHOOK_VERIFY_SIGNATURE: bool = True
     ALLOW_TEST_PAYSTACK_WEBHOOK: bool = False
     PAYSTACK_REDIRECT_URL: str = ""
-    PAYSTACK_EVENT_REDIRECT_URL_TEMPLATE: str = (
-        "https://bouwnce.com/app/events/{event_id}/payment/success"
-    )
+    PAYSTACK_EVENT_REDIRECT_URL_TEMPLATE: str = ""
 
     MAX_EVENT_TICKETS_PER_CLAIM: int = 10
     # Cloudinary folder for generated event-ticket QR images.

@@ -121,9 +121,10 @@ class Settings(BaseSettings):
     PAYSTACK_API_KEY: str = ""
     PAYSTACK_WEBHOOK_VERIFY_SIGNATURE: bool = True
     ALLOW_TEST_PAYSTACK_WEBHOOK: bool = False
-    # Post-payment landing page Paystack redirects the payer to (optional:
-    # falls back to the in-page review flow when unset).
     PAYSTACK_REDIRECT_URL: str = ""
+    PAYSTACK_EVENT_REDIRECT_URL_TEMPLATE: str = (
+        "https://bouwnce.com/app/events/{event_id}/payment/success"
+    )
 
     MAX_EVENT_TICKETS_PER_CLAIM: int = 10
     # Cloudinary folder for generated event-ticket QR images.

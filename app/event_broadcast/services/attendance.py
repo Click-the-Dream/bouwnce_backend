@@ -280,6 +280,15 @@ class AttendanceService:
                 payment_url = attendance.payment_url
                 payment_reference = None  # already persisted on the row
             else:
+                # Post-payment landing page: build a per-event URL from the
+                # env-configurable template so Paystack drops the payer on
+                # this event's success screen (it appends its own ?reference/
+                # ?trxref query params). Empty template -> gateway falls back
+                # to the static PAYSTACK_REDIRECT_URL or Paystack's default.
+                template = settings.PAYSTACK_EVENT_REDIRECT_URL_TEMPLATE
+                callback_url = (
+                    template.format(event_id=str(event.id)) if template else None
+                )
                 try:
                     (
                         payment_url,
@@ -288,6 +297,7 @@ class AttendanceService:
                         {
                             "email": current_user.email,
                             "amount": naira_to_kobo(total_amount),
+                            "callback_url": callback_url,
                             "metadata": {
                                 "type": "event",
                                 "event_id": str(event.id),

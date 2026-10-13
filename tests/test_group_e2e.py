@@ -454,6 +454,7 @@ class TestGroupWebSocketE2E(GroupE2EBase):
 
                 await self._wait_until(
                     lambda: bool(member_ws.messages("group_message"))
+                    and bool(owner_ws.messages("group_message_sent"))
                 )
                 delivered = member_ws.messages("group_message")
                 assert delivered[0]["data"]["body"] == "hi ws"

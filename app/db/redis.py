@@ -36,6 +36,8 @@ async def get_redis_client() -> redis.Redis:
             health_check_interval=int(
                 getattr(settings, "REDIS_HEALTH_CHECK_INTERVAL", 30)
             ),
+            socket_timeout=None,
+            socket_connect_timeout=None,
         )
         _redis_client = redis.Redis(connection_pool=pool)
         # Verify connection once at startup/first use
@@ -85,6 +87,10 @@ async def get_blocking_redis_client() -> redis.Redis:
             health_check_interval=int(
                 getattr(settings, "REDIS_HEALTH_CHECK_INTERVAL", 30)
             ),
+            # Same reason as the shared pool above; long-block reads also
+            # need no requirement that a response lands within 5s.
+            socket_timeout=None,
+            socket_connect_timeout=None,
         )
         _blocking_redis_client = redis.Redis(connection_pool=pool)
         return _blocking_redis_client

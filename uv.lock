@@ -7,6 +7,15 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
+[manifest]
+constraints = [
+    { name = "aiosmtplib", specifier = ">=5.1.2" },
+    { name = "anyio", specifier = ">=4.14.2" },
+    { name = "mako", specifier = ">=1.4.2" },
+    { name = "starlette", specifier = ">=1.3.1" },
+    { name = "urllib3", specifier = ">=2.8.0" },
+]
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"
@@ -420,10 +429,8 @@ dependencies = [
     { name = "alembic" },
     { name = "apscheduler" },
     { name = "asyncpg" },
-    { name = "bandit" },
     { name = "bcrypt" },
     { name = "beanie" },
-    { name = "black" },
     { name = "celery" },
     { name = "chardet" },
     { name = "cloudinary" },
@@ -436,12 +443,10 @@ dependencies = [
     { name = "openai" },
     { name = "paystack" },
     { name = "paystackapi" },
-    { name = "pre-commit" },
     { name = "psycopg2-binary" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pymongo" },
-    { name = "pytest" },
     { name = "python-decouple" },
     { name = "python-multipart" },
     { name = "pywebpush" },
@@ -449,18 +454,19 @@ dependencies = [
     { name = "redis" },
     { name = "reportlab" },
     { name = "resend" },
-    { name = "ruff" },
     { name = "segno" },
     { name = "sqlalchemy" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "bandit" },
     { name = "black" },
     { name = "mongoengine" },
     { name = "mongoengine-migrate" },
     { name = "pip-audit" },
     { name = "pre-commit" },
+    { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
@@ -470,28 +476,24 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.16.5" },
     { name = "apscheduler", extras = ["asyncio"], specifier = ">=3.11.1" },
     { name = "asyncpg", specifier = ">=0.30.0" },
-    { name = "bandit", specifier = ">=1.9.4" },
     { name = "bcrypt", specifier = ">=4.1.0" },
     { name = "beanie", extras = ["odm"], specifier = "==1.30.0" },
-    { name = "black", specifier = ">=26.3.1" },
     { name = "celery", specifier = ">=5.5.3" },
     { name = "chardet", specifier = "<6" },
     { name = "cloudinary", specifier = ">=1.44.1" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "emails", specifier = ">=0.6" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.116.1" },
-    { name = "fastapi-mail", specifier = ">=1.5.0" },
+    { name = "fastapi-mail", specifier = ">=1.6.8" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "motor", specifier = ">=3.7.1" },
     { name = "openai", specifier = ">=3.1.0" },
     { name = "paystack", specifier = ">=1.5.0" },
     { name = "paystackapi", specifier = ">=2.1.3" },
-    { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "pyjwt", specifier = ">=2.14.0" },
-    { name = "pymongo", specifier = ">=4.18.1" },
-    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "pymongo", specifier = ">=4.18.1,<5" },
     { name = "python-decouple", specifier = ">=3.8" },
     { name = "python-multipart", specifier = ">=0.0.31" },
     { name = "pywebpush", specifier = ">=2.4.0" },
@@ -499,20 +501,21 @@ requires-dist = [
     { name = "redis", specifier = ">=6.4.0" },
     { name = "reportlab" },
     { name = "resend", specifier = ">=2.17.0" },
-    { name = "ruff", specifier = ">=0.15.6" },
     { name = "segno" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "black", specifier = ">=25.1.0" },
+    { name = "bandit", specifier = ">=1.9.4" },
+    { name = "black", specifier = ">=26.3.1" },
     { name = "mongoengine", specifier = ">=0.29.1" },
     { name = "mongoengine-migrate", specifier = ">=0.0.3" },
     { name = "pip-audit", specifier = ">=2.10.0" },
-    { name = "pre-commit", specifier = ">=4.3.0" },
+    { name = "pre-commit", specifier = ">=4.5.1" },
+    { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
-    { name = "ruff", specifier = ">=0.13.0" },
+    { name = "ruff", specifier = ">=0.15.6" },
 ]
 
 [[package]]

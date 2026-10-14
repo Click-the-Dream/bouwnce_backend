@@ -288,9 +288,17 @@ class BuddySearchService:
         outgoing_request_exists = (
             select(MatchRequest.id)
             .where(
-                MatchRequest.requester_id == requester_id,
-                MatchRequest.target_user_id == self.user_model.id,
-                MatchRequest.status.in_(("pending", "accepted")),
+                (
+                    (
+                        (MatchRequest.requester_id == requester_id)
+                        & (MatchRequest.target_user_id == self.user_model.id)
+                    )
+                    | (
+                        (MatchRequest.requester_id == self.user_model.id)
+                        & (MatchRequest.target_user_id == requester_id)
+                    )
+                ),
+                MatchRequest.status.in_(("pending", "accepted", "rejected")),
             )
             .exists()
         )

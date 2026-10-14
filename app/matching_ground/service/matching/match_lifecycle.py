@@ -586,6 +586,57 @@ class MatchLifecycleService:
             ),
         }
 
+    async def get_connection_status(
+        self,
+        *,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        other_user_id: uuid.UUID,
+    ) -> dict:
+        if user_id == other_user_id:
+            raise BadRequestException("You can't check a connection with yourself")
+
+        other_user = await User.get_by_id(str(other_user_id), session)
+        if other_user is None:
+            raise NotFoundException("User not found")
+
+        match = await Match.find_active_between_any_direction(
+            session, user_id, other_user_id
+        )
+        request = await MatchRequest.find_latest_between_any_direction(
+            session, user_id, other_user_id
+        )
+        is_connected = match is not None
+
+        return {
+            "other_user_id": str(other_user_id),
+            "status": (
+                "connected"
+                if is_connected
+                else request.status if request is not None else "none"
+            ),
+            "is_connected": is_connected,
+            "request_id": str(request.id) if request is not None else None,
+            "request_direction": (
+                "outgoing"
+                if request is not None and request.requester_id == user_id
+                else "incoming" if request is not None else None
+            ),
+            "requested_at": (
+                request.created_at.isoformat() if request is not None else None
+            ),
+            "responded_at": (
+                request.responded_at.isoformat()
+                if request is not None and request.responded_at
+                else None
+            ),
+            "connected_at": (
+                match.accepted_at.isoformat()
+                if match is not None and match.accepted_at
+                else None
+            ),
+        }
+
     async def list_matches_for_user(
         self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int
     ) -> dict:
@@ -618,23 +669,35 @@ class MatchLifecycleService:
         note: str | None,
         background_tasks: BackgroundTasks,
     ) -> dict:
-        existing = await MatchRequest.find_open_for_pair(
-            session, requester.id, target_user_id
-        )
-        if existing is not None:
-            return {"status": "already_pending", "request_id": str(existing.id)}
+        if requester.id == target_user_id:
+            raise BadRequestException("You can't match with yourself")
 
         if await UserBlock.is_blocked_between(session, requester.id, target_user_id):
             raise ForbiddenException("You can match with someone who has blocked you")
 
-        if requester.id == target_user_id:
-            raise BadRequestException("You can't match with yourself")
+        existing = await MatchRequest.find_latest_between_any_direction(
+            session, requester.id, target_user_id
+        )
+        if existing is not None:
+            if existing.status == "pending":
+                return {"status": "already_pending", "request_id": str(existing.id)}
+            if existing.status == "rejected":
+                return {"status": "rejected", "request_id": str(existing.id)}
+
+        active_match = await Match.find_active_between_any_direction(
+            session, requester.id, target_user_id
+        )
+        if active_match is not None:
+            return {"status": "already_connected", "match_id": str(active_match.id)}
+
+        target_user = await User.get_by_id(str(target_user_id), session)
+        if target_user is None:
+            raise NotFoundException("User not found")
 
         request = await MatchRequest.create_pending(
             session, requester.id, target_user_id, note
         )
 
-        target_user = await User.get_by_id(str(target_user_id), session)
         requester_display = requester.username or requester.full_name or "someone"
 
         await Notification.create(

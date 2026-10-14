@@ -111,6 +111,22 @@ async def get_match_request_status(
     )
 
 
+@router.get(
+    "/connection-status/{other_user_id}",
+    summary="Get the connection status between the current user and another user",
+)
+async def get_connection_status(
+    other_user_id: uuid.UUID,
+    db: dbSessionDep,
+    current_user: CurrentUser,
+) -> dict:
+    return await MatchLifecycleService().get_connection_status(
+        session=db,
+        user_id=current_user.id,
+        other_user_id=other_user_id,
+    )
+
+
 @router.get("/")
 async def list_matches(
     db: dbSessionDep,

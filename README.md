@@ -16,7 +16,7 @@ The project also uses **`uv`** as the Python package manager and several Python 
 ![PostgreSQL](https://img.shields.io/badge/postgresql-15-blue?logo=postgresql&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/mongodb-6.0-green?logo=mongodb&logoColor=white)
 ![Redis](https://img.shields.io/badge/redis-7.0-orange?logo=redis&logoColor=white)
-![Code Quality](https://img.shields.io/badge/code%20quality-A%2B-brightgreen)
+![Code Quality](<https://img.shields.io/badge/code%20quality-A%2B-brightgreen>)
 
 ---
 
@@ -191,6 +191,7 @@ uv install
 ```
 
 2. Run database migrations
+
    - **PostgreSQL**:
 
    ```bash
@@ -208,18 +209,16 @@ uv install
 ### Database Migrations
 
 - PostgreSQL:
+
   - Handled using Alembic.
-
   - Migration scripts are under Alembic/versions.
-
   - Use alembic revision --autogenerate -m "description" to create migrations.
-
 - MongoDB:
+
   - Managed via Python scripts in migrations/mongodb.
-
   - Supports versioning by numbering scripts (e.g., 001_add_field.py).
-
 - Redis:
+
   - Redis does not require migrations; used for caching only.
 
 ---
@@ -245,20 +244,14 @@ Ensures **code formatting, linting, and other checks** before commits.
 ### Notes
 
 - Environment variables are configured in `app/core/config.py`.
-
 - Use the **layered architecture** to maintain separation of concerns:
+
   - **API layer**: Handles HTTP requests and dependency injection.
-
   - **Service layer**: Contains business logic.
-
   - **DB layer**: Database connections and session management.
-
   - **Core layer**: Config, security, logging, utilities.
-
   - **Schemas**: Pydantic models for data validation.
-
 - Logging and security utilities are centralized in `app/core`.
-
 - Unit tests are placed under `app/test`.
 
 ---
@@ -269,8 +262,8 @@ The realtime chat contract for the frontend team lives in
 **[`docs/websocket-contract.md`](docs/websocket-contract.md)**. It documents both
 sockets end-to-end:
 
-| Chat                  | Endpoint                                                                  |
-| --------------------- | ------------------------------------------------------------------------- |
+| Chat                  | Endpoint                                                                    |
+| --------------------- | --------------------------------------------------------------------------- |
 | Direct messages (1:1) | `wss://<host>/api/v1/events/ws?token=<access_token>`                      |
 | Group chat            | `wss://<host>/api/v1/groups/ws/chat?token=<access_token>&group_id=<uuid>` |
 
@@ -303,7 +296,6 @@ receive notifications even when the app is closed.
    print('VAPID_PRIVATE_KEY=' + priv)
    EOF
    ```
-
 2. Set in `.env`:
 
    ```
@@ -314,12 +306,12 @@ receive notifications even when the app is closed.
 
 **API endpoints**
 
-| Method | Path                            | Auth | Purpose                            |
-| ------ | ------------------------------- | ---- | ---------------------------------- |
-| GET    | `/api/v1/push/vapid-public-key` | No   | VAPID public key for `subscribe()` |
-| POST   | `/api/v1/push/subscribe`        | Yes  | Store a browser subscription       |
-| DELETE | `/api/v1/push/subscribe`        | Yes  | Remove a browser subscription      |
-| POST   | `/api/v1/push/test`             | Yes  | Send a test push (dev only)        |
+| Method | Path                              | Auth | Purpose                             |
+| ------ | --------------------------------- | ---- | ----------------------------------- |
+| GET    | `/api/v1/push/vapid-public-key` | No   | VAPID public key for`subscribe()` |
+| POST   | `/api/v1/push/subscribe`        | Yes  | Store a browser subscription        |
+| DELETE | `/api/v1/push/subscribe`        | Yes  | Remove a browser subscription       |
+| POST   | `/api/v1/push/test`             | Yes  | Send a test push (dev only)         |
 
 Subscribe request body (the browser `PushSubscription`):
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from difflib import SequenceMatcher
 
 from fastapi import BackgroundTasks
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,11 @@ from app.utils.exception import (
     BadRequestException,
     ForbiddenException,
     NotFoundException,
+)
+from app.worker.event_system import (
+    EventNames,
+    PushNotificationEvent,
+    dispatch_event,
 )
 
 
@@ -586,6 +592,57 @@ class MatchLifecycleService:
             ),
         }
 
+    async def get_connection_status(
+        self,
+        *,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        other_user_id: uuid.UUID,
+    ) -> dict:
+        if user_id == other_user_id:
+            raise BadRequestException("You can't check a connection with yourself")
+
+        other_user = await User.get_by_id(str(other_user_id), session)
+        if other_user is None:
+            raise NotFoundException("User not found")
+
+        match = await Match.find_active_between_any_direction(
+            session, user_id, other_user_id
+        )
+        request = await MatchRequest.find_latest_between_any_direction(
+            session, user_id, other_user_id
+        )
+        is_connected = match is not None
+
+        return {
+            "other_user_id": str(other_user_id),
+            "status": (
+                "connected"
+                if is_connected
+                else request.status if request is not None else "none"
+            ),
+            "is_connected": is_connected,
+            "request_id": str(request.id) if request is not None else None,
+            "request_direction": (
+                "outgoing"
+                if request is not None and request.requester_id == user_id
+                else "incoming" if request is not None else None
+            ),
+            "requested_at": (
+                request.created_at.isoformat() if request is not None else None
+            ),
+            "responded_at": (
+                request.responded_at.isoformat()
+                if request is not None and request.responded_at
+                else None
+            ),
+            "connected_at": (
+                match.accepted_at.isoformat()
+                if match is not None and match.accepted_at
+                else None
+            ),
+        }
+
     async def list_matches_for_user(
         self, session: AsyncSession, user_id: uuid.UUID, page: int, page_size: int
     ) -> dict:
@@ -617,44 +674,80 @@ class MatchLifecycleService:
         target_user_id: uuid.UUID,
         note: str | None,
         background_tasks: BackgroundTasks,
+        redis: Redis,
     ) -> dict:
-        existing = await MatchRequest.find_open_for_pair(
-            session, requester.id, target_user_id
-        )
-        if existing is not None:
-            return {"status": "already_pending", "request_id": str(existing.id)}
+        if requester.id == target_user_id:
+            raise BadRequestException("You can't match with yourself")
 
         if await UserBlock.is_blocked_between(session, requester.id, target_user_id):
             raise ForbiddenException("You can match with someone who has blocked you")
 
-        if requester.id == target_user_id:
-            raise BadRequestException("You can't match with yourself")
+        existing = await MatchRequest.find_latest_between_any_direction(
+            session, requester.id, target_user_id
+        )
+        if existing is not None:
+            if existing.status == "pending":
+                return {"status": "already_pending", "request_id": str(existing.id)}
+            if existing.status == "rejected":
+                return {"status": "rejected", "request_id": str(existing.id)}
+
+        active_match = await Match.find_active_between_any_direction(
+            session, requester.id, target_user_id
+        )
+        if active_match is not None:
+            return {"status": "already_connected", "match_id": str(active_match.id)}
+
+        target_user = await User.get_by_id(str(target_user_id), session)
+        if target_user is None:
+            raise NotFoundException("User not found")
 
         request = await MatchRequest.create_pending(
             session, requester.id, target_user_id, note
         )
 
-        target_user = await User.get_by_id(str(target_user_id), session)
         requester_display = requester.username or requester.full_name or "someone"
+
+        notification_payload = {
+            "route": "match.request",
+            "request_id": str(request.id),
+            "from_user": {
+                "id": str(requester.id),
+                "username": requester.username,
+                "full_name": requester.full_name,
+                "profile_pic": requester.profile_pic,
+            },
+        }
+        notification_title = f"New match request · {requester_display}"
+        notification_body = f"{requester_display} sent you a match request."
 
         await Notification.create(
             data={
                 "user_id": target_user_id,
-                "title": f"New match request · {requester_display}",
-                "body": f"{requester_display} sent you a match request.",
+                "title": notification_title,
+                "body": notification_body,
                 "event_type": "match_request",
-                "payload": {
-                    "route": "match.request",
-                    "request_id": str(request.id),
-                    "from_user": {
-                        "id": str(requester.id),
-                        "username": requester.username,
-                        "full_name": requester.full_name,
-                        "profile_pic": requester.profile_pic,
-                    },
-                },
+                "payload": notification_payload,
             },
             db=session,
+        )
+        await dispatch_event(
+            EventNames.PUSH_NOTIFICATION,
+            PushNotificationEvent(
+                user_id=str(target_user_id),
+                title=notification_title,
+                body=notification_body,
+                data={
+                    "type": "match.request.created",
+                    "url": f"/app/requests?id={request.id}",
+                    "tag": f"match-request-{request.id}",
+                    "request_id": str(request.id),
+                    "route": notification_payload["route"],
+                    "sender_profile_image": requester.profile_pic,
+                    "from_user": notification_payload["from_user"],
+                },
+            ),
+            db=session,
+            redis=redis,
         )
 
         email_context = {
@@ -687,6 +780,7 @@ class MatchLifecycleService:
         request_id: uuid.UUID,
         responder_user_id: uuid.UUID,
         accepted: bool,
+        redis: Redis,
     ) -> dict:
         request = await MatchRequest.get_by_id(str(request_id), session)
         if request is None:
@@ -763,6 +857,22 @@ class MatchLifecycleService:
         await Notification.create(
             data=notif_data,
             db=session,
+        )
+        await dispatch_event(
+            EventNames.PUSH_NOTIFICATION,
+            PushNotificationEvent(
+                user_id=str(request.requester_id),
+                title=notif_data["title"],
+                body=notif_data["body"],
+                data={
+                    "type": "match.request.accepted",
+                    "url": f"/app/requests?id={request.id}",
+                    "tag": f"match-accepted-{request.id}",
+                    **notif_data["payload"],
+                },
+            ),
+            db=session,
+            redis=redis,
         )
         return {
             "status": "accepted",

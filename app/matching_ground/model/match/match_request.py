@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
-from sqlalchemy import DateTime, ForeignKey, String, and_, select
+from sqlalchemy import DateTime, ForeignKey, String, and_, or_, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
@@ -77,6 +77,26 @@ class MatchRequest(BaseModel):
                     cls.status == "pending",
                 )
             )
+        )
+        return result.scalar_one_or_none()
+
+    @classmethod
+    async def find_latest_between_any_direction(
+        cls,
+        session: AsyncSession,
+        user_a: uuid.UUID,
+        user_b: uuid.UUID,
+    ) -> Self | None:
+        result = await session.execute(
+            select(cls)
+            .where(
+                or_(
+                    and_(cls.requester_id == user_a, cls.target_user_id == user_b),
+                    and_(cls.requester_id == user_b, cls.target_user_id == user_a),
+                )
+            )
+            .order_by(cls.created_at.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

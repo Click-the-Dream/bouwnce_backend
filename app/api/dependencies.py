@@ -77,7 +77,7 @@ async def get_current_user(
         user_id: str = payload.get("sub")
         if user_id is None:
             raise UnAuthorizedException("Could not validate credentials")
-        user = await User.get_by_id(user_id, db)
+        user = await User.get_for_auth(user_id, db)
         if user is None:
             raise UnAuthorizedException("Could not validate credentials")
         return user

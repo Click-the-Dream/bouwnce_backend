@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from difflib import SequenceMatcher
 
 from fastapi import BackgroundTasks
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,11 @@ from app.utils.exception import (
     BadRequestException,
     ForbiddenException,
     NotFoundException,
+)
+from app.worker.event_system import (
+    EventNames,
+    PushNotificationEvent,
+    dispatch_event,
 )
 
 
@@ -668,6 +674,7 @@ class MatchLifecycleService:
         target_user_id: uuid.UUID,
         note: str | None,
         background_tasks: BackgroundTasks,
+        redis: Redis,
     ) -> dict:
         if requester.id == target_user_id:
             raise BadRequestException("You can't match with yourself")
@@ -700,24 +707,47 @@ class MatchLifecycleService:
 
         requester_display = requester.username or requester.full_name or "someone"
 
+        notification_payload = {
+            "route": "match.request",
+            "request_id": str(request.id),
+            "from_user": {
+                "id": str(requester.id),
+                "username": requester.username,
+                "full_name": requester.full_name,
+                "profile_pic": requester.profile_pic,
+            },
+        }
+        notification_title = f"New match request · {requester_display}"
+        notification_body = f"{requester_display} sent you a match request."
+
         await Notification.create(
             data={
                 "user_id": target_user_id,
-                "title": f"New match request · {requester_display}",
-                "body": f"{requester_display} sent you a match request.",
+                "title": notification_title,
+                "body": notification_body,
                 "event_type": "match_request",
-                "payload": {
-                    "route": "match.request",
-                    "request_id": str(request.id),
-                    "from_user": {
-                        "id": str(requester.id),
-                        "username": requester.username,
-                        "full_name": requester.full_name,
-                        "profile_pic": requester.profile_pic,
-                    },
-                },
+                "payload": notification_payload,
             },
             db=session,
+        )
+        await dispatch_event(
+            EventNames.PUSH_NOTIFICATION,
+            PushNotificationEvent(
+                user_id=str(target_user_id),
+                title=notification_title,
+                body=notification_body,
+                data={
+                    "type": "match.request.created",
+                    "url": f"/app/requests?id={request.id}",
+                    "tag": f"match-request-{request.id}",
+                    "request_id": str(request.id),
+                    "route": notification_payload["route"],
+                    "sender_profile_image": requester.profile_pic,
+                    "from_user": notification_payload["from_user"],
+                },
+            ),
+            db=session,
+            redis=redis,
         )
 
         email_context = {
@@ -750,6 +780,7 @@ class MatchLifecycleService:
         request_id: uuid.UUID,
         responder_user_id: uuid.UUID,
         accepted: bool,
+        redis: Redis,
     ) -> dict:
         request = await MatchRequest.get_by_id(str(request_id), session)
         if request is None:
@@ -826,6 +857,22 @@ class MatchLifecycleService:
         await Notification.create(
             data=notif_data,
             db=session,
+        )
+        await dispatch_event(
+            EventNames.PUSH_NOTIFICATION,
+            PushNotificationEvent(
+                user_id=str(request.requester_id),
+                title=notif_data["title"],
+                body=notif_data["body"],
+                data={
+                    "type": "match.request.accepted",
+                    "url": f"/app/requests?id={request.id}",
+                    "tag": f"match-accepted-{request.id}",
+                    **notif_data["payload"],
+                },
+            ),
+            db=session,
+            redis=redis,
         )
         return {
             "status": "accepted",

@@ -47,10 +47,12 @@ class AuthService:
                 )
         user_data["is_store_owner"] = False
         try:
-            new_user = await User.create(user_data, db)
+            new_user = User(**user_data)
+            otp = new_user.generate_otp()
+            db.add(new_user)
+            await db.flush()
 
-            await UserWallet.create({"user_id": new_user.id}, db=db)
-            otp = await new_user.generate_otp(db)
+            db.add(UserWallet(user_id=new_user.id))
             # Ensure OTP is persisted before returning it to the client (avoids race with /verify-code)
             await db.commit()
 
@@ -106,7 +108,7 @@ class AuthService:
         ):
             raise BadRequestException(message="Invalid or expired verification code")
 
-        await user.clear_otp(db)
+        user.clear_otp()
 
         # user_data = UserResponse(**user.to_dict())
         access_token = create_access_token(subject=user.id)
@@ -152,7 +154,7 @@ class AuthService:
 
         if user is None:
             raise NotFoundException(message="User with the email does not exist")
-        otp = await user.generate_otp(db)
+        otp = user.generate_otp()
         # Ensure OTP is persisted before returning it to the client (avoids race with /verify-code)
         await db.commit()
 

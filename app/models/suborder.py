@@ -16,7 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
 from app.models import BaseModel
 
@@ -113,6 +113,17 @@ class SubOrder(BaseModel):
         self.total_amount -= amount
         self.order.total_amount -= amount
         await self.save(db)
+
+    @classmethod
+    async def get_for_status_update(
+        cls, suborder_id: str, db: AsyncSession
+    ) -> SubOrder | None:
+        result = await db.execute(
+            select(cls)
+            .where(cls.id == suborder_id)
+            .options(selectinload(cls.store), selectinload(cls.order))
+        )
+        return result.scalar_one_or_none()
 
 
 class SubOrderSnapshot(BaseModel):

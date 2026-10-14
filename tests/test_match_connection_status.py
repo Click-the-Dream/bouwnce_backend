@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from fastapi import BackgroundTasks
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import main
 from app.matching_ground.model.match import Match, MatchRequest
@@ -99,9 +102,7 @@ async def test_create_request_does_not_resend_a_rejected_request(monkeypatch) ->
     rejected_request = SimpleNamespace(id=uuid4(), status="rejected")
     create_pending = AsyncMock()
 
-    monkeypatch.setattr(
-        UserBlock, "is_blocked_between", AsyncMock(return_value=False)
-    )
+    monkeypatch.setattr(UserBlock, "is_blocked_between", AsyncMock(return_value=False))
     monkeypatch.setattr(
         MatchRequest,
         "find_latest_between_any_direction",
@@ -110,11 +111,14 @@ async def test_create_request_does_not_resend_a_rejected_request(monkeypatch) ->
     monkeypatch.setattr(MatchRequest, "create_pending", create_pending)
 
     result = await MatchLifecycleService().create_request(
-        session=object(),
-        requester=SimpleNamespace(id=user_id, username="requester", full_name=None),
+        session=cast(AsyncSession, object()),
+        requester=cast(
+            User, SimpleNamespace(id=user_id, username="requester", full_name=None)
+        ),
         target_user_id=other_user_id,
         note=None,
         background_tasks=BackgroundTasks(),
+        redis=cast(Redis, object()),
     )
 
     assert result == {

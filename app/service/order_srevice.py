@@ -81,7 +81,7 @@ class OrderService:
 
         # extract unique store ids from carts
 
-        product_ids = [cart.product_id for cart in user.carts]
+        product_ids = await Cart.get_product_ids_for_user(user.id, db)
         if not product_ids:
             raise BadRequestException(message="User has no product in cart")
 
@@ -538,16 +538,7 @@ class OrderService:
         if new_status not in allowed_statuses:
             raise BadRequestException(message="Invalid suborder status")
 
-        # Load required relationships explicitly (avoid async lazy-loading issues)
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        result = await db.execute(
-            select(SubOrder)
-            .where(SubOrder.id == suborder_id)
-            .options(selectinload(SubOrder.store), selectinload(SubOrder.order))
-        )
-        suborder = result.scalar_one_or_none()
+        suborder = await SubOrder.get_for_status_update(suborder_id, db)
         if not suborder:
             raise NotFoundException(message="Suborder not found")
 

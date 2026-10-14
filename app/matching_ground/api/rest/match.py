@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Query
 
-from app.api.dependencies import CurrentUser, dbSessionDep
+from app.api.dependencies import CurrentUser, dbSessionDep, redisSessionDep
 from app.matching_ground.schema.match import (
     CreateMatchRequestPayload,
     RespondMatchRequestPayload,
@@ -60,6 +60,7 @@ async def create_match_request(
     payload: CreateMatchRequestPayload,
     db: dbSessionDep,
     current_user: CurrentUser,
+    redis: redisSessionDep,
     background_tasks: BackgroundTasks,
 ) -> dict:
     service = MatchLifecycleService()
@@ -69,6 +70,7 @@ async def create_match_request(
         target_user_id=uuid.UUID(payload.target_user_id),
         note=payload.note,
         background_tasks=background_tasks,
+        redis=redis,
     )
 
     return {k: v for k, v in result.items() if k != "recipient_email"}
@@ -161,6 +163,7 @@ async def respond_match_request(
     payload: RespondMatchRequestPayload,
     db: dbSessionDep,
     current_user: CurrentUser,
+    redis: redisSessionDep,
 ) -> dict:
     service = MatchLifecycleService()
     return await service.respond_request(
@@ -168,4 +171,5 @@ async def respond_match_request(
         request_id=uuid.UUID(request_id),
         responder_user_id=current_user.id,
         accepted=payload.accepted,
+        redis=redis,
     )

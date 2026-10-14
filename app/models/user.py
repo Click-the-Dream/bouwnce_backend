@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, Self
 
 from sqlalchemy import JSON, Boolean, DateTime, Enum, String, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, load_only, mapped_column, relationship
+from sqlalchemy.orm import Mapped, load_only, mapped_column, raiseload, relationship
 
 from app.core.security import genrate_verification_code
 from app.models import BaseModel
 from app.models.wallet import UserWallet
+from app.utils.exception import BadRequestException, NotFoundException
+from app.utils.helper import is_valid_uuid
 from app.utils.user_cache import (
     get_cached_user,
     set_cached_user,
@@ -200,6 +202,25 @@ class User(BaseModel):
         return result.scalar_one_or_none()
 
     @classmethod
+    async def get_for_auth(cls, user_id: str, db: AsyncSession) -> Self:
+        if not is_valid_uuid(user_id):
+            raise BadRequestException("id not a valid uuid")
+
+        result = await db.execute(
+            select(cls)
+            .where(
+                cls.id == user_id,
+                cls.is_active.is_(True),
+                cls.is_deleted.is_(False),
+            )
+            .options(raiseload("*"))
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise NotFoundException(message="User with the specified ID not found")
+        return user
+
+    @classmethod
     async def get_by_unique(
         cls,
         *,
@@ -215,27 +236,22 @@ class User(BaseModel):
         elif username:
             query = select(cls).where(cls.username == username)
 
-        result = await db.execute(query)
+        result = await db.execute(query.options(raiseload("*")))
         return result.scalar_one_or_none()
 
-    async def generate_otp(self, db: AsyncSession) -> str:
+    def generate_otp(self) -> str:
 
         otp = genrate_verification_code()
 
         self.otp = otp
         self.otp_time = datetime.now(UTC) + timedelta(minutes=30)
 
-        await db.flush()
-        await db.refresh(self)
-
         return otp
 
-    async def clear_otp(self, db: AsyncSession):
+    def clear_otp(self) -> None:
 
         self.otp = None
         self.otp_time = None
-
-        await self.save(db)
 
     async def delete_me(self, db: AsyncSession) -> Self:
 

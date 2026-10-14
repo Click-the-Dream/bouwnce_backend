@@ -44,6 +44,13 @@ class Cart(BaseModel):
         )
 
     @classmethod
+    async def get_product_ids_for_user(
+        cls, user_id: UUID_TYPE, db: AsyncSession
+    ) -> list[str]:
+        result = await db.execute(select(cls.product_id).where(cls.user_id == user_id))
+        return list(result.scalars().all())
+
+    @classmethod
     async def delete_by_user_id(cls, user_id: str, db: AsyncSession):
         stm = delete(cls).where(cls.user_id == user_id)
         await db.execute(stm)

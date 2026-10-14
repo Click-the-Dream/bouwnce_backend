@@ -286,9 +286,17 @@ class AttendanceService:
                 # ?trxref query params). Empty template -> gateway falls back
                 # to the static PAYSTACK_REDIRECT_URL or Paystack's default.
                 template = settings.PAYSTACK_EVENT_REDIRECT_URL_TEMPLATE
-                callback_url = (
-                    template.format(event_id=str(event.id)) if template else None
-                )
+                # Literal substitution instead of str.format: the template is
+                # env config, so any brace sequence that isn't our
+                # placeholder (a different spelling, or literal braces in the
+                # URL) must not 500 the endpoint. Accept the documented
+                # {event_id} placeholder plus the {eventId} spelling.
+                callback_url = None
+                if template:
+                    event_id_str = str(event.id)
+                    callback_url = template.replace(
+                        "{event_id}", event_id_str
+                    ).replace("{eventId}", event_id_str)
                 try:
                     (
                         payment_url,

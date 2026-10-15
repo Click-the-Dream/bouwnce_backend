@@ -337,6 +337,7 @@ async def update_message(
     """
     result = await group_service.update_message(
         db=db,
+        group_id=str(group_id),
         message_id=str(message_id),
         user_id=str(current_user.id),
         body=message_data.body,
@@ -361,6 +362,7 @@ async def delete_message(
     """Delete a group message."""
     await group_service.delete_message(
         db=db,
+        group_id=str(group_id),
         message_id=str(message_id),
         user_id=str(current_user.id),
     )

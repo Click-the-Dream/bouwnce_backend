@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
+from app.service import group_ws_service, mobile_events_service
 from app.service.ws_presence import PubSubDispatcher, pubsub_dispatcher
 
 
@@ -30,11 +34,7 @@ class TestPubSubDispatcher:
         pubsub = AsyncMock()
         redis.pubsub.return_value = pubsub
 
-        # psubscribe is a coroutine; make it a no-op coroutine that returns the pubsub
-        async def _noop_psubscribe(*a, **kw):
-            return pubsub
-
-        pubsub.psubscribe = _noop_psubscribe
+        pubsub.psubscribe = AsyncMock()
         pubsub.aclose = AsyncMock()
         pubsub.listen.return_value = iter([])
         return redis, pubsub
@@ -46,8 +46,9 @@ class TestPubSubDispatcher:
         await dispatcher.start(redis)
         try:
             redis.pubsub.assert_called_once()
-            # psubscribe called with correct pattern
-            # (the coroutine was awaited via ensure_future)
+            pubsub.psubscribe.assert_awaited_once_with(
+                "chat:user:*", "group:user:*"
+            )
             assert dispatcher._pubsub is pubsub
             assert dispatcher._task is not None
         finally:
@@ -158,6 +159,297 @@ class TestPubSubDispatcher:
         first_device.assert_called_once()
         second_device.assert_called_once()
         await dispatcher.stop()
+
+    @pytest.mark.asyncio
+    async def test_dispatch_scopes_callbacks_to_channel_prefix(self, mock_redis):
+        redis, pubsub = mock_redis
+        listen_future = asyncio.Future()
+        pubsub.listen.return_value = listen_future
+        dispatcher = PubSubDispatcher(
+            patterns=("chat:user:*", "group:user:*")
+        )
+        await dispatcher.start(redis)
+
+        chat_callback = AsyncMock()
+        group_callback = AsyncMock()
+        await dispatcher.register(
+            user_id="alice",
+            connection_id="chat",
+            channel_prefix="chat:user:",
+            send_callback=chat_callback,
+        )
+        await dispatcher.register(
+            user_id="alice",
+            connection_id="group",
+            channel_prefix="group:user:",
+            send_callback=group_callback,
+        )
+        listen_future.set_result(
+            iter(
+                [
+                    {
+                        "type": "pmessage",
+                        "channel": b"chat:user:alice",
+                        "data": json.dumps({"type": "chat.message"}).encode(),
+                    },
+                    {
+                        "type": "pmessage",
+                        "channel": b"chat:user:alice",
+                        "data": json.dumps(
+                            {"type": "group.message.created"}
+                        ).encode(),
+                    },
+                    {
+                        "type": "pmessage",
+                        "channel": b"group:user:alice",
+                        "data": json.dumps({"type": "group_message"}).encode(),
+                    },
+                    None,
+                ]
+            )
+        )
+
+        await asyncio.sleep(0.1)
+
+        assert chat_callback.await_count == 2
+        group_callback.assert_awaited_once()
+        chat_types = {
+            call.args[0]["type"] for call in chat_callback.await_args_list
+        }
+        assert chat_types == {"chat.message", "group.message.created"}
+        assert group_callback.await_args.args[0]["type"] == "group_message"
+        await dispatcher.stop()
+
+    @pytest.mark.asyncio
+    async def test_unscoped_client_socket_receives_chat_and_group_frames(self):
+        dispatcher = PubSubDispatcher()
+        callback = AsyncMock()
+        await dispatcher.register(
+            user_id="alice",
+            connection_id="events",
+            send_callback=callback,
+        )
+
+        await dispatcher._dispatch_message(
+            {
+                "type": "pmessage",
+                "channel": b"group:user:alice",
+                "data": json.dumps({"type": "group_message"}).encode(),
+            }
+        )
+        await dispatcher._dispatch_message(
+            {
+                "type": "pmessage",
+                "channel": b"chat:user:alice",
+                "data": json.dumps({"type": "chat.message"}).encode(),
+            }
+        )
+
+        await asyncio.sleep(0.1)
+        assert callback.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_group_action_over_shared_socket_checks_membership(
+        self, monkeypatch
+    ):
+        group_id = str(uuid4())
+        websocket = AsyncMock()
+        query_result = SimpleNamespace(
+            all=lambda: [("alice", "alice-name"), ("another-member", "other-name")]
+        )
+        db = AsyncMock()
+        db.execute.return_value = query_result
+        publish_group_frame = AsyncMock()
+
+        @asynccontextmanager
+        async def session():
+            yield db
+
+        monkeypatch.setattr(group_ws_service, "get_async_session", session)
+        monkeypatch.setattr(
+            group_ws_service, "_publish_group_frame", publish_group_frame
+        )
+
+        await group_ws_service.process_group_action(
+            websocket=websocket,
+            redis=object(),
+            message_data={
+                "type": "group_typing",
+                "group_id": group_id,
+                "is_typing": True,
+            },
+            user_id="alice",
+            send_lock=asyncio.Lock(),
+        )
+
+        db.execute.assert_awaited_once()
+        publish_group_frame.assert_awaited_once()
+        assert publish_group_frame.await_args.kwargs["member_ids"] == [
+            "another-member"
+        ]
+        assert publish_group_frame.await_args.kwargs["payload"]["data"]["username"] == (
+            "alice-name"
+        )
+
+    @pytest.mark.asyncio
+    async def test_group_action_over_shared_socket_rejects_non_member(
+        self, monkeypatch
+    ):
+        group_id = str(uuid4())
+        websocket = AsyncMock()
+        query_result = SimpleNamespace(all=lambda: [])
+        db = AsyncMock()
+        db.execute.return_value = query_result
+        publish_group_frame = AsyncMock()
+
+        @asynccontextmanager
+        async def session():
+            yield db
+
+        monkeypatch.setattr(group_ws_service, "get_async_session", session)
+        monkeypatch.setattr(
+            group_ws_service, "_publish_group_frame", publish_group_frame
+        )
+
+        await group_ws_service.process_group_action(
+            websocket=websocket,
+            redis=object(),
+            message_data={"type": "group_typing", "group_id": group_id},
+            user_id="alice",
+            send_lock=asyncio.Lock(),
+        )
+
+        websocket.send_json.assert_awaited_once()
+        assert websocket.send_json.await_args.args[0]["error"] == "group.access.denied"
+        db.execute.assert_awaited_once()
+        publish_group_frame.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_group_message_edit_broadcasts_to_active_members(self, monkeypatch):
+        group_id = str(uuid4())
+        message_id = str(uuid4())
+        websocket = AsyncMock()
+        redis = object()
+        db = AsyncMock()
+        members = ["alice", "bob"]
+        update_result = {
+            "data": {
+                "message": {"id": message_id, "body": "edited"},
+                "sender": {"id": "alice"},
+            }
+        }
+        publish_group_frame = AsyncMock()
+
+        @asynccontextmanager
+        async def session():
+            yield db
+
+        monkeypatch.setattr(group_ws_service, "get_async_session", session)
+        monkeypatch.setattr(
+            group_ws_service, "_active_member_ids", AsyncMock(return_value=members)
+        )
+        monkeypatch.setattr(
+            group_ws_service.group_service,
+            "update_message",
+            AsyncMock(return_value=update_result),
+        )
+        monkeypatch.setattr(
+            group_ws_service, "_publish_group_frame", publish_group_frame
+        )
+
+        await group_ws_service.process_group_action(
+            websocket=websocket,
+            redis=redis,
+            message_data={
+                "type": "group_message_edit",
+                "group_id": group_id,
+                "message_id": message_id,
+                "body": "edited",
+            },
+            user_id="alice",
+            send_lock=asyncio.Lock(),
+        )
+
+        group_ws_service.group_service.update_message.assert_awaited_once()
+        assert (
+            group_ws_service.group_service.update_message.await_args.kwargs["group_id"]
+            == group_id
+        )
+        publish_group_frame.assert_awaited_once_with(
+            redis=redis,
+            member_ids=members,
+            payload={
+                "type": "group_message_updated",
+                "group_id": group_id,
+                "data": update_result["data"]["message"],
+                "sender": update_result["data"]["sender"],
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_dm_message_edit_fans_out_to_both_participants(self, monkeypatch):
+        sender_id = str(uuid4())
+        recipient_id = str(uuid4())
+        result = {
+            "sender_id": sender_id,
+            "recipient_id": recipient_id,
+            "message": {"id": str(uuid4()), "body": "edited"},
+        }
+        db = AsyncMock()
+
+        @asynccontextmanager
+        async def session():
+            yield db
+
+        class Pipeline:
+            def __init__(self):
+                self.published = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return None
+
+            def publish(self, channel, payload):
+                self.published.append((channel, json.loads(payload)))
+
+            async def execute(self):
+                return None
+
+        class Redis:
+            def __init__(self):
+                self.pipe = Pipeline()
+
+            def pipeline(self):
+                return self.pipe
+
+        redis = Redis()
+        monkeypatch.setattr(mobile_events_service, "get_async_session", session)
+        monkeypatch.setattr(
+            mobile_events_service.chat_service,
+            "edit_message",
+            AsyncMock(return_value=result),
+        )
+
+        await mobile_events_service.MobileEventsService()._handle_chat_message_mutation(
+            websocket=AsyncMock(),
+            send_lock=asyncio.Lock(),
+            redis=redis,
+            user_id=sender_id,
+            incoming={"message_id": str(uuid4()), "body": "edited"},
+            msg_type="chat.edit",
+        )
+
+        assert [channel for channel, _ in redis.pipe.published] == [
+            f"chat:user:{sender_id}",
+            f"chat:user:{recipient_id}",
+        ]
+        assert all(
+            frame["type"] == "chat.message.updated"
+            and frame["data"] == result["message"]
+            for _, frame in redis.pipe.published
+        )
 
     @pytest.mark.asyncio
     async def test_dispatch_skips_unregistered_user(self, mock_redis):

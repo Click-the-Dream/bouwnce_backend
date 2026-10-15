@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import desc, func, select, text, update
+from sqlalchemy import delete, desc, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.matching_ground.model.notification import Notification
@@ -81,6 +81,28 @@ class ChatRepository:
                 select(Message).where(Message.id == uuid.UUID(str(message_id)))
             )
         ).scalar_one_or_none()
+
+    async def update_message_body(
+        self, db: AsyncSession, message_id: str, body: str
+    ) -> Message | None:
+        result = await db.execute(
+            update(Message)
+            .where(Message.id == uuid.UUID(str(message_id)))
+            .values(body=body)
+            .returning(Message)
+        )
+        message = result.scalar_one_or_none()
+        if message is not None:
+            await db.refresh(message)
+        return message
+
+    async def delete_message(self, db: AsyncSession, message_id: str) -> bool:
+        result = await db.execute(
+            delete(Message)
+            .where(Message.id == uuid.UUID(str(message_id)))
+            .returning(Message.id)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def get_messages_by_ids(
         self, db: AsyncSession, message_ids: set[str]

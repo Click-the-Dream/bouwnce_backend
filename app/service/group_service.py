@@ -627,6 +627,7 @@ class GroupService:
         self,
         *,
         db: AsyncSession,
+        group_id: str,
         message_id: str,
         user_id: str,
         body: str | None = None,
@@ -639,6 +640,8 @@ class GroupService:
             # Get the message
             message = await self.message_repo.get_message_by_id(db, message_id)
             if not message:
+                raise NotFoundException(message="Message not found")
+            if str(message.group_id) != str(group_id):
                 raise NotFoundException(message="Message not found")
 
             # Check if user is the sender
@@ -678,13 +681,15 @@ class GroupService:
             raise InternalServerErrorException(message=str(e)) from e
 
     async def delete_message(
-        self, db: AsyncSession, message_id: str, user_id: str
+        self, db: AsyncSession, group_id: str, message_id: str, user_id: str
     ) -> dict[str, Any]:
         """Delete a group message."""
         try:
             # Get the message
             message = await self.message_repo.get_message_by_id(db, message_id)
             if not message:
+                raise NotFoundException(message="Message not found")
+            if str(message.group_id) != str(group_id):
                 raise NotFoundException(message="Message not found")
 
             # Check if user is the sender

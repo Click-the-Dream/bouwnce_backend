@@ -23,6 +23,8 @@ from app.core.security import verify_token
 from app.db.postgres_db_conn import get_async_session
 from app.db.redis import get_redis_client
 from app.matching_ground.schema.chat import (
+    ChatDeleteMessagePayload,
+    ChatEditMessagePayload,
     ChatMessageEvent,
     ChatReadAckData,
     ChatReadAckEvent,
@@ -41,6 +43,7 @@ from app.matching_ground.schema.chat import (
 from app.matching_ground.service.chat_service import chat_service
 from app.models.chat import Conversation
 from app.models.user import User
+from app.service.group_ws_service import process_group_action
 from app.service.ws_chat import ACTIVE_CHAT_CONNECTIONS, ChatDelivery  # noqa: F401
 from app.service.ws_presence import (
     PRESENCE_KEY_PREFIX,
@@ -178,6 +181,13 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                             break
                         continue
 
+                    if msg_type in ("chat.edit", "chat.delete"):
+                        if not await self._handle_chat_message_mutation(
+                            websocket, send_lock, redis, user_id, incoming, msg_type
+                        ):
+                            break
+                        continue
+
                     # ---- chat.upload_media ----
                     if msg_type == "chat.upload_media":
                         if not await self._handle_chat_upload_media(
@@ -200,6 +210,23 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                             websocket, send_lock, redis, user_id, incoming
                         ):
                             break
+                        continue
+
+                    if msg_type in (
+                        "group_message",
+                        "group.message",
+                        "group_typing",
+                        "group.typing",
+                        "group_message_edit",
+                        "group_message_delete",
+                    ):
+                        await process_group_action(
+                            websocket=websocket,
+                            redis=redis,
+                            message_data=incoming,
+                            user_id=str(user_id),
+                            send_lock=send_lock,
+                        )
                         continue
 
                     # Unknown event type — ignore, don't crash
@@ -291,6 +318,77 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 client_id=payload.client_id,
             )
         )
+        return True
+
+    async def _handle_chat_message_mutation(
+        self,
+        websocket: WebSocket,
+        send_lock,
+        redis,
+        user_id: str,
+        incoming: dict,
+        msg_type: str,
+    ) -> bool:
+        try:
+            if msg_type == "chat.edit":
+                payload = ChatEditMessagePayload.model_validate(incoming)
+                async with get_async_session() as db:
+                    result = await chat_service.edit_message(
+                        db=db,
+                        message_id=str(payload.message_id),
+                        user_id=str(user_id),
+                        body=payload.body,
+                    )
+                frame = {
+                    "type": "chat.message.updated",
+                    "data": result["message"],
+                }
+            else:
+                payload = ChatDeleteMessagePayload.model_validate(incoming)
+                async with get_async_session() as db:
+                    result = await chat_service.delete_message(
+                        db=db,
+                        message_id=str(payload.message_id),
+                        user_id=str(user_id),
+                    )
+                frame = {
+                    "type": "chat.message.deleted",
+                    "data": {
+                        "conversation_id": result["conversation_id"],
+                        "message_id": result["message_id"],
+                        "sender_id": result["sender_id"],
+                        "recipient_id": result["recipient_id"],
+                    },
+                }
+
+        except Exception as exc:
+            await self._send_json_safe(
+                websocket,
+                {
+                    "type": "error",
+                    "error": f"{msg_type}.failed",
+                    "message": str(exc),
+                },
+                send_lock=send_lock,
+            )
+            return True
+
+        try:
+            async with redis.pipeline() as pipe:
+                pipe.publish(f"chat:user:{result['sender_id']}", json.dumps(frame))
+                pipe.publish(f"chat:user:{result['recipient_id']}", json.dumps(frame))
+                await pipe.execute()
+        except Exception:
+            logger.exception("DM message mutation saved but could not be broadcast")
+            await self._send_json_safe(
+                websocket,
+                {
+                    "type": "error",
+                    "error": "chat.message.delivery_failed",
+                    "message": "The change was saved; reload the conversation to sync it",
+                },
+                send_lock=send_lock,
+            )
         return True
 
     async def _handle_chat_upload_media(

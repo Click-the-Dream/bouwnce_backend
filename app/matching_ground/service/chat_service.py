@@ -19,7 +19,11 @@ from app.matching_ground.repositories.chat_repository import chat_repository
 from app.matching_ground.service.chat_read import ChatReadOps
 from app.models.user import User
 from app.utils.chat_utils import ChatSerializers
-from app.utils.exception import ForbiddenException, NotFoundException
+from app.utils.exception import (
+    BadRequestException,
+    ForbiddenException,
+    NotFoundException,
+)
 from app.utils.responses import response_builder
 from app.worker.event_system import (
     EventNames,
@@ -210,6 +214,65 @@ class ChatService(ChatSerializers, ChatReadOps):
             )
 
         return result
+
+    async def edit_message(
+        self, *, db: AsyncSession, message_id: str, user_id: str, body: str
+    ) -> dict:
+        body = body.strip()
+        if not body:
+            raise BadRequestException("Message body cannot be empty")
+        message = await chat_repository.find_message(db, message_id)
+        if message is None:
+            raise NotFoundException("Message not found")
+        if str(message.sender_id) != str(user_id):
+            raise ForbiddenException("You can only edit your own messages")
+
+        updated = await chat_repository.update_message_body(db, message_id, body)
+        if updated is None:
+            raise NotFoundException("Message not found")
+
+        users = await chat_repository.get_users(
+            db, [str(updated.sender_id), str(updated.recipient_id)]
+        )
+        users_by_id = {str(user.id): user for user in users}
+        sender = users_by_id.get(str(updated.sender_id))
+        recipient = users_by_id.get(str(updated.recipient_id))
+        if sender is None or recipient is None:
+            raise NotFoundException("Message participants not found")
+
+        payload = self._build_chat_message_data(
+            msg=updated,
+            sender=sender,
+            recipient=recipient,
+            reply_obj=False,
+        ).model_dump(mode="json")
+        await db.commit()
+        return {
+            "conversation_id": str(updated.conversation_id),
+            "sender_id": str(updated.sender_id),
+            "recipient_id": str(updated.recipient_id),
+            "message": payload,
+        }
+
+    async def delete_message(
+        self, *, db: AsyncSession, message_id: str, user_id: str
+    ) -> dict:
+        message = await chat_repository.find_message(db, message_id)
+        if message is None:
+            raise NotFoundException("Message not found")
+        if str(message.sender_id) != str(user_id):
+            raise ForbiddenException("You can only delete your own messages")
+
+        deleted = await chat_repository.delete_message(db, message_id)
+        if not deleted:
+            raise NotFoundException("Message not found")
+        await db.commit()
+        return {
+            "conversation_id": str(message.conversation_id),
+            "sender_id": str(message.sender_id),
+            "recipient_id": str(message.recipient_id),
+            "message_id": str(message.id),
+        }
 
     async def send_media_message(
         self,

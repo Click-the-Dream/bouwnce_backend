@@ -53,12 +53,8 @@ class PubSubDispatcher:
 
     Instead of each WebSocket creating its own ``pubsub.subscribe()`` (which
     consumes one Redis connection per user forever), a single background task
-    does ``psubscribe(*patterns)`` (defaults to ``chat:user:*``) and dispatches
-    messages to the registered send callback for the target user.
-
-    A separate instance can be created with a different pattern namespace
-    (e.g. ``PubSubDispatcher(patterns=("group:user:*",))``) so chat and group
-    frames are routed by independent dispatchers.
+    does ``psubscribe(*patterns)`` and dispatches messages to the registered
+    send callbacks for the target user and channel namespace.
 
     Usage::
 
@@ -82,8 +78,8 @@ class PubSubDispatcher:
     # self-healing transient drops.
     _MAX_RESTART_ATTEMPTS = 5
     _RESTART_BACKOFF_SECONDS = 5.0
-    #: Channel patterns subscribed by the default (DM chat) dispatcher.
-    DEFAULT_PATTERNS: tuple[str, ...] = ("chat:user:*",)
+    #: Chat and group delivery share one Pub/Sub connection per app process.
+    DEFAULT_PATTERNS: tuple[str, ...] = ("chat:user:*", "group:user:*")
 
     def __init__(self, patterns: tuple[str, ...] | None = None) -> None:
         self._redis = None
@@ -92,8 +88,8 @@ class PubSubDispatcher:
         # A separate dispatcher instance is used per channel namespace (chat,
         # group, ...) so frames never leak onto sockets from another namespace.
         self._patterns = tuple(patterns) if patterns else self.DEFAULT_PATTERNS
-        # user_id -> send callback
-        self._callbacks: dict[str, dict[str, _SEND_CALLBACK]] = {}
+        # user_id -> connection_id -> (channel prefix, send callback)
+        self._callbacks: dict[str, dict[str, tuple[str | None, _SEND_CALLBACK]]] = {}
         self._register_lock = asyncio.Lock()
         # Serialises the check => create => assign sequence in start().
         # Without this, concurrent callers race past the "already running"
@@ -143,16 +139,21 @@ class PubSubDispatcher:
         user_id: str,
         send_callback: _SEND_CALLBACK,
         connection_id: str | None = None,
+        channel_prefix: str | None = None,
     ) -> None:
-        """Register a send callback for ``user_id``.
+        """Register a send callback for ``user_id`` and an optional channel prefix.
 
         The callback receives ``(payload_dict, send_lock_or_none)`` and must
         return a ``Future[bool]`` — ``True`` if the message was sent, ``False``
-        if the connection is dead.
+        if the connection is dead. Prefix scoping keeps group frames off DM
+        sockets and DM frames off group sockets.
         """
         async with self._register_lock:
             callbacks = self._callbacks.setdefault(user_id, {})
-            callbacks[connection_id or str(id(send_callback))] = send_callback
+            callbacks[connection_id or str(id(send_callback))] = (
+                channel_prefix,
+                send_callback,
+            )
 
     async def unregister(
         self, *, user_id: str, connection_id: str | None = None
@@ -267,8 +268,15 @@ class PubSubDispatcher:
                 )
                 return
 
+            channel_prefix = channel.rsplit(":", 1)[0] + ":"
             async with self._register_lock:
-                callbacks = list(self._callbacks.get(target_user_id, {}).values())
+                callbacks = [
+                    callback
+                    for prefix, callback in self._callbacks.get(
+                        target_user_id, {}
+                    ).values()
+                    if prefix is None or prefix == channel_prefix
+                ]
 
             if not callbacks:
                 return

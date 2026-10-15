@@ -33,6 +33,15 @@ class SendMessagePayload(BaseModel):
     ]
 
 
+class ChatEditMessagePayload(BaseModel):
+    message_id: Annotated[uuid.UUID, Field(..., description="Message to edit")]
+    body: Annotated[str, Field(..., min_length=1, max_length=4000)]
+
+
+class ChatDeleteMessagePayload(BaseModel):
+    message_id: Annotated[uuid.UUID, Field(..., description="Message to delete")]
+
+
 class MarkConversationReadPayload(BaseModel):
     recipient_id: Annotated[uuid.UUID, Field(..., description="Other user id (uuid)")]
     message_id: Annotated[

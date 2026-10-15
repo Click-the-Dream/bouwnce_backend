@@ -273,22 +273,20 @@ class AttendanceService:
 
         if total_amount > 0:
             if attendance and attendance.payment_reference:
-                # Retry of a failed/unpaid claim: replay the stored Paystack
-                # transaction so the reference and this row stay 1:1 (minting
-                # a second reference here would orphan any charge made on the
-                # first one, since the webhook resolves rows by reference).
+
                 payment_url = attendance.payment_url
-                payment_reference = None  # already persisted on the row
+                payment_reference = None
+
             else:
-                # Post-payment landing page: build a per-event URL from the
-                # env-configurable template so Paystack drops the payer on
-                # this event's success screen (it appends its own ?reference/
-                # ?trxref query params). Empty template -> gateway falls back
-                # to the static PAYSTACK_REDIRECT_URL or Paystack's default.
+
                 template = settings.PAYSTACK_EVENT_REDIRECT_URL_TEMPLATE
-                callback_url = (
-                    template.format(event_id=str(event.id)) if template else None
-                )
+
+                callback_url = None
+                if template:
+                    event_id_str = str(event.id)
+                    callback_url = template.replace("{event_id}", event_id_str).replace(
+                        "{eventId}", event_id_str
+                    )
                 try:
                     (
                         payment_url,
@@ -307,9 +305,7 @@ class AttendanceService:
                         }
                     )
                 except Exception as exc:
-                    # Nothing is persisted on this path, so there is no row to
-                    # mark failed; the retried request simply tries Paystack
-                    # again (the session rolls back on the raised exception).
+
                     raise BadRequestException(
                         "Unable to initialize event payment"
                     ) from exc
@@ -318,11 +314,6 @@ class AttendanceService:
             payment_reference = None
 
         if attendance is None:
-            # Persist the Paystack pair on creation itself. Omitting these
-            # keys here left fresh rows with NULLs, which the response echoed
-            # and — critically — which the reference-keyed webhook could
-            # never match, so fulfillment never fired for new claims. For
-            # free events (total_amount == 0) both are None by design.
             attendance_data = {
                 "user_id": current_user.id,
                 "event_id": event_id,
@@ -339,9 +330,7 @@ class AttendanceService:
                 db, attendance_data
             )
         else:
-            # Retry of a pending claim: refresh the selection/totals; the
-            # reference/URL are only overwritten when Paystack generated a new
-            # one (the replay case above leaves the stored pair untouched).
+
             attendance.ticket_info = user_select_tickets
             attendance.total_amount = total_amount
             attendance.total_tickets = total_tickets
@@ -354,12 +343,7 @@ class AttendanceService:
             attendance.idempotency_key = idempotency_key
 
         if total_amount == 0:
-            # Free checkout: no Paystack transaction, no payment URL, and the
-            # caller gets the confirmed attendance straight back. Run the
-            # same fulfillment pipeline as a paid webhook (binding capacity
-            # check, ticket issuance + QR codes, delivery email) so free
-            # attendees receive their tickets like paid ones. A fulfillment
-            # failure raises and rolls the whole claim back with the session.
+
             await self.fulfill_event_tickets(db, redis, attendance)
 
         await db.commit()

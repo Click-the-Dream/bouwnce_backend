@@ -64,6 +64,9 @@ def _serialize_event(event: OutingEvent) -> dict[str, Any]:
     )
     event_dict["id"] = str(event_dict["id"])
     event_dict["creator_id"] = str(event_dict["creator_id"])
+    group_id = event_dict.get("group_id", getattr(event, "group_id", None))
+    event_dict["group_id"] = str(group_id) if group_id else None
+    event_dict["has_group"] = event_dict["group_id"] is not None
     return event_dict
 
 

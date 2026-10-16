@@ -142,6 +142,7 @@ class GroupMessageResponse(GroupMessageBase):
     ]
     deleted_for_everyone_at: datetime | None = None
     is_edited: Annotated[bool, Field(..., description="Whether message was edited")]
+    is_edit: bool = False
     mentioned_user_ids: Annotated[
         list[uuid.UUID] | None, Field(None, description="List of mentioned user IDs")
     ]

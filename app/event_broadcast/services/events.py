@@ -5,6 +5,7 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.event_broadcast.models.events import EventState, LocationType, OutingEvent
+from app.event_broadcast.services.event_group import event_group_service
 from app.models.user import User
 from app.utils.exception import BadRequestException, NotFoundException
 from app.utils.helper import is_valid_uuid
@@ -32,6 +33,9 @@ def _serialize_event(event: OutingEvent) -> dict[str, Any]:
     )
     event_dict["id"] = str(event_dict["id"])
     event_dict["creator_id"] = str(event_dict["creator_id"])
+    group_id = event_dict.get("group_id", getattr(event, "group_id", None))
+    event_dict["group_id"] = str(group_id) if group_id else None
+    event_dict["has_group"] = event_dict["group_id"] is not None
     return event_dict
 
 
@@ -39,6 +43,7 @@ class EventService:
     async def create_event(
         self, db: AsyncSession, current_user: User, event_data: dict
     ) -> dict[str, Any]:
+        create_group = bool(event_data.pop("create_group", False))
         if not event_data.get("name") or not event_data["name"].strip():
             raise BadRequestException("Event name is required")
 
@@ -130,12 +135,28 @@ class EventService:
         event_data["creator_id"] = current_user.id
 
         event = await OutingEvent.create_event(db, event_data)
+        group_id = None
+        if create_group:
+            try:
+                group_result = await event_group_service.create_or_get_for_host(
+                    db=db,
+                    event_id=str(event.id),
+                    host_id=str(current_user.id),
+                )
+                group_id = group_result["data"]["group"]["id"]
+            except Exception:
+                await db.rollback()
+                raise
         await db.commit()
+
+        if group_id is not None:
+            event.group_id = group_id
+        response_data = _serialize_event(event)
 
         return response_builder(
             status_code=status.HTTP_201_CREATED,
             message="Event created successfully",
-            data=_serialize_event(event),
+            data=response_data,
         )
 
     async def get_user_events(

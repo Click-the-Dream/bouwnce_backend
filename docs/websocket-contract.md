@@ -15,9 +15,9 @@ Use one WebSocket for direct messages, group chat, and live notifications.
 Authenticate by passing your access token as a query parameter (browsers cannot
 set an `Authorization` header on a WebSocket handshake).
 
-| URL                             | Required query params |
-| ------------------------------- | --------------------- |
-| `wss://<host>/api/v1/events/ws` | `token`               |
+| URL                               | Required query params |
+| --------------------------------- | --------------------- |
+| `wss://<host>/api/v1/events/ws` | `token`             |
 
 - `token` — the same access token used by the app’s REST requests.
 - Include `group_id` in each group action; it is not a connection query
@@ -80,8 +80,8 @@ may take up to about 75 seconds to update.
 If the connection is rejected before it opens, browsers commonly report close
 code `1006` rather than the server's `1008` policy code.
 
-| Close code          | Cause                                                                      |
-| ------------------- | -------------------------------------------------------------------------- |
+| Close code            | Cause                                                                      |
+| --------------------- | -------------------------------------------------------------------------- |
 | `1008` (pre-accept) | Missing or invalid access token.                                           |
 | `1000`              | Normal closure (either side).                                              |
 | `1006`              | Abnormal network closure or a rejected connection surfaced to the browser. |
@@ -122,6 +122,7 @@ other fields as optional and do not rely on them.
   "updated_at": "2026-10-11T12:00:00+00:00",
   "edited_at": null, // ISO-8601 | null
   "is_edited": false,
+  "is_edit": false, // alias for clients using this field name
   "media_type": null, // "image" | "video" | "file" | "audio" | null
   "media_urls": null, // string[] | null
   "media_names": null, // string[] | null
@@ -149,6 +150,7 @@ other fields as optional and do not rely on them.
   "updated_at": "2026-10-11T12:00:00+00:00",
   "edited_at": null, // ISO-8601 | null
   "is_edited": false,
+  "is_edit": false, // alias for clients using this field name
   "deleted_for_everyone_at": null, // ISO-8601 | null
   "sender": {/* UserLite */},
   "recipient": {/* UserLite */},
@@ -166,7 +168,7 @@ other fields as optional and do not rely on them.
 | --------------------- | ------------------------------------------- | ------------------------------------------------------- |
 | `ping`              | Liveness                                    | —                                                      |
 | `chat.send`         | Send a text message                         | `recipient_id`, `body`                              |
-| `chat.edit`         | Edit one of your DM messages                | `message_id`, `body`                               |
+| `chat.edit`         | Edit one of your DM messages                | `message_id`, `body`                                |
 | `chat.delete`       | Hide a DM message for you or delete for all | `message_id`, optional `delete_for`                 |
 | `chat.upload_media` | Send media (already uploaded to Cloudinary) | `recipient_id`, `media_urls`, `media_type`        |
 | `chat.read`         | Mark conversation / message read            | `recipient_id` (+ `message_id` unless `mark_all`) |
@@ -279,24 +281,24 @@ identifies someone other than the signed-in user.
 
 ### 4.2 Server → Client
 
-| `type`                 | When                                                            | `data`                                                                              |
-| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `chat.ready`           | once after connect                                              | `{ "user_id": uuid }`                                                               |
-| `pong`                 | reply to `ping`                                               | —                                                                                    |
-| `bouwnce.system`       | once after connect                                              | `{ "user": { id, email, username, full_name, profile_pic } }`                       |
-| `user.online.snapshot` | once after connect                                              | `{ "items": [ { "user": UserLite, "online": bool } ] }`                             |
-| `user.online`          | partner connects/disconnects (and for you)                      | `{ "user": UserLite, "online": bool }`                                              |
-| `chat.send.ack`        | immediately after a valid `chat.send` / `chat.upload_media` | `{ sender_id, recipient_id, client_id }`                                            |
-| `chat.sent`            | after your message is accepted                                  | `{ "conversation_id": uuid, "message": ChatMessageData }` (top-level `client_id`) |
-| `chat.message`         | incoming message from the other user                            | `ChatMessageData`                                                                   |
-| `chat.message.updated` | a DM message was edited by its sender                           | `ChatMessageData`                                                                   |
-| `chat.message.deleted` | a DM message was deleted                          | `{ conversation_id, message_id, sender_id, recipient_id, delete_for, deleted_for_everyone_at }` |
-| `chat.read.ack`        | reply to your `chat.read`                                     | `{ conversation_id, reader_id, read, updated }`                                     |
-| `chat.read.updated`    | when either side marks messages read                            | `{ conversation_id, message_id, reader_id, read, updated }`                         |
-| `chat.typing`          | other user's typing state                                       | `{ conversation_id, user: UserLite, is_typing }`                                    |
-| `group_message`        | a message arrives in a group you belong to                      | message data includes `group_id`                                                    |
-| `group_typing`         | a member of a group you belong to is typing                     | `{ "group_id": uuid, "user_id": uuid, "username": string \| null, "is_typing": bool }` |
-| `error`                | validation / handler failure                                    | `{ error, message }` (see §8)                                                      |
+| `type`                 | When                                                            | `data`                                                                                          |
+| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `chat.ready`           | once after connect                                              | `{ "user_id": uuid }`                                                                           |
+| `pong`                 | reply to `ping`                                               | —                                                                                                |
+| `bouwnce.system`       | once after connect                                              | `{ "user": { id, email, username, full_name, profile_pic } }`                                   |
+| `user.online.snapshot` | once after connect                                              | `{ "items": [ { "user": UserLite, "online": bool } ] }`                                         |
+| `user.online`          | partner connects/disconnects (and for you)                      | `{ "user": UserLite, "online": bool }`                                                          |
+| `chat.send.ack`        | immediately after a valid `chat.send` / `chat.upload_media` | `{ sender_id, recipient_id, client_id }`                                                        |
+| `chat.sent`            | after your message is accepted                                  | `{ "conversation_id": uuid, "message": ChatMessageData }` (top-level `client_id`)             |
+| `chat.message`         | incoming message from the other user                            | `ChatMessageData`                                                                               |
+| `chat.message.updated` | a DM message was edited by its sender                           | `ChatMessageData`                                                                               |
+| `chat.message.deleted` | a DM message was deleted                                        | `{ conversation_id, message_id, sender_id, recipient_id, delete_for, deleted_for_everyone_at }` |
+| `chat.read.ack`        | reply to your `chat.read`                                     | `{ conversation_id, reader_id, read, updated }`                                                 |
+| `chat.read.updated`    | when either side marks messages read                            | `{ conversation_id, message_id, reader_id, read, updated }`                                     |
+| `chat.typing`          | other user's typing state                                       | `{ conversation_id, user: UserLite, is_typing }`                                                |
+| `group_message`        | a message arrives in a group you belong to                      | message data includes `group_id`                                                                |
+| `group_typing`         | a member of a group you belong to is typing                     | `{ "group_id": uuid, "user_id": uuid, "username": string \| null, "is_typing": bool }`           |
+| `error`                | validation / handler failure                                    | `{ error, message }` (see §8)                                                                  |
 
 Notes:
 
@@ -348,13 +350,13 @@ send group actions.
 
 ### 5.1 Client → Server
 
-| `type`          | Aliases           | Purpose                         |
-| ----------------- | ----------------- | ------------------------------- |
-| `ping`          | —                | Liveness (`pong` reply)       |
-| `group_message` | `group.message` | Send a message (`group_id`)   |
-| `group_typing`  | `group.typing`  | Typing indicator (`group_id`) |
-| `group_message_edit` | — | Edit one of your messages (`group_id`, `message_id`) |
-| `group_message_delete` | — | Hide a message for you or delete for all (`group_id`, `message_id`, optional `delete_for`) |
+| `type`                 | Aliases           | Purpose                                                                                          |
+| ------------------------ | ----------------- | ------------------------------------------------------------------------------------------------ |
+| `ping`                 | —                | Liveness (`pong` reply)                                                                        |
+| `group_message`        | `group.message` | Send a message (`group_id`)                                                                    |
+| `group_typing`         | `group.typing`  | Typing indicator (`group_id`)                                                                  |
+| `group_message_edit`   | —                | Edit one of your messages (`group_id`, `message_id`)                                         |
+| `group_message_delete` | —                | Hide a message for you or delete for all (`group_id`, `message_id`, optional `delete_for`) |
 
 `type` is matched case-insensitively after trimming. Any other value yields an
 `error` frame (§8).
@@ -439,15 +441,15 @@ after reconnecting.
 
 ### 5.2 Server → Client
 
-| `type`               | When                                                    | Payload                                                                                          |
-| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `pong`               | reply to `ping`                                       | `{ "type": "pong" }`                                                                           |
-| `group_message`      | a message is broadcast in the group                     | `{ "type": "group_message", "data": GroupMessage, "sender": User }`                            |
-| `group_message_sent` | ack for **your** `group_message`                | `{ "type": "group_message_sent", "client_id": "…", "data": GroupMessage }`                    |
-| `group_message_updated` | a group message was edited                 | `{ "type": "group_message_updated", "group_id": uuid, "data": GroupMessage, "sender": User }` |
-| `group_message_deleted` | a group message was deleted                | `{ "type": "group_message_deleted", "data": { "group_id": uuid, "message_id": uuid, "sender_id": uuid, "delete_for": "me" \| "everyone", "deleted_for": uuid[], "deleted_for_everyone_at": timestamp \| null } }` |
-| `group_typing`       | another member is typing                                | `{ "type": "group_typing", "data": { "group_id": uuid, "user_id": uuid, "username": string \| null, "is_typing": bool } }` |
-| `error`              | invalid JSON / unknown type / empty body / send failure | `{ "type": "error", "message": "…" }`                                                         |
+| `type`                  | When                                                    | Payload                                                                                                                                                                                                           |
+| ------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pong`                  | reply to `ping`                                       | `{ "type": "pong" }`                                                                                                                                                                                            |
+| `group_message`         | a message is broadcast in the group                     | `{ "type": "group_message", "data": GroupMessage, "sender": User }`                                                                                                                                             |
+| `group_message_sent`    | ack for **your** `group_message`                | `{ "type": "group_message_sent", "client_id": "…", "data": GroupMessage }`                                                                                                                                     |
+| `group_message_updated` | a group message was edited                              | `{ "type": "group_message_updated", "group_id": uuid, "data": GroupMessage, "sender": User }`                                                                                                                   |
+| `group_message_deleted` | a group message was deleted                             | `{ "type": "group_message_deleted", "data": { "group_id": uuid, "message_id": uuid, "sender_id": uuid, "delete_for": "me" \| "everyone", "deleted_for": uuid[], "deleted_for_everyone_at": timestamp \| null } }` |
+| `group_typing`          | another member is typing                                | `{ "type": "group_typing", "data": { "group_id": uuid, "user_id": uuid, "username": string \| null, "is_typing": bool } }`                                                                                       |
+| `error`                 | invalid JSON / unknown type / empty body / send failure | `{ "type": "error", "message": "…" }`                                                                                                                                                                          |
 
 Notes:
 
@@ -510,20 +512,20 @@ group.
 }
 ```
 
-| `error`                    | Cause                                                                                          |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| `invalid_payload`          | `chat.send` / `chat.upload_media` / `chat.read` / `chat.typing` body failed validation |
-| `self_send_not_allowed`    | `chat.upload_media` with `recipient_id` == self                                            |
-| `invalid_media_type`       | media type not in `image` / `video` / `file`                                             |
-| `missing_media_urls`       | empty `media_urls`                                                                           |
-| `invalid_media_urls`       | a URL is not a Cloudinary secure URL for this deployment                                       |
-| `chat.send.failed`         | message could not be sent (for example, you are not allowed to message the recipient)          |
-| `chat.edit.failed`         | message edit failed (missing message, invalid body, unauthorized user, deleted message, or expired edit window) |
-| `chat.delete.failed`       | message deletion failed (missing message, unauthorized user, invalid `delete_for`, or expired delete-for-everyone window) |
-| `chat.message.delivery_failed` | the change was saved but could not be broadcast; reload the conversation to sync it          |
-| `chat.upload_media.failed` | media message could not be sent                                                                |
-| `chat.read.failed`         | read update failed (conversation not found, bad `message_id`, …)                            |
-| `chat.typing.failed`       | typing publish failed                                                                          |
+| `error`                        | Cause                                                                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_payload`              | `chat.send` / `chat.upload_media` / `chat.read` / `chat.typing` body failed validation                              |
+| `self_send_not_allowed`        | `chat.upload_media` with `recipient_id` == self                                                                         |
+| `invalid_media_type`           | media type not in `image` / `video` / `file`                                                                          |
+| `missing_media_urls`           | empty `media_urls`                                                                                                        |
+| `invalid_media_urls`           | a URL is not a Cloudinary secure URL for this deployment                                                                    |
+| `chat.send.failed`             | message could not be sent (for example, you are not allowed to message the recipient)                                       |
+| `chat.edit.failed`             | message edit failed (missing message, invalid body, unauthorized user, deleted message, or expired edit window)             |
+| `chat.delete.failed`           | message deletion failed (missing message, unauthorized user, invalid `delete_for`, or expired delete-for-everyone window) |
+| `chat.message.delivery_failed` | the change was saved but could not be broadcast; reload the conversation to sync it                                         |
+| `chat.upload_media.failed`     | media message could not be sent                                                                                             |
+| `chat.read.failed`             | read update failed (conversation not found, bad `message_id`, …)                                                         |
+| `chat.typing.failed`           | typing publish failed                                                                                                       |
 
 DM handler errors are non-fatal: the socket stays open.
 
@@ -531,16 +533,16 @@ DM handler errors are non-fatal: the socket stays open.
 
 Group action errors do not close the shared socket.
 
-| Error | Cause |
-| ----- | ----- |
-| `invalid_group_id` | A group action is missing a valid `group_id`. |
-| `group.access.denied` | The signed-in user is not an active member of the group. |
-| `group.access.failed` | The server could not verify active group membership. |
-| `Message body cannot be empty` | `group_message` has a blank body. |
-| `group.message.failed` | The message could not be saved or validated, including an invalid mention. |
-| `group_message_edit.failed` | The edit was invalid, the message is missing/not in this group, or you are not its sender. |
-| `group_message_delete.failed` | The message is missing/not in this group, or you are not its sender. |
-| `group.message.delivery_failed` | The change was saved but could not be broadcast; reload group history to sync it. |
+| Error                             | Cause                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `invalid_group_id`              | A group action is missing a valid `group_id`.                                            |
+| `group.access.denied`           | The signed-in user is not an active member of the group.                                   |
+| `group.access.failed`           | The server could not verify active group membership.                                       |
+| `Message body cannot be empty`  | `group_message` has a blank body.                                                        |
+| `group.message.failed`          | The message could not be saved or validated, including an invalid mention.                 |
+| `group_message_edit.failed`     | The edit was invalid, the message is missing/not in this group, or you are not its sender. |
+| `group_message_delete.failed`   | The message is missing/not in this group, or you are not its sender.                       |
+| `group.message.delivery_failed` | The change was saved but could not be broadcast; reload group history to sync it.          |
 
 ---
 
@@ -559,16 +561,16 @@ The mobile events long-poll endpoint is available as an optional fallback:
 
 ## 10. Related REST endpoints
 
-| Purpose                           | Endpoint                                                       |
-| --------------------------------- | -------------------------------------------------------------- |
-| DM send (fallback without socket) | `POST /api/v1/chats/messages`                                |
-| DM conversations                  | `GET /api/v1/chats/conversations`                            |
-| DM messages                       | `GET /api/v1/chats/conversations/{conversation_id}/messages` |
-| Sign chat upload                  | `POST /api/v1/uploads/chat/sign`                             |
-| Group send                        | `POST /api/v1/groups/{group_id}/messages`                    |
-| Group history                     | `GET /api/v1/groups/{group_id}/messages`                     |
-| Delete group message              | `DELETE /api/v1/groups/{group_id}/messages/{message_id}?delete_for=me|everyone` |
-| Group members                     | `GET /api/v1/groups/{group_id}/members`                      |
+| Purpose                           | Endpoint                                                              |
+| --------------------------------- | --------------------------------------------------------------------- |
+| DM send (fallback without socket) | `POST /api/v1/chats/messages`                                       |
+| DM conversations                  | `GET /api/v1/chats/conversations`                                   |
+| DM messages                       | `GET /api/v1/chats/conversations/{conversation_id}/messages`        |
+| Sign chat upload                  | `POST /api/v1/uploads/chat/sign`                                    |
+| Group send                        | `POST /api/v1/groups/{group_id}/messages`                           |
+| Group history                     | `GET /api/v1/groups/{group_id}/messages`                            |
+| Delete group message              | `DELETE /api/v1/groups/{group_id}/messages/{message_id}?delete_for=me |
+| Group members                     | `GET /api/v1/groups/{group_id}/members`                             |
 
 ---
 
@@ -576,14 +578,14 @@ The mobile events long-poll endpoint is available as an optional fallback:
 
 ### Client → Server
 
-| Endpoint     | Types                                                                                                    |
-| ------------ | -------------------------------------------------------------------------------------------------------- |
+| Endpoint       | Types                                                                                                                                                                                                 |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/events/ws` | `ping`, `chat.send`, `chat.edit`, `chat.delete`, `chat.upload_media`, `chat.read`, `chat.typing`, `group_message`, `group_message_edit`, `group_message_delete`, `group_typing` |
 
 ### Server → Client
 
-| Endpoint     | Types                                                                                                                                                                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Endpoint       | Types                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/events/ws` | `chat.ready`, `pong`, `bouwnce.system`, `user.online.snapshot`, `user.online`, `chat.send.ack`, `chat.sent`, `chat.message`, `chat.message.updated`, `chat.message.deleted`, `chat.read.ack`, `chat.read.updated`, `chat.typing`, `group_message`, `group_message_sent`, `group_message_updated`, `group_message_deleted`, `group_typing`, `error` |
 
 ---

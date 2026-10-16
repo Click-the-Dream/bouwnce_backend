@@ -163,6 +163,7 @@ class ChatMessageReplyData(BaseModel):
     updated_at: datetime
     edited_at: datetime | None = None
     is_edited: bool = False
+    is_edit: bool = False
     deleted_for_everyone_at: datetime | None = None
     sender: ChatUserLite | None = None
     recipient: ChatUserLite | None = None

@@ -216,6 +216,7 @@ class EventGroupService:
                 group_id=group.id,
                 created_by=host_id,
             )
+            event.group_id = group.id
             db.add(link)
             await db.flush()
         else:
@@ -229,6 +230,8 @@ class EventGroupService:
             group = group_result.scalar_one_or_none()
             if group is None:
                 raise NotFoundException("The event group is no longer available")
+            if getattr(event, "group_id", None) != group.id:
+                event.group_id = group.id
 
         await cls._add_membership(
             db,

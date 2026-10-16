@@ -146,6 +146,13 @@ class Message(BaseModel):
         ),
     )
 
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        edited = bool(data.get("is_edited") or data.get("edited_at"))
+        data["is_edited"] = edited
+        data["is_edit"] = edited
+        return data
+
 
 class MessageDeletion(BaseModel):
     """Per-user deletion markers for direct messages."""
@@ -320,6 +327,13 @@ class GroupMessage(BaseModel):
         Index("ix_group_messages_created_at", "created_at"),
         Index("ix_group_messages_reply_to", "reply_to_message_id"),
     )
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        edited = bool(data.get("is_edited") or data.get("edited_at"))
+        data["is_edited"] = edited
+        data["is_edit"] = edited
+        return data
 
 
 class GroupMessageDeletion(BaseModel):

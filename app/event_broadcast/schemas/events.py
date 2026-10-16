@@ -43,6 +43,13 @@ class CreateEventSchema(BaseModel):
         list[str] | None,
         Field(default=None, description="List of interest tags for the event"),
     ]
+    create_group: Annotated[
+        bool,
+        Field(
+            default=False,
+            description="Create the event attendee group chat together with the event",
+        ),
+    ]
 
 
 class UpdateEventSchema(BaseModel):
@@ -93,6 +100,8 @@ class EventResponseData(BaseModel):
     creator_id: str
     created_at: str
     updated_at: str
+    group_id: str | None = None
+    has_group: bool = False
 
 
 class EventResponse(BaseResponse):

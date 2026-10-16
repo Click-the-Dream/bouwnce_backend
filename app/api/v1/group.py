@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -212,7 +212,10 @@ async def get_group_members(
         user_id=str(current_user.id),
     )
     return [
-        GroupMemberResponse(**member_data["member"])
+        GroupMemberResponse(
+            **member_data["member"],
+            user=member_data["user"],
+        )
         for member_data in result["data"]["members"]
     ]
 
@@ -276,7 +279,10 @@ async def send_message(
         reply_to_message_id=message_data.reply_to_message_id,
         mentioned_user_ids=message_data.mentioned_user_ids,
     )
-    return GroupMessageResponse(**result["data"]["message"])
+    return GroupMessageResponse(
+        **result["data"]["message"],
+        sender=result["data"]["sender"],
+    )
 
 
 @router.get(
@@ -311,7 +317,10 @@ async def get_group_messages(
         before_message_id=str(before_message_id) if before_message_id else None,
     )
     return [
-        GroupMessageResponse(**message_data["message"])
+        GroupMessageResponse(
+            **message_data["message"],
+            sender=message_data["sender"],
+        )
         for message_data in result["data"]["messages"]
     ]
 
@@ -337,6 +346,7 @@ async def update_message(
     """
     result = await group_service.update_message(
         db=db,
+        group_id=str(group_id),
         message_id=str(message_id),
         user_id=str(current_user.id),
         body=message_data.body,
@@ -357,12 +367,18 @@ async def delete_message(
     message_id: uuid.UUID,
     current_user: CurrentActiveUser,
     db: dbSessionDep,
+    delete_for: Annotated[
+        Literal["me", "everyone"],
+        Query(description="Delete only for you or for all group members"),
+    ] = "everyone",
 ) -> None:
-    """Delete a group message."""
+    """Delete a group message for the current user or for all group members."""
     await group_service.delete_message(
         db=db,
+        group_id=str(group_id),
         message_id=str(message_id),
         user_id=str(current_user.id),
+        delete_for=delete_for,
     )
     return None
 
@@ -486,7 +502,10 @@ async def get_group_stats(
 
     # Get actual message count
     message_result = await group_service.message_repo.get_group_messages(
-        db=db, group_id=str(group_id), page=1, page_size=1  # Just to get count
+        db=db,
+        group_id=str(group_id),
+        page=1,
+        page_size=1,  # Just to get count
     )
     message_count = message_result[1]  # total_count from the tuple
 

@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Self
 
-from sqlalchemy import UUID, Float, ForeignKey, Integer, String, func, select
+from sqlalchemy import (
+    UUID,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
@@ -17,6 +27,19 @@ if TYPE_CHECKING:
 
 class UserEventAttendance(BaseModel):
     __tablename__ = "user_event_attendance"
+
+    __table_args__ = (
+        Index(
+            "ix_user_event_attendance_confirmed_event_user",
+            "event_id",
+            "user_id",
+            postgresql_where=text(
+                "payment_status = 'successful' "
+                "AND attendance_status = 'confirmed' "
+                "AND is_deleted = false"
+            ),
+        ),
+    )
 
     user_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False

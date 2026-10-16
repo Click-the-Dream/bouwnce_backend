@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -140,6 +140,7 @@ class GroupMessageResponse(GroupMessageBase):
     edited_at: Annotated[
         datetime | None, Field(None, description="Last edit timestamp")
     ]
+    deleted_for_everyone_at: datetime | None = None
     is_edited: Annotated[bool, Field(..., description="Whether message was edited")]
     mentioned_user_ids: Annotated[
         list[uuid.UUID] | None, Field(None, description="List of mentioned user IDs")
@@ -170,6 +171,13 @@ class GroupMessageUpdate(BaseModel):
         list[str] | None,
         Field(None, description="List of media file names"),
     ]
+
+
+class GroupMessageDelete(BaseModel):
+    """Deletion scope for a group message."""
+
+    message_id: Annotated[uuid.UUID, Field(..., description="Message to delete")]
+    delete_for: Literal["me", "everyone"] = "everyone"
 
 
 class GroupInviteResponse(BaseModel):

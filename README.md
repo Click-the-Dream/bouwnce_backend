@@ -259,18 +259,20 @@ Ensures **code formatting, linting, and other checks** before commits.
 ### Realtime / WebSocket Contract
 
 The realtime chat contract for the frontend team lives in
-**[`docs/websocket-contract.md`](docs/websocket-contract.md)**. It documents both
-sockets end-to-end:
+**[`docs/websocket-contract.md`](docs/websocket-contract.md)**. Use this single
+socket for direct messages and group chat:
 
-| Chat                  | Endpoint                                                                    |
-| --------------------- | --------------------------------------------------------------------------- |
-| Direct messages (1:1) | `wss://<host>/api/v1/events/ws?token=<access_token>`                      |
-| Group chat            | `wss://<host>/api/v1/groups/ws/chat?token=<access_token>&group_id=<uuid>` |
+| Chat                   | Endpoint                                           |
+| ---------------------- | -------------------------------------------------- |
+| Direct and group chat  | `wss://<host>/api/v1/events/ws?token=<access_token>` |
 
-It covers authentication, connection lifecycle and close behaviour, every inbound
-and outbound frame with field tables and JSON examples, delivery/dedup and
-reconnect catch-up semantics, error frames, and the related push/notification
-side effects. Treat it as the source of truth when integrating the client.
+Send a `group_id` with group actions. The contract documents connection setup,
+client/server frames, reconnect behavior, and related REST endpoints. Treat it
+as the source of truth when integrating the client.
+
+Event hosts can create an optional attendee chat group at any time. Confirmed
+attendees are backfilled when the group is created and enrolled automatically
+as later ticket purchases are confirmed.
 
 ---
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.api.dependencies import CurrentUser, dbSessionDep
 from app.event_broadcast.schemas.events import (
@@ -8,6 +8,7 @@ from app.event_broadcast.schemas.events import (
     UpdateEventSchema,
     UpdateEventStatusSchema,
 )
+from app.event_broadcast.services.event_group import event_group_service
 from app.event_broadcast.services.events import event_service
 
 router = APIRouter(prefix="/events")
@@ -124,4 +125,41 @@ async def delete_event(
         db=db,
         current_user=current_user,
         event_id=event_id,
+    )
+
+
+@router.post(
+    "/{event_id}/group",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create or retrieve the event attendee group",
+)
+async def create_event_group(
+    event_id: str,
+    db: dbSessionDep,
+    current_user: CurrentUser,
+    response: Response,
+):
+    result = await event_group_service.create_or_get_for_host(
+        db=db,
+        event_id=event_id,
+        host_id=str(current_user.id),
+    )
+    response.status_code = result["status_code"]
+    return result
+
+
+@router.get(
+    "/{event_id}/group",
+    status_code=status.HTTP_200_OK,
+    summary="Get the event group for the host or a confirmed attendee",
+)
+async def get_event_group(
+    event_id: str,
+    db: dbSessionDep,
+    current_user: CurrentUser,
+):
+    return await event_group_service.get_for_attendee(
+        db=db,
+        event_id=event_id,
+        user_id=str(current_user.id),
     )

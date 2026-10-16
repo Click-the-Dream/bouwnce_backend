@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import time
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -54,6 +55,7 @@ _TYPING_USER_CACHE: dict[str, tuple[ChatUserLite, float]] = {}
 CHAT_DELIVERED_KEY_PREFIX = "chat:delivered:"
 CHAT_LOCAL_DELIVERY_TTL_SECONDS = 300.0
 ACTIVE_CHAT_LOCAL_DELIVERIES: dict[str, float] = {}
+CHAT_EXCLUDED_CONNECTION_FIELD = "_exclude_connection_id"
 
 # Connection registry (imported by main service)
 ACTIVE_CHAT_CONNECTIONS: dict[
@@ -190,7 +192,6 @@ class ChatDelivery:
                 message_id=str(message_id),
             )
         except Exception:
-
             return False
 
     async def _check_notification_read_status(
@@ -239,7 +240,6 @@ class ChatDelivery:
 
                 return False
         except Exception:
-
             return False
 
     async def _should_deliver_chat_message(
@@ -519,18 +519,25 @@ class ChatDelivery:
         *,
         redis,
         sender_id: str,
+        sender_connection_id: str | None = None,
         recipient_id: str,
         conversation_id: str,
         payload: ChatMessageEvent,
     ) -> None:
         payload_json = payload.model_dump_json()
+        sender_payload_json = payload_json
+        if sender_connection_id:
+            sender_payload = payload.model_dump(mode="json")
+            sender_payload[CHAT_EXCLUDED_CONNECTION_FIELD] = sender_connection_id
+            sender_payload_json = json.dumps(sender_payload)
+
         await self._send_chat_message_direct(
             redis=redis, recipient_id=recipient_id, payload=payload
         )
         with contextlib.suppress(Exception):
             async with redis.pipeline() as pipe:
                 pipe.publish(f"chat:conversation:{conversation_id}", payload_json)
-                pipe.publish(f"chat:user:{sender_id}", payload_json)
+                pipe.publish(f"chat:user:{sender_id}", sender_payload_json)
                 pipe.publish(f"chat:user:{recipient_id}", payload_json)
                 pipe.xadd(
                     f"{CHAT_EVENTS_STREAM_KEY_PREFIX}{recipient_id}",
@@ -553,11 +560,13 @@ class ChatDelivery:
         recipient_id: str,
         conversation_id: str,
         payload: ChatMessageEvent,
+        sender_connection_id: str | None = None,
         client_id: str | None = None,
     ) -> None:
         await self._publish_chat_message_fanout(
             redis=redis,
             sender_id=sender_id,
+            sender_connection_id=sender_connection_id,
             recipient_id=recipient_id,
             conversation_id=conversation_id,
             payload=payload,
@@ -584,6 +593,7 @@ class ChatDelivery:
         send_lock: asyncio.Lock,
         redis,
         sender_id: str,
+        sender_connection_id: str,
         recipient_id: str,
         body: str | None,
         reply_to_message_id: str | None,
@@ -606,7 +616,7 @@ class ChatDelivery:
                     as_response=False,
                     persist_notification=False,
                     notify_side_effects=False,
-                    publish_redis_fanout=True,
+                    publish_redis_fanout=False,
                 )
         except (
             NotFoundException,
@@ -642,6 +652,7 @@ class ChatDelivery:
             send_lock=send_lock,
             redis=redis,
             sender_id=str(sender_id),
+            sender_connection_id=sender_connection_id,
             recipient_id=str(recipient_id),
             conversation_id=str(result["conversation_id"]),
             payload=ChatMessageEvent(data=message_data),
@@ -655,6 +666,7 @@ class ChatDelivery:
         send_lock: asyncio.Lock,
         redis,
         sender_id: str,
+        sender_connection_id: str,
         recipient_id: str,
         body: str | None,
         media_urls: list[str],
@@ -683,7 +695,7 @@ class ChatDelivery:
                     as_response=False,
                     persist_notification=False,
                     notify_side_effects=False,
-                    publish_redis_fanout=True,
+                    publish_redis_fanout=False,
                 )
         except (
             NotFoundException,
@@ -722,6 +734,7 @@ class ChatDelivery:
             send_lock=send_lock,
             redis=redis,
             sender_id=str(sender_id),
+            sender_connection_id=sender_connection_id,
             recipient_id=str(recipient_id),
             conversation_id=str(result["conversation_id"]),
             payload=ChatMessageEvent(data=message_data),

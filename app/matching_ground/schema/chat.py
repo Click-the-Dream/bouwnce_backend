@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,16 @@ class SendMessagePayload(BaseModel):
             description="Reply to message id (uuid)",
         ),
     ]
+
+
+class ChatEditMessagePayload(BaseModel):
+    message_id: Annotated[uuid.UUID, Field(..., description="Message to edit")]
+    body: Annotated[str, Field(..., min_length=1, max_length=4000)]
+
+
+class ChatDeleteMessagePayload(BaseModel):
+    message_id: Annotated[uuid.UUID, Field(..., description="Message to delete")]
+    delete_for: Literal["me", "everyone"] = "everyone"
 
 
 class MarkConversationReadPayload(BaseModel):
@@ -151,6 +161,9 @@ class ChatMessageReplyData(BaseModel):
     id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    edited_at: datetime | None = None
+    is_edited: bool = False
+    deleted_for_everyone_at: datetime | None = None
     sender: ChatUserLite | None = None
     recipient: ChatUserLite | None = None
 

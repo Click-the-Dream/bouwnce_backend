@@ -6,7 +6,6 @@ from app.api.v1 import (
     cart_router,
     contact_info_crud,
     group,
-    group_ws,
     jobs,
     mobile_events,
     newsletter,
@@ -96,7 +95,6 @@ api_router.include_router(uploads.router)
 api_router.include_router(chat.router)
 api_router.include_router(admin_bouwnce.router)
 api_router.include_router(group.router)
-api_router.include_router(group_ws.router)
 api_router.include_router(notifications.router)
 api_router.include_router(push.router)
 api_router.include_router(event_router)

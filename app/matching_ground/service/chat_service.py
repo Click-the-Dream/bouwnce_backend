@@ -9,6 +9,7 @@ This file stays ~600 lines: send_message, send_media_message, list, get, partner
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from fastapi import status
@@ -19,7 +20,11 @@ from app.matching_ground.repositories.chat_repository import chat_repository
 from app.matching_ground.service.chat_read import ChatReadOps
 from app.models.user import User
 from app.utils.chat_utils import ChatSerializers
-from app.utils.exception import ForbiddenException, NotFoundException
+from app.utils.exception import (
+    BadRequestException,
+    ForbiddenException,
+    NotFoundException,
+)
 from app.utils.responses import response_builder
 from app.worker.event_system import (
     EventNames,
@@ -211,6 +216,112 @@ class ChatService(ChatSerializers, ChatReadOps):
 
         return result
 
+    async def edit_message(
+        self, *, db: AsyncSession, message_id: str, user_id: str, body: str
+    ) -> dict:
+        body = body.strip()
+        if not body:
+            raise BadRequestException("Message body cannot be empty")
+        message = await chat_repository.find_message(db, message_id)
+        if message is None:
+            raise NotFoundException("Message not found")
+        if str(message.sender_id) != str(user_id):
+            raise ForbiddenException("You can only edit your own messages")
+        if message.deleted_for_everyone_at is not None:
+            raise BadRequestException("A deleted message cannot be edited")
+
+        timeout = settings.MESSAGE_EDIT_TIMEOUT_SECONDS
+        edited_after = datetime.now(UTC) - timedelta(seconds=timeout)
+        if message.created_at < edited_after:
+            raise BadRequestException(
+                f"Message edit window expired ({timeout} seconds)"
+            )
+
+        updated = await chat_repository.update_message_body(
+            db, message_id, body, str(user_id), edited_after
+        )
+        if updated is None:
+            raise BadRequestException("Message can no longer be edited")
+
+        users = await chat_repository.get_users(
+            db, [str(updated.sender_id), str(updated.recipient_id)]
+        )
+        users_by_id = {str(user.id): user for user in users}
+        sender = users_by_id.get(str(updated.sender_id))
+        recipient = users_by_id.get(str(updated.recipient_id))
+        if sender is None or recipient is None:
+            raise NotFoundException("Message participants not found")
+
+        payload = self._build_chat_message_data(
+            msg=updated,
+            sender=sender,
+            recipient=recipient,
+            reply_obj=False,
+        ).model_dump(mode="json")
+        await db.commit()
+        return {
+            "conversation_id": str(updated.conversation_id),
+            "sender_id": str(updated.sender_id),
+            "recipient_id": str(updated.recipient_id),
+            "message": payload,
+        }
+
+    async def delete_message(
+        self,
+        *,
+        db: AsyncSession,
+        message_id: str,
+        user_id: str,
+        delete_for: str = "everyone",
+    ) -> dict:
+        message = await chat_repository.find_message(db, message_id)
+        if message is None:
+            raise NotFoundException("Message not found")
+        deleted_for_everyone_at = None
+        if delete_for == "me":
+            if str(user_id) not in {
+                str(message.sender_id),
+                str(message.recipient_id),
+            }:
+                raise ForbiddenException("You cannot access this message")
+            await chat_repository.delete_for_user(db, message_id, user_id)
+            deleted_for = [str(user_id)]
+        elif delete_for == "everyone":
+            if str(message.sender_id) != str(user_id):
+                raise ForbiddenException("You can only delete your own messages")
+            timeout = settings.MESSAGE_DELETE_EVERYONE_TIMEOUT_SECONDS
+            delete_after = datetime.now(UTC) - timedelta(seconds=timeout)
+            if message.created_at < delete_after:
+                raise BadRequestException(
+                    f"Delete-for-everyone window expired ({timeout} seconds)"
+                )
+            if message.deleted_for_everyone_at is not None:
+                raise BadRequestException("Message was already deleted")
+            deleted = await chat_repository.delete_for_everyone(
+                db, message_id, user_id, delete_after
+            )
+            if deleted is None:
+                raise BadRequestException("Message can no longer be deleted")
+            deleted_for_everyone_at = (
+                deleted.deleted_for_everyone_at.isoformat()
+                if deleted.deleted_for_everyone_at
+                else None
+            )
+            deleted_for = [str(message.sender_id), str(message.recipient_id)]
+        else:
+            raise BadRequestException("delete_for must be 'me' or 'everyone'")
+
+        await db.commit()
+        return {
+            "conversation_id": str(message.conversation_id),
+            "sender_id": str(message.sender_id),
+            "recipient_id": str(message.recipient_id),
+            "message_id": str(message.id),
+            "delete_for": delete_for,
+            "deleted_for": deleted_for,
+            "deleted_for_everyone_at": deleted_for_everyone_at,
+        }
+
     async def send_media_message(
         self,
         *,
@@ -393,7 +504,7 @@ class ChatService(ChatSerializers, ChatReadOps):
         )
         conversation_ids = [conversation.id for conversation in rows]
         last_by_conversation_id = await chat_repository.get_latest_messages(
-            db, conversation_ids
+            db, conversation_ids, user_id
         )
         unread_by_conversation_id = await chat_repository.get_unread_counts(
             db, conversation_ids, user_id
@@ -456,7 +567,9 @@ class ChatService(ChatSerializers, ChatReadOps):
         if current_id not in {str(conv.user_a_id), str(conv.user_b_id)}:
             raise ForbiddenException("You cannot access this conversation")
 
-        msgs, total = await chat_repository.list_messages(db, conv.id, page, page_size)
+        msgs, total = await chat_repository.list_messages(
+            db, conv.id, current_id, page, page_size
+        )
 
         reply_ids: set[str] = set()
         user_ids: set[str] = set()
@@ -468,7 +581,9 @@ class ChatService(ChatSerializers, ChatReadOps):
 
         reply_by_id = {}
         if reply_ids:
-            reply_rows = await chat_repository.get_messages_by_ids(db, reply_ids)
+            reply_rows = await chat_repository.get_messages_by_ids(
+                db, reply_ids, current_id
+            )
             reply_by_id = {str(r.id): r for r in reply_rows}
             for r in reply_rows:
                 user_ids.add(str(r.sender_id))

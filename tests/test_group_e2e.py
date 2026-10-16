@@ -1,9 +1,8 @@
-"""End-to-end tests for the group chat feature.
+"""End-to-end tests for group APIs and shared events delivery.
 
-These run against the REAL FastAPI app, REAL Postgres and REAL Redis. Users are
-seeded directly in the database and authenticated with real JWTs (the same
-approach used by ``test_web_push_e2e.py``). All test-created state (users,
-groups, memberships, messages) is cleaned up afterwards.
+API and realtime scenarios use real Postgres and Redis. API requests use the
+same JWT authentication as clients. Test-created users, groups, memberships,
+and messages are cleaned up afterwards.
 """
 
 from __future__ import annotations
@@ -16,19 +15,14 @@ from uuid import uuid4
 import httpx
 from httpx import ASGITransport
 from sqlalchemy import text
-from starlette.datastructures import QueryParams
-from starlette.websockets import WebSocketDisconnect
 
 from app.core.security import create_token
 from app.db.postgres_db_conn import engine, get_async_session
 from app.db.redis import close_redis_client, get_redis_client
 from app.models.user import User
 from app.service.group_service import group_service
-from app.service.group_ws_service import (
-    deliver_group_payload,
-    group_pubsub_dispatcher,
-    handle_group_websocket,
-)
+from app.service.group_ws_service import process_group_action
+from app.service.ws_presence import pubsub_dispatcher
 from main import app
 
 API = "/api/v1/groups"
@@ -45,6 +39,7 @@ class GroupE2EBase:
         return await User.create(
             {
                 "email": f"e2e_group_{uuid4().hex[:12]}@bouwnce.test",
+                "username": f"e2e_{uuid4().hex[:12]}",
                 "full_name": "E2E Group Tester",
                 "role": "user",
                 "is_store_owner": False,
@@ -95,11 +90,10 @@ class GroupE2EBase:
         try:
             await fn()
         finally:
-            # The group dispatcher is a module singleton whose background task is
-            # bound to this loop; stop it before the loop is torn down so the
-            # next test can start it cleanly.
+            # The shared dispatcher task is bound to this loop; stop it before
+            # the loop is torn down so the next test can start it cleanly.
             with contextlib.suppress(Exception):
-                await group_pubsub_dispatcher.stop()
+                await pubsub_dispatcher.stop()
             await close_redis_client()
             await engine.dispose()
 
@@ -197,9 +191,13 @@ class TestGroupApiE2E(GroupE2EBase):
                     f"{API}/{group['id']}/members", headers=member_h
                 )
                 assert resp.status_code == 200, resp.text
-                member_ids = {m["user_id"] for m in resp.json()}
+                members = resp.json()
+                member_ids = {m["user_id"] for m in members}
                 assert str(owner.id) in member_ids
                 assert str(member.id) in member_ids
+                owner_member = next(m for m in members if m["user_id"] == str(owner.id))
+                assert owner_member["user"]["id"] == str(owner.id)
+                assert owner_member["user"]["username"] == owner.username
 
                 # ----- send message (member) -----
                 resp = await client.post(
@@ -211,6 +209,7 @@ class TestGroupApiE2E(GroupE2EBase):
                 message = resp.json()
                 assert message["body"] == "hello group"
                 assert message["sender_id"] == str(member.id)
+                assert message["sender"]["id"] == str(member.id)
 
                 # ----- non-member cannot send -----
                 resp = await client.post(
@@ -226,6 +225,9 @@ class TestGroupApiE2E(GroupE2EBase):
                 )
                 assert resp.status_code == 200, resp.text
                 assert len(resp.json()) == 1
+                assert resp.json()[0]["id"] == message["id"]
+                assert resp.json()[0]["body"] == "hello group"
+                assert resp.json()[0]["sender"]["id"] == str(member.id)
 
                 # ----- edit own message -----
                 resp = await client.patch(
@@ -347,50 +349,13 @@ class TestGroupApiE2E(GroupE2EBase):
 
 
 class FakeWebSocket:
-    """Minimal WebSocket stand-in for driving ``handle_group_websocket``."""
+    """Minimal WebSocket stand-in for the shared events connection."""
 
-    def __init__(
-        self,
-        token: str,
-        group_id: str,
-        incoming: list[str] | None = None,
-    ) -> None:
-        self.query_params = QueryParams({"token": token, "group_id": group_id})
-        self._incoming: asyncio.Queue = asyncio.Queue()
-        for item in incoming or []:
-            self._incoming.put_nowait(item)
-        self.sent: list[dict | str] = []
-        self.accepted = False
-        self.closed = False
-
-    async def accept(self) -> None:
-        self.accepted = True
-
-    async def receive_text(self) -> str:
-        item = await self._incoming.get()
-        if item == "__close__":
-            raise WebSocketDisconnect(code=1000)
-        return item
-
-    async def send_text(self, payload: str) -> None:
-        try:
-            self.sent.append(json.loads(payload))
-        except json.JSONDecodeError:
-            self.sent.append(payload)
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
 
     async def send_json(self, payload: dict) -> None:
         self.sent.append(payload)
-
-    async def close(self, code: int = 1000) -> None:
-        self.closed = True
-        self._incoming.put_nowait("__close__")
-
-    def close_later(self) -> None:
-        self._incoming.put_nowait("__close__")
-
-    def feed(self, payload: dict) -> None:
-        """Queue an inbound frame for the running handler to process."""
-        self._incoming.put_nowait(json.dumps(payload))
 
     def messages(self, message_type: str) -> list[dict]:
         return [
@@ -400,20 +365,38 @@ class FakeWebSocket:
         ]
 
 
-class TestGroupWebSocketE2E(GroupE2EBase):
-    def test_member_receives_broadcast_and_non_member_is_rejected(self):
+async def _register_events_socket(
+    user_id: str, connection_id: str, websocket: FakeWebSocket
+) -> None:
+    async def send(payload: dict, _: asyncio.Lock | None) -> bool:
+        await websocket.send_json(payload)
+        return True
+
+    await pubsub_dispatcher.register(
+        user_id=user_id,
+        connection_id=connection_id,
+        send_callback=send,
+    )
+
+
+class TestGroupEventsSocketE2E(GroupE2EBase):
+    def test_group_actions_use_shared_events_sockets(self):
         async def fn():
             group_ids: list[str] = []
+            redis = await get_redis_client()
             async with get_async_session() as db:
                 owner = await self._create_user(db)
                 member = await self._create_user(db)
                 outsider = await self._create_user(db)
 
+            owner_ws = FakeWebSocket()
+            member_ws = FakeWebSocket()
+            outsider_ws = FakeWebSocket()
             try:
                 async with get_async_session() as db:
                     created = await group_service.create_group(
                         db=db,
-                        name=f"ws-{uuid4().hex[:10]}",
+                        name=f"events-{uuid4().hex[:10]}",
                         created_by=str(owner.id),
                     )
                     group_id = created["data"]["group"]["id"]
@@ -426,61 +409,100 @@ class TestGroupWebSocketE2E(GroupE2EBase):
                         added_by=str(owner.id),
                     )
 
-                owner_token = create_token(str(owner.id))
-                member_token = create_token(str(member.id))
-                outsider_token = create_token(str(outsider.id))
+                await pubsub_dispatcher.start(redis)
+                await _register_events_socket(str(owner.id), "owner", owner_ws)
+                await _register_events_socket(str(member.id), "member", member_ws)
+                send_lock = asyncio.Lock()
 
-                # A non-member must be rejected (closed with code 1008).
-                outsider_ws = FakeWebSocket(outsider_token, group_id)
-                await handle_group_websocket(outsider_ws, outsider_token)
-                assert outsider_ws.closed is True
-                assert outsider_ws.accepted is False
-
-                member_ws = FakeWebSocket(member_token, group_id)
-                member_task = asyncio.create_task(
-                    handle_group_websocket(member_ws, member_token)
+                await process_group_action(
+                    websocket=owner_ws,
+                    redis=redis,
+                    message_data={
+                        "type": "group_message",
+                        "group_id": group_id,
+                        "body": "shared socket message",
+                        "client_id": "client-1",
+                    },
+                    user_id=str(owner.id),
+                    send_lock=send_lock,
                 )
-                await self._wait_until(lambda: member_ws.accepted)
-
-                owner_ws = FakeWebSocket(
-                    owner_token,
-                    group_id,
-                    incoming=[json.dumps({"type": "group_message", "body": "hi ws"})],
-                )
-                owner_task = asyncio.create_task(
-                    handle_group_websocket(owner_ws, owner_token)
-                )
-                await self._wait_until(lambda: owner_ws.accepted)
-
                 await self._wait_until(
-                    lambda: bool(member_ws.messages("group_message"))
-                    and bool(owner_ws.messages("group_message_sent"))
+                    lambda: (
+                        bool(member_ws.messages("group_message"))
+                        and bool(owner_ws.messages("group_message_sent"))
+                        and bool(owner_ws.messages("group_message"))
+                    )
                 )
-                delivered = member_ws.messages("group_message")
-                assert delivered[0]["data"]["body"] == "hi ws"
-                assert delivered[0]["data"]["sender_id"] == str(owner.id)
-                assert owner_ws.messages("group_message_sent")
+                assert member_ws.messages("group_message")[0]["data"]["body"] == (
+                    "shared socket message"
+                )
+                assert owner_ws.messages("group_message_sent")[0]["client_id"] == (
+                    "client-1"
+                )
+                assert owner_ws.messages("group_message")
 
-                member_ws.close_later()
-                owner_ws.close_later()
-                with contextlib.suppress(Exception):
-                    await member_task
-                with contextlib.suppress(Exception):
-                    await owner_task
+                async with httpx.AsyncClient(
+                    transport=ASGITransport(app=app), base_url=BASE_URL
+                ) as client:
+                    history = await client.get(
+                        f"{API}/{group_id}/messages",
+                        headers=self._auth(owner),
+                    )
+                assert history.status_code == 200, history.text
+                assert len(history.json()) == 1
+                assert history.json()[0]["body"] == "shared socket message"
+                assert history.json()[0]["sender"]["id"] == str(owner.id)
+
+                await process_group_action(
+                    websocket=outsider_ws,
+                    redis=redis,
+                    message_data={
+                        "type": "group_message",
+                        "group_id": group_id,
+                        "body": "not allowed",
+                    },
+                    user_id=str(outsider.id),
+                    send_lock=asyncio.Lock(),
+                )
+                assert outsider_ws.messages("error")[0]["error"] == (
+                    "group.access.denied"
+                )
+                assert not member_ws.messages("group_message")[1:]
+
+                await process_group_action(
+                    websocket=owner_ws,
+                    redis=redis,
+                    message_data={
+                        "type": "group_typing",
+                        "group_id": group_id,
+                        "is_typing": True,
+                    },
+                    user_id=str(owner.id),
+                    send_lock=send_lock,
+                )
+                await self._wait_until(lambda: bool(member_ws.messages("group_typing")))
+                assert member_ws.messages("group_typing")[-1]["data"]["user_id"] == (
+                    str(owner.id)
+                )
+                assert member_ws.messages("group_typing")[-1]["data"]["username"] == (
+                    owner.username
+                )
+                assert not owner_ws.messages("group_typing")
             finally:
+                await pubsub_dispatcher.unregister(
+                    user_id=str(owner.id), connection_id="owner"
+                )
+                await pubsub_dispatcher.unregister(
+                    user_id=str(member.id), connection_id="member"
+                )
                 async with get_async_session() as db:
                     await self._cleanup(db, [owner, member, outsider], group_ids)
 
         self.run(self._scenario_db(fn))
 
 
-class TestGroupWebSocketParityE2E(GroupE2EBase):
-    """WebSocket delivery paths that mirror the direct-message chat model.
-
-    These exercise the Redis pub/sub fan-out (cross-worker delivery), the
-    per-group stream catch-up on reconnect, and the push/mobile + notification
-    side effects that offline members receive.
-    """
+class TestGroupEventsParityE2E(GroupE2EBase):
+    """Shared events socket fan-out and offline notification behavior."""
 
     async def _setup_group(self, users: list[User]) -> str:
         """Create a group owned by ``users[0]`` with the rest as members."""
@@ -502,13 +524,6 @@ class TestGroupWebSocketParityE2E(GroupE2EBase):
         return group_id
 
     @staticmethod
-    async def _cleanup_group_redis(redis, group_id, user_ids) -> None:
-        keys = [f"group:events:stream:{group_id}"]
-        keys += [f"group:events:last:{group_id}:{uid}" for uid in user_ids]
-        with contextlib.suppress(Exception):
-            await redis.delete(*keys)
-
-    @staticmethod
     async def _wait_for_push(redis, queue_key: str, user_id: str, timeout: float = 5.0):
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
@@ -524,7 +539,7 @@ class TestGroupWebSocketParityE2E(GroupE2EBase):
         raise AssertionError("push notification was not enqueued in time")
 
     def test_cross_worker_pubsub_fanout_and_typing(self):
-        """A socket that is not in this worker's manager still gets frames."""
+        """Every signed-in device gets group frames over the shared dispatcher."""
 
         async def fn():
             group_ids: list[str] = []
@@ -532,69 +547,74 @@ class TestGroupWebSocketParityE2E(GroupE2EBase):
             async with get_async_session() as db:
                 owner = await self._create_user(db)
                 member = await self._create_user(db)
-            owner_task = None
+            owner_ws = FakeWebSocket()
+            first_device_ws = FakeWebSocket()
+            second_device_ws = FakeWebSocket()
             try:
                 group_id = await self._setup_group([owner, member])
                 group_ids.append(group_id)
-                owner_token = create_token(str(owner.id))
-                member_token = create_token(str(member.id))
-
-                # Worker A: only the owner has a local socket.
-                owner_ws = FakeWebSocket(owner_token, group_id)
-                owner_task = asyncio.create_task(
-                    handle_group_websocket(owner_ws, owner_token)
-                )
-                await self._wait_until(lambda: owner_ws.accepted)
-                await self._wait_until(lambda: bool(owner_ws.messages("group.ready")))
-
-                # Worker B: register a member socket directly with the shared
-                # dispatcher. It is NOT in this worker's connection manager, so
-                # the only way it can receive anything is the Redis pub/sub path.
-                await group_pubsub_dispatcher.start(redis)
-                remote_ws = FakeWebSocket(member_token, group_id)
-                await group_pubsub_dispatcher.register(
-                    user_id=str(member.id),
-                    connection_id="remote-worker",
-                    send_callback=lambda payload, _lock: deliver_group_payload(
-                        redis=redis,
-                        websocket=remote_ws,
-                        payload=payload,
-                        user_id=str(member.id),
-                        send_lock=None,
-                    ),
+                await pubsub_dispatcher.start(redis)
+                await _register_events_socket(str(owner.id), "owner", owner_ws)
+                await _register_events_socket(str(member.id), "phone", first_device_ws)
+                await _register_events_socket(
+                    str(member.id), "browser", second_device_ws
                 )
 
-                owner_ws.feed({"type": "group_message", "body": "from worker A"})
+                await process_group_action(
+                    websocket=owner_ws,
+                    redis=redis,
+                    message_data={
+                        "type": "group_message",
+                        "group_id": group_id,
+                        "body": "from worker A",
+                    },
+                    user_id=str(owner.id),
+                    send_lock=asyncio.Lock(),
+                )
                 await self._wait_until(
-                    lambda: bool(remote_ws.messages("group_message"))
+                    lambda: (
+                        bool(first_device_ws.messages("group_message"))
+                        and bool(second_device_ws.messages("group_message"))
+                    )
                 )
-                delivered = remote_ws.messages("group_message")[-1]
+                delivered = first_device_ws.messages("group_message")[-1]
                 assert delivered["data"]["body"] == "from worker A"
                 assert delivered["data"]["sender_id"] == str(owner.id)
+                assert second_device_ws.messages("group_message")[-1] == delivered
 
-                # Typing is pub/sub-only and must never echo back to the sender.
-                owner_ws.feed({"type": "group_typing", "is_typing": True})
-                await self._wait_until(lambda: bool(remote_ws.messages("group_typing")))
-                typing = remote_ws.messages("group_typing")[-1]
+                await process_group_action(
+                    websocket=owner_ws,
+                    redis=redis,
+                    message_data={
+                        "type": "group_typing",
+                        "group_id": group_id,
+                        "is_typing": True,
+                    },
+                    user_id=str(owner.id),
+                    send_lock=asyncio.Lock(),
+                )
+                await self._wait_until(
+                    lambda: bool(first_device_ws.messages("group_typing"))
+                )
+                typing = first_device_ws.messages("group_typing")[-1]
                 assert typing["data"]["user_id"] == str(owner.id)
+                assert typing["data"]["username"] == owner.username
                 assert typing["data"]["is_typing"] is True
                 assert not owner_ws.messages("group_typing")
             finally:
-                with contextlib.suppress(Exception):
-                    await group_pubsub_dispatcher.unregister(
-                        user_id=str(member.id), connection_id="remote-worker"
-                    )
-                if owner_task is not None:
-                    with contextlib.suppress(Exception):
-                        owner_ws.close_later()
-                        await owner_task
+                await pubsub_dispatcher.unregister(
+                    user_id=str(owner.id), connection_id="owner"
+                )
+                await pubsub_dispatcher.unregister(
+                    user_id=str(member.id), connection_id="phone"
+                )
+                await pubsub_dispatcher.unregister(
+                    user_id=str(member.id), connection_id="browser"
+                )
                 with contextlib.suppress(Exception):
                     from app.worker.tasks.web_push import PUSH_QUEUE_KEY
 
                     await redis.delete(PUSH_QUEUE_KEY)
-                await self._cleanup_group_redis(
-                    redis, group_id if group_ids else "", [owner.id, member.id]
-                )
                 async with get_async_session() as db:
                     await self._cleanup(db, [owner, member], group_ids)
 
@@ -611,24 +631,22 @@ class TestGroupWebSocketParityE2E(GroupE2EBase):
             async with get_async_session() as db:
                 owner = await self._create_user(db)
                 member = await self._create_user(db)
-            owner_task = None
             try:
                 group_id = await self._setup_group([owner, member])
                 group_ids.append(group_id)
-                owner_token = create_token(str(owner.id))
 
                 # The member never opens a socket: it must still be notified.
-                owner_ws = FakeWebSocket(
-                    owner_token,
-                    group_id,
-                    incoming=[
-                        json.dumps({"type": "group_message", "body": "ping offline"})
-                    ],
+                await process_group_action(
+                    websocket=FakeWebSocket(),
+                    redis=redis,
+                    message_data={
+                        "type": "group_message",
+                        "group_id": group_id,
+                        "body": "ping offline",
+                    },
+                    user_id=str(owner.id),
+                    send_lock=asyncio.Lock(),
                 )
-                owner_task = asyncio.create_task(
-                    handle_group_websocket(owner_ws, owner_token)
-                )
-                await self._wait_until(lambda: owner_ws.accepted)
 
                 payload = await self._wait_for_push(
                     redis, PUSH_QUEUE_KEY, str(member.id)
@@ -656,94 +674,8 @@ class TestGroupWebSocketParityE2E(GroupE2EBase):
                 assert rows[0]["event_type"] == "group_message"
                 assert rows[0]["payload"]["group_id"] == group_id
             finally:
-                if owner_task is not None:
-                    with contextlib.suppress(Exception):
-                        owner_ws.close_later()
-                        await owner_task
                 with contextlib.suppress(Exception):
                     await redis.delete(PUSH_QUEUE_KEY)
-                await self._cleanup_group_redis(
-                    redis, group_ids[0] if group_ids else "", [owner.id, member.id]
-                )
-                async with get_async_session() as db:
-                    await self._cleanup(db, [owner, member], group_ids)
-
-        self.run(self._scenario_db(fn))
-
-    def test_reconnect_replays_missed_message_from_stream(self):
-        """A member that reconnects catches up on messages sent while away."""
-        from app.worker.tasks.web_push import PUSH_QUEUE_KEY
-
-        async def fn():
-            group_ids: list[str] = []
-            redis = await get_redis_client()
-            await redis.delete(PUSH_QUEUE_KEY)
-            async with get_async_session() as db:
-                owner = await self._create_user(db)
-                member = await self._create_user(db)
-            owner_ws = member_ws = None
-            owner_task = member_task = None
-            try:
-                group_id = await self._setup_group([owner, member])
-                group_ids.append(group_id)
-                owner_token = create_token(str(owner.id))
-                member_token = create_token(str(member.id))
-
-                # The member connects once (this anchors its stream cursor)
-                # and then drops before any message is sent.
-                first_member_ws = FakeWebSocket(member_token, group_id)
-                first_task = asyncio.create_task(
-                    handle_group_websocket(first_member_ws, member_token)
-                )
-                await self._wait_until(lambda: first_member_ws.accepted)
-                await self._wait_until(
-                    lambda: bool(first_member_ws.messages("group.ready"))
-                )
-                first_member_ws.close_later()
-                await first_task
-
-                # The owner sends while the member is offline.
-                owner_ws = FakeWebSocket(
-                    owner_token,
-                    group_id,
-                    incoming=[
-                        json.dumps({"type": "group_message", "body": "missed you"})
-                    ],
-                )
-                owner_task = asyncio.create_task(
-                    handle_group_websocket(owner_ws, owner_token)
-                )
-                await self._wait_until(lambda: owner_ws.accepted)
-                await self._wait_until(
-                    lambda: bool(owner_ws.messages("group_message_sent"))
-                )
-
-                # On reconnect the missed message must be replayed from the
-                # per-group Redis stream.
-                member_ws = FakeWebSocket(member_token, group_id)
-                member_task = asyncio.create_task(
-                    handle_group_websocket(member_ws, member_token)
-                )
-                await self._wait_until(lambda: member_ws.accepted)
-                await self._wait_until(
-                    lambda: bool(member_ws.messages("group_message"))
-                )
-                caught_up = member_ws.messages("group_message")[-1]
-                assert caught_up["data"]["body"] == "missed you"
-            finally:
-                for websocket, task in (
-                    (member_ws, member_task),
-                    (owner_ws, owner_task),
-                ):
-                    if task is not None and websocket is not None:
-                        websocket.close_later()
-                        with contextlib.suppress(Exception):
-                            await task
-                with contextlib.suppress(Exception):
-                    await redis.delete(PUSH_QUEUE_KEY)
-                await self._cleanup_group_redis(
-                    redis, group_ids[0] if group_ids else "", [owner.id, member.id]
-                )
                 async with get_async_session() as db:
                     await self._cleanup(db, [owner, member], group_ids)
 

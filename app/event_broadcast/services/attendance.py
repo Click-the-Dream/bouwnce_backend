@@ -524,6 +524,13 @@ class AttendanceService:
         attendance.payment_status = "successful"
         attendance.attendance_status = "confirmed"
         await attendance.save(db)
+        from app.event_broadcast.services.event_group import event_group_service
+
+        event_group_id = await event_group_service.add_confirmed_attendee(
+            db=db,
+            event_id=str(attendance.event_id),
+            user_id=str(attendance.user_id),
+        )
 
         tickets = await create_tickets_with_qr(
             db, attendance=attendance, selections=attendance.ticket_info
@@ -547,6 +554,8 @@ class AttendanceService:
                 "event_id": str(attendance.event_id),
                 "ticket_count": len(tickets),
             }
+            if event_group_id:
+                event_payload["group_id"] = event_group_id
             await dispatch_event(
                 EventNames.MOBILE_EVENT,
                 MobileEvent(event_name="event.tickets.issued", payload=event_payload),

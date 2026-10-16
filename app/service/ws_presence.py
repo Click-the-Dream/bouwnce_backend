@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import inspect
 import json
+import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import WebSocket
@@ -28,11 +29,47 @@ from app.matching_ground.service.bouwnce_dm_service import bouwnce_dm_service
 from app.matching_ground.service.chat_service import chat_service
 from app.models.chat import Conversation, Message
 from app.models.user import User
-from app.service.ws_chat import ACTIVE_CHAT_CONNECTIONS
 from app.utils.exception import NotFoundException
 
 PRESENCE_KEY_PREFIX = "presence:user:"
+PRESENCE_CONNECTIONS_KEY_PREFIX = "presence:user:connections:"
 PRESENCE_TTL_SECONDS = 75
+_PRESENCE_REFRESH_SCRIPT = """
+local now_ms = tonumber(ARGV[1])
+local expires_at = now_ms + tonumber(ARGV[3])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms)
+local previous_count = redis.call('ZCARD', KEYS[1])
+redis.call('ZADD', KEYS[1], expires_at, ARGV[2])
+redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[3]) * 2)
+redis.call('SET', KEYS[2], '1', 'PX', tonumber(ARGV[3]) * 2)
+return previous_count
+"""
+_PRESENCE_REMOVE_SCRIPT = """
+local now_ms = tonumber(ARGV[1])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms)
+redis.call('ZREM', KEYS[1], ARGV[2])
+local remaining_count = redis.call('ZCARD', KEYS[1])
+if remaining_count == 0 then
+    redis.call('DEL', KEYS[1], KEYS[2])
+else
+    redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[3]) * 2)
+    redis.call('SET', KEYS[2], '1', 'PX', tonumber(ARGV[3]) * 2)
+end
+return remaining_count
+"""
+_PUBLISH_OFFLINE_IF_ABSENT_SCRIPT = """
+local now_ms = tonumber(ARGV[1])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now_ms)
+if redis.call('ZCARD', KEYS[1]) > 0 then
+    return 0
+end
+redis.call('DEL', KEYS[2])
+local payload = ARGV[#ARGV]
+for index = 2, #ARGV - 1 do
+    redis.call('PUBLISH', ARGV[index], payload)
+end
+return 1
+"""
 
 # Bound the number of simultaneous blocking long-polls so they can never queue
 # up waiting for a pooled connection.  Requests that miss a slot take the
@@ -53,12 +90,8 @@ class PubSubDispatcher:
 
     Instead of each WebSocket creating its own ``pubsub.subscribe()`` (which
     consumes one Redis connection per user forever), a single background task
-    does ``psubscribe(*patterns)`` (defaults to ``chat:user:*``) and dispatches
-    messages to the registered send callback for the target user.
-
-    A separate instance can be created with a different pattern namespace
-    (e.g. ``PubSubDispatcher(patterns=("group:user:*",))``) so chat and group
-    frames are routed by independent dispatchers.
+    does ``psubscribe(*patterns)`` and dispatches messages to the registered
+    send callbacks for the target user and channel namespace.
 
     Usage::
 
@@ -82,8 +115,8 @@ class PubSubDispatcher:
     # self-healing transient drops.
     _MAX_RESTART_ATTEMPTS = 5
     _RESTART_BACKOFF_SECONDS = 5.0
-    #: Channel patterns subscribed by the default (DM chat) dispatcher.
-    DEFAULT_PATTERNS: tuple[str, ...] = ("chat:user:*",)
+    #: Chat and group delivery share one Pub/Sub connection per app process.
+    DEFAULT_PATTERNS: tuple[str, ...] = ("chat:user:*", "group:user:*")
 
     def __init__(self, patterns: tuple[str, ...] | None = None) -> None:
         self._redis = None
@@ -92,8 +125,8 @@ class PubSubDispatcher:
         # A separate dispatcher instance is used per channel namespace (chat,
         # group, ...) so frames never leak onto sockets from another namespace.
         self._patterns = tuple(patterns) if patterns else self.DEFAULT_PATTERNS
-        # user_id -> send callback
-        self._callbacks: dict[str, dict[str, _SEND_CALLBACK]] = {}
+        # user_id -> connection_id -> (channel prefix, send callback)
+        self._callbacks: dict[str, dict[str, tuple[str | None, _SEND_CALLBACK]]] = {}
         self._register_lock = asyncio.Lock()
         # Serialises the check => create => assign sequence in start().
         # Without this, concurrent callers race past the "already running"
@@ -143,16 +176,21 @@ class PubSubDispatcher:
         user_id: str,
         send_callback: _SEND_CALLBACK,
         connection_id: str | None = None,
+        channel_prefix: str | None = None,
     ) -> None:
-        """Register a send callback for ``user_id``.
+        """Register a send callback for ``user_id`` and an optional channel prefix.
 
         The callback receives ``(payload_dict, send_lock_or_none)`` and must
         return a ``Future[bool]`` — ``True`` if the message was sent, ``False``
-        if the connection is dead.
+        if the connection is dead. Prefix scoping keeps group frames off DM
+        sockets and DM frames off group sockets.
         """
         async with self._register_lock:
             callbacks = self._callbacks.setdefault(user_id, {})
-            callbacks[connection_id or str(id(send_callback))] = send_callback
+            callbacks[connection_id or str(id(send_callback))] = (
+                channel_prefix,
+                send_callback,
+            )
 
     async def unregister(
         self, *, user_id: str, connection_id: str | None = None
@@ -267,13 +305,27 @@ class PubSubDispatcher:
                 )
                 return
 
+            channel_prefix = channel.rsplit(":", 1)[0] + ":"
             async with self._register_lock:
-                callbacks = list(self._callbacks.get(target_user_id, {}).values())
+                callbacks = [
+                    (connection_id, callback)
+                    for connection_id, (prefix, callback) in self._callbacks.get(
+                        target_user_id, {}
+                    ).items()
+                    if prefix is None or prefix == channel_prefix
+                ]
 
             if not callbacks:
                 return
 
-            for callback in callbacks:
+            excluded_connection_id = (
+                payload.pop("_exclude_connection_id", None)
+                if isinstance(payload, dict)
+                else None
+            )
+            for connection_id, callback in callbacks:
+                if connection_id == excluded_connection_id:
+                    continue
                 task = asyncio.ensure_future(callback(payload, None))
                 task.add_done_callback(self._log_failed_callback)
         except Exception:
@@ -309,6 +361,7 @@ class PresenceManager:
         websocket: WebSocket,
         redis,
         user_id: str,
+        connection_id: str,
         send_lock: asyncio.Lock,
     ) -> None:
         system_user: User | None = None
@@ -353,17 +406,20 @@ class PresenceManager:
         except Exception as e:
             print(f"[bootstrap] DB phase failed: {type(e).__name__}: {e}", flush=True)
 
-        await redis.set(f"{PRESENCE_KEY_PREFIX}{user_id}", "1", ex=PRESENCE_TTL_SECONDS)
+        was_online = await self._register_presence_connection(
+            redis=redis,
+            user_id=str(user_id),
+            connection_id=connection_id,
+        )
 
-        publish_task = asyncio.create_task(
-            self._publish_presence_from_data(
+        if not was_online:
+            await self._publish_presence_from_data(
                 redis=redis,
                 user_id=str(user_id),
                 me_user=me_user,
                 partner_ids=partner_ids,
                 online=True,
             )
-        )
 
         with contextlib.suppress(Exception):
             await self._send_presence_snapshot(
@@ -372,8 +428,6 @@ class PresenceManager:
                 user_id=str(user_id),
                 send_lock=send_lock,
             )
-        with contextlib.suppress(Exception):
-            await publish_task
 
     # ------------------------------------------------------------------
     # Presence publish / snapshot
@@ -518,35 +572,73 @@ class PresenceManager:
         }
         payload = json.dumps(payload_obj)
 
-        for pid in {*partner_ids, str(user_id)}:
-            connections = ACTIVE_CHAT_CONNECTIONS.get(str(pid)) or {}
-            for _connection_id, (
-                websocket,
-                send_lock,
-                _chat_queue,
-            ) in connections.items():
-                with contextlib.suppress(Exception):
-                    await self._send_json_safe(
-                        websocket, payload_obj, send_lock=send_lock
-                    )
-
         try:
-            async with redis.pipeline() as pipe:
-                for pid in partner_ids:
-                    pipe.publish(f"chat:user:{pid}", payload)
-                pipe.publish(f"chat:user:{user_id}", payload)
-                await pipe.execute()
+            if online:
+                async with redis.pipeline() as pipe:
+                    for pid in partner_ids:
+                        pipe.publish(f"chat:user:{pid}", payload)
+                    pipe.publish(f"chat:user:{user_id}", payload)
+                    await pipe.execute()
+            else:
+                channels = {
+                    *(f"chat:user:{pid}" for pid in partner_ids),
+                    f"chat:user:{user_id}",
+                }
+                await redis.eval(
+                    _PUBLISH_OFFLINE_IF_ABSENT_SCRIPT,
+                    2,
+                    f"{PRESENCE_CONNECTIONS_KEY_PREFIX}{user_id}",
+                    f"{PRESENCE_KEY_PREFIX}{user_id}",
+                    int(time.time() * 1000),
+                    *sorted(channels),
+                    payload,
+                )
         except Exception:
             return
 
     # ------------------------------------------------------------------
     # Heartbeat
     # ------------------------------------------------------------------
-    async def _presence_heartbeat(self, *, redis, user_id: str) -> None:
+    async def _register_presence_connection(
+        self, *, redis, user_id: str, connection_id: str
+    ) -> bool:
+        ttl_ms = PRESENCE_TTL_SECONDS * 1000
+        previous_count = await redis.eval(
+            _PRESENCE_REFRESH_SCRIPT,
+            2,
+            f"{PRESENCE_CONNECTIONS_KEY_PREFIX}{user_id}",
+            f"{PRESENCE_KEY_PREFIX}{user_id}",
+            int(time.time() * 1000),
+            connection_id,
+            ttl_ms,
+        )
+        return int(previous_count) == 0
+
+    async def _remove_presence_connection(
+        self, *, redis, user_id: str, connection_id: str
+    ) -> bool:
+        ttl_ms = PRESENCE_TTL_SECONDS * 1000
+        remaining_count = await redis.eval(
+            _PRESENCE_REMOVE_SCRIPT,
+            2,
+            f"{PRESENCE_CONNECTIONS_KEY_PREFIX}{user_id}",
+            f"{PRESENCE_KEY_PREFIX}{user_id}",
+            int(time.time() * 1000),
+            connection_id,
+            ttl_ms,
+        )
+        return int(remaining_count) == 0
+
+    async def _presence_heartbeat(
+        self, *, redis, user_id: str, connection_id: str
+    ) -> None:
         try:
-            key = f"{PRESENCE_KEY_PREFIX}{user_id}"
             while True:
-                await redis.set(key, "1", ex=PRESENCE_TTL_SECONDS)
+                await self._register_presence_connection(
+                    redis=redis,
+                    user_id=user_id,
+                    connection_id=connection_id,
+                )
                 await asyncio.sleep(max(PRESENCE_TTL_SECONDS // 2, 10))
         except Exception:
             return

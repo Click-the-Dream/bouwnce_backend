@@ -18,7 +18,7 @@ from app.db.postgres_db_conn import get_async_session
 from app.matching_ground.model.notification import Notification
 from app.models.chat import GroupMember
 from app.models.user import User
-from app.schemas.group import GroupMessageUpdate
+from app.schemas.group import GroupMessageDelete, GroupMessageUpdate
 from app.service import group_service
 from app.utils.exception import ForbiddenException
 from app.worker.event_system import (
@@ -273,9 +273,15 @@ async def _handle_group_message_mutation(
     message_type: str,
     send_lock: asyncio.Lock,
 ) -> None:
-    message_id = str(message_data.get("message_id") or "").strip()
+    target_member_ids: list[str] | None = None
     try:
-        message_id = str(uuid.UUID(message_id))
+        if message_type == "group_message_delete":
+            delete_payload = GroupMessageDelete.model_validate(message_data)
+            message_id = str(delete_payload.message_id)
+            delete_for = delete_payload.delete_for
+        else:
+            message_id = str(uuid.UUID(str(message_data.get("message_id") or "")))
+            delete_for = "everyone"
         async with get_async_session() as db:
             member_ids = await _active_member_ids(db, group_id)
             if user_id not in member_ids:
@@ -303,19 +309,18 @@ async def _handle_group_message_mutation(
                     "sender": result["data"]["sender"],
                 }
             else:
-                await group_service.delete_message(
+                result = await group_service.delete_message(
                     db=db,
                     group_id=group_id,
                     message_id=message_id,
                     user_id=user_id,
+                    delete_for=delete_for,
                 )
+                deletion = result["data"]
+                target_member_ids = deletion["deleted_for"]
                 frame = {
                     "type": "group_message_deleted",
-                    "data": {
-                        "group_id": group_id,
-                        "message_id": message_id,
-                        "sender_id": user_id,
-                    },
+                    "data": deletion,
                 }
     except Exception as exc:
         await _send_json_safe(
@@ -330,7 +335,9 @@ async def _handle_group_message_mutation(
         return
 
     published = await _publish_group_frame(
-        redis=redis, member_ids=member_ids, payload=frame
+        redis=redis,
+        member_ids=target_member_ids or member_ids,
+        payload=frame,
     )
     if not published:
         await _send_json_safe(

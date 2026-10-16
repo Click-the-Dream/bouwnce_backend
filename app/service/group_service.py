@@ -4,11 +4,13 @@ Group Chat Service
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.user import User
 from app.repositories import (
     GroupMemberRepository,
@@ -592,6 +594,7 @@ class GroupService:
                 page=page,
                 page_size=page_size,
                 before_message_id=before_message_id,
+                user_id=user_id,
             )
 
             # Get sender details for each message
@@ -642,6 +645,12 @@ class GroupService:
     ) -> dict[str, Any]:
         """Update a group message."""
         try:
+            member = await self.member_repo.get_member(db, group_id, user_id)
+            if not member or not member.is_active:
+                raise ForbiddenException(
+                    message="You are not an active member of this group"
+                )
+
             # Get the message
             message = await self.message_repo.get_message_by_id(db, message_id)
             if not message:
@@ -652,6 +661,15 @@ class GroupService:
             # Check if user is the sender
             if str(message.sender_id) != user_id:
                 raise ForbiddenException(message="You can only edit your own messages")
+            if message.deleted_for_everyone_at is not None:
+                raise BadRequestException(message="A deleted message cannot be edited")
+
+            timeout = settings.MESSAGE_EDIT_TIMEOUT_SECONDS
+            edited_after = datetime.now(UTC) - timedelta(seconds=timeout)
+            if message.created_at < edited_after:
+                raise BadRequestException(
+                    message=f"Message edit window expired ({timeout} seconds)"
+                )
 
             # Update the message
             updated_message = await self.message_repo.update_message(
@@ -661,9 +679,11 @@ class GroupService:
                 media_type=media_type,
                 media_urls=media_urls,
                 media_names=media_names,
+                sender_id=user_id,
+                edited_after=edited_after,
             )
             if not updated_message:
-                raise NotFoundException(message="Message not found")
+                raise BadRequestException(message="Message can no longer be edited")
 
             await db.commit()
 
@@ -681,15 +701,28 @@ class GroupService:
             )
         except Exception as e:
             await db.rollback()
-            if isinstance(e, (NotFoundException, ForbiddenException)):
+            if isinstance(
+                e, (NotFoundException, ForbiddenException, BadRequestException)
+            ):
                 raise e
             raise InternalServerErrorException(message=str(e)) from e
 
     async def delete_message(
-        self, db: AsyncSession, group_id: str, message_id: str, user_id: str
+        self,
+        db: AsyncSession,
+        group_id: str,
+        message_id: str,
+        user_id: str,
+        delete_for: str = "everyone",
     ) -> dict[str, Any]:
         """Delete a group message."""
         try:
+            member = await self.member_repo.get_member(db, group_id, user_id)
+            if not member or not member.is_active:
+                raise ForbiddenException(
+                    message="You are not an active member of this group"
+                )
+
             # Get the message
             message = await self.message_repo.get_message_by_id(db, message_id)
             if not message:
@@ -697,16 +730,45 @@ class GroupService:
             if str(message.group_id) != str(group_id):
                 raise NotFoundException(message="Message not found")
 
-            # Check if user is the sender
-            if str(message.sender_id) != user_id:
-                raise ForbiddenException(
-                    message="You can only delete your own messages"
+            deleted_for_everyone_at = None
+            if delete_for == "me":
+                await self.message_repo.delete_for_user(db, message_id, user_id)
+                deleted_for = [user_id]
+            elif delete_for == "everyone":
+                if str(message.sender_id) != user_id:
+                    raise ForbiddenException(
+                        message="You can only delete your own messages"
+                    )
+                timeout = settings.MESSAGE_DELETE_EVERYONE_TIMEOUT_SECONDS
+                delete_after = datetime.now(UTC) - timedelta(seconds=timeout)
+                if message.created_at < delete_after:
+                    raise BadRequestException(
+                        message=(
+                            f"Delete-for-everyone window expired ({timeout} seconds)"
+                        )
+                    )
+                if message.deleted_for_everyone_at is not None:
+                    raise BadRequestException(message="Message was already deleted")
+                deleted = await self.message_repo.delete_for_everyone(
+                    db, message_id, user_id, delete_after
                 )
-
-            # Delete the message
-            success = await self.message_repo.delete_message(db, message_id)
-            if not success:
-                raise NotFoundException(message="Message not found")
+                if deleted is None:
+                    raise BadRequestException(
+                        message="Message can no longer be deleted"
+                    )
+                deleted_for_everyone_at = (
+                    deleted.deleted_for_everyone_at.isoformat()
+                    if deleted.deleted_for_everyone_at
+                    else None
+                )
+                members = await self.member_repo.get_group_members(db, group_id)
+                deleted_for = [
+                    str(member.user_id) for member in members if member.is_active
+                ]
+            else:
+                raise BadRequestException(
+                    message="delete_for must be 'me' or 'everyone'"
+                )
 
             await db.commit()
 
@@ -714,10 +776,20 @@ class GroupService:
                 status_code=status.HTTP_200_OK,
                 status="success",
                 message="Message deleted successfully",
+                data={
+                    "group_id": group_id,
+                    "message_id": message_id,
+                    "sender_id": str(message.sender_id),
+                    "delete_for": delete_for,
+                    "deleted_for": deleted_for,
+                    "deleted_for_everyone_at": deleted_for_everyone_at,
+                },
             )
         except Exception as e:
             await db.rollback()
-            if isinstance(e, (NotFoundException, ForbiddenException)):
+            if isinstance(
+                e, (NotFoundException, ForbiddenException, BadRequestException)
+            ):
                 raise e
             raise InternalServerErrorException(message=str(e)) from e
 

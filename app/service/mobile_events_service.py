@@ -376,6 +376,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                         db=db,
                         message_id=str(payload.message_id),
                         user_id=str(user_id),
+                        delete_for=payload.delete_for,
                     )
                 frame = {
                     "type": "chat.message.deleted",
@@ -384,6 +385,8 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                         "message_id": result["message_id"],
                         "sender_id": result["sender_id"],
                         "recipient_id": result["recipient_id"],
+                        "delete_for": result["delete_for"],
+                        "deleted_for_everyone_at": result["deleted_for_everyone_at"],
                     },
                 }
 
@@ -400,9 +403,13 @@ class MobileEventsService(ChatDelivery, PresenceManager):
             return True
 
         try:
+            recipient_ids = result.get("deleted_for") or [
+                result["sender_id"],
+                result["recipient_id"],
+            ]
             async with redis.pipeline() as pipe:
-                pipe.publish(f"chat:user:{result['sender_id']}", json.dumps(frame))
-                pipe.publish(f"chat:user:{result['recipient_id']}", json.dumps(frame))
+                for recipient_id in recipient_ids:
+                    pipe.publish(f"chat:user:{recipient_id}", json.dumps(frame))
                 await pipe.execute()
         except Exception:
             logger.exception("DM message mutation saved but could not be broadcast")

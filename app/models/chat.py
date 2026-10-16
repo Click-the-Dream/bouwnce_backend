@@ -109,6 +109,10 @@ class Message(BaseModel):
         index=True,
     )
     body: Mapped[str] = mapped_column(String, nullable=False)
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -125,6 +129,9 @@ class Message(BaseModel):
         ForeignKey("messages.id", ondelete="SET NULL"),
         nullable=True,
     )
+    deleted_for_everyone_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     conversation: Mapped[Conversation] = relationship(lazy="noload")
 
@@ -137,6 +144,28 @@ class Message(BaseModel):
             "recipient_id",
             postgresql_where=text("read_at IS NULL"),
         ),
+    )
+
+
+class MessageDeletion(BaseModel):
+    """Per-user deletion markers for direct messages."""
+
+    __tablename__ = "message_deletions"
+
+    message_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "user_id", name="uq_message_deletions_message_user"
+        ),
+        Index("ix_message_deletions_user_message", "user_id", "message_id"),
     )
 
 
@@ -256,6 +285,9 @@ class GroupMessage(BaseModel):
         DateTime(timezone=True), nullable=True
     )
     is_edited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_for_everyone_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Message features
     media_type: Mapped[str | None] = mapped_column(
@@ -287,4 +319,26 @@ class GroupMessage(BaseModel):
         Index("ix_group_messages_sender_id", "sender_id"),
         Index("ix_group_messages_created_at", "created_at"),
         Index("ix_group_messages_reply_to", "reply_to_message_id"),
+    )
+
+
+class GroupMessageDeletion(BaseModel):
+    """Per-user deletion markers for group messages."""
+
+    __tablename__ = "group_message_deletions"
+
+    message_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("group_messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID_Type] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "user_id", name="uq_group_message_deletions_message_user"
+        ),
+        Index("ix_group_message_deletions_user_message", "user_id", "message_id"),
     )

@@ -1,6 +1,6 @@
 import warnings
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Redis keys / streams
@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     CHAT_IMAGES_ALLOWED_FORMATS: str = "jpg,jpeg,png,webp"
     CHAT_VIDEOS_ALLOWED_FORMATS: str = "mp4,webm"
     CHAT_FILES_ALLOWED_FORMATS: str = "pdf,doc,docx,xls,xlsx,ppt,pptx"
+
+    # Message mutations are time-limited to preserve conversation integrity.
+    MESSAGE_EDIT_TIMEOUT_SECONDS: int = Field(default=900, gt=0)
+    MESSAGE_DELETE_EVERYONE_TIMEOUT_SECONDS: int = Field(default=900, gt=0)
 
     # =========================
     # System email

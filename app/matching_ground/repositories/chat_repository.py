@@ -4,11 +4,11 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, desc, func, select, text, update
+from sqlalchemy import desc, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.matching_ground.model.notification import Notification
-from app.models.chat import Conversation, Message
+from app.models.chat import Conversation, Message, MessageDeletion
 from app.models.user import User
 
 if TYPE_CHECKING:
@@ -83,12 +83,22 @@ class ChatRepository:
         ).scalar_one_or_none()
 
     async def update_message_body(
-        self, db: AsyncSession, message_id: str, body: str
+        self,
+        db: AsyncSession,
+        message_id: str,
+        body: str,
+        sender_id: str,
+        edited_after: datetime,
     ) -> Message | None:
         result = await db.execute(
             update(Message)
-            .where(Message.id == uuid.UUID(str(message_id)))
-            .values(body=body)
+            .where(
+                Message.id == uuid.UUID(str(message_id)),
+                Message.sender_id == uuid.UUID(str(sender_id)),
+                Message.created_at >= edited_after,
+                Message.deleted_for_everyone_at.is_(None),
+            )
+            .values(body=body, edited_at=func.now(), is_edited=True)
             .returning(Message)
         )
         message = result.scalar_one_or_none()
@@ -96,26 +106,64 @@ class ChatRepository:
             await db.refresh(message)
         return message
 
-    async def delete_message(self, db: AsyncSession, message_id: str) -> bool:
-        result = await db.execute(
-            delete(Message)
-            .where(Message.id == uuid.UUID(str(message_id)))
-            .returning(Message.id)
+    async def delete_for_user(
+        self, db: AsyncSession, message_id: str, user_id: str
+    ) -> None:
+        stmt = (
+            pg_insert(MessageDeletion)
+            .values(message_id=message_id, user_id=user_id)
+            .on_conflict_do_nothing(index_elements=["message_id", "user_id"])
         )
-        return result.scalar_one_or_none() is not None
+        await db.execute(stmt)
+
+    async def delete_for_everyone(
+        self,
+        db: AsyncSession,
+        message_id: str,
+        sender_id: str,
+        delete_after: datetime,
+    ) -> Message | None:
+        result = await db.execute(
+            update(Message)
+            .where(
+                Message.id == uuid.UUID(str(message_id)),
+                Message.sender_id == uuid.UUID(str(sender_id)),
+                Message.created_at >= delete_after,
+                Message.deleted_for_everyone_at.is_(None),
+            )
+            .values(
+                body="This message was deleted",
+                media_type=None,
+                media_urls=None,
+                media_name=None,
+                deleted_for_everyone_at=func.now(),
+            )
+            .returning(Message)
+        )
+        message = result.scalar_one_or_none()
+        if message is not None:
+            await db.refresh(message)
+        return message
 
     async def get_messages_by_ids(
-        self, db: AsyncSession, message_ids: set[str]
+        self,
+        db: AsyncSession,
+        message_ids: set[str],
+        current_user_id: str | None = None,
     ) -> list[Message]:
         if not message_ids:
             return []
-        return list(
-            (
-                await db.execute(
-                    select(Message).where(Message.id.in_(list(message_ids)))
+        query = select(Message).where(Message.id.in_(list(message_ids)))
+        if current_user_id is not None:
+            query = query.where(
+                ~select(MessageDeletion.id)
+                .where(
+                    MessageDeletion.message_id == Message.id,
+                    MessageDeletion.user_id == current_user_id,
                 )
-            ).scalars()
-        )
+                .exists()
+            )
+        return list((await db.execute(query)).scalars())
 
     async def list_conversations(
         self, db: AsyncSession, user_id: str, page: int, page_size: int
@@ -135,7 +183,15 @@ class ChatRepository:
         )
         latest_message_at = (
             select(func.max(Message.created_at))
-            .where(Message.conversation_id == Conversation.id)
+            .where(
+                Message.conversation_id == Conversation.id,
+                ~select(MessageDeletion.id)
+                .where(
+                    MessageDeletion.message_id == Message.id,
+                    MessageDeletion.user_id == user_id,
+                )
+                .exists(),
+            )
             .correlate(Conversation)
             .scalar_subquery()
         )
@@ -157,17 +213,29 @@ class ChatRepository:
         return rows, total
 
     async def get_latest_messages(
-        self, db: AsyncSession, conversation_ids: list
+        self,
+        db: AsyncSession,
+        conversation_ids: list,
+        current_user_id: str | None = None,
     ) -> dict[str, Message]:
         if not conversation_ids:
             return {}
+        query = select(Message).where(Message.conversation_id.in_(conversation_ids))
+        if current_user_id is not None:
+            query = query.where(
+                ~select(MessageDeletion.id)
+                .where(
+                    MessageDeletion.message_id == Message.id,
+                    MessageDeletion.user_id == current_user_id,
+                )
+                .exists()
+            )
         rows = list(
             (
                 await db.execute(
-                    select(Message)
-                    .where(Message.conversation_id.in_(conversation_ids))
-                    .order_by(Message.conversation_id, desc(Message.created_at))
-                    .distinct(Message.conversation_id)
+                    query.order_by(
+                        Message.conversation_id, desc(Message.created_at)
+                    ).distinct(Message.conversation_id)
                 )
             ).scalars()
         )
@@ -185,6 +253,12 @@ class ChatRepository:
                     Message.conversation_id.in_(conversation_ids),
                     Message.recipient_id == recipient_id,
                     Message.read_at.is_(None),
+                    ~select(MessageDeletion.id)
+                    .where(
+                        MessageDeletion.message_id == Message.id,
+                        MessageDeletion.user_id == recipient_id,
+                    )
+                    .exists(),
                 )
                 .group_by(Message.conversation_id)
             )
@@ -194,14 +268,27 @@ class ChatRepository:
         }
 
     async def list_messages(
-        self, db: AsyncSession, conversation_id, page: int, page_size: int
+        self,
+        db: AsyncSession,
+        conversation_id,
+        current_user_id: str,
+        page: int,
+        page_size: int,
     ) -> tuple[list[Message], int]:
+        visible_to_user = (
+            ~select(MessageDeletion.id)
+            .where(
+                MessageDeletion.message_id == Message.id,
+                MessageDeletion.user_id == current_user_id,
+            )
+            .exists()
+        )
         total = int(
             (
                 await db.execute(
                     select(func.count())
                     .select_from(Message)
-                    .where(Message.conversation_id == conversation_id)
+                    .where(Message.conversation_id == conversation_id, visible_to_user)
                 )
             ).scalar()
             or 0
@@ -210,7 +297,7 @@ class ChatRepository:
             (
                 await db.execute(
                     select(Message)
-                    .where(Message.conversation_id == conversation_id)
+                    .where(Message.conversation_id == conversation_id, visible_to_user)
                     .order_by(desc(Message.created_at))
                     .offset((page - 1) * page_size)
                     .limit(page_size)

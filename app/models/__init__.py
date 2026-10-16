@@ -7,7 +7,12 @@ from app.matching_ground.model.user_geolocation import UserGeolocation
 from app.matching_ground.model.user_interest import UserInterest
 from app.models.basemodel import BaseModel
 from app.models.cart import Cart
-from app.models.chat import Conversation, Message
+from app.models.chat import (
+    Conversation,
+    GroupMessageDeletion,
+    Message,
+    MessageDeletion,
+)
 from app.models.contact_info import ContactInfo
 from app.models.device_token import DeviceToken
 from app.models.inventory import Inventory
@@ -57,6 +62,8 @@ __all__ = [
     "SubOrderSnapshot",
     "Conversation",
     "Message",
+    "MessageDeletion",
+    "GroupMessageDeletion",
     "DeviceToken",
     "Notification",
     "WebPushSubscription",

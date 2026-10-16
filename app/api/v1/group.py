@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -367,13 +367,18 @@ async def delete_message(
     message_id: uuid.UUID,
     current_user: CurrentActiveUser,
     db: dbSessionDep,
+    delete_for: Annotated[
+        Literal["me", "everyone"],
+        Query(description="Delete only for you or for all group members"),
+    ] = "everyone",
 ) -> None:
-    """Delete a group message."""
+    """Delete a group message for the current user or for all group members."""
     await group_service.delete_message(
         db=db,
         group_id=str(group_id),
         message_id=str(message_id),
         user_id=str(current_user.id),
+        delete_for=delete_for,
     )
     return None
 

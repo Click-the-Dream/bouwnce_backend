@@ -4,12 +4,13 @@ Group Message Repository
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, desc, func, select, text, update
+from sqlalchemy import desc, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.models.chat import GroupMessage
+from app.models.chat import GroupMessage, GroupMessageDeletion
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,25 +66,32 @@ class GroupMessageRepository:
         page: int = 1,
         page_size: int = 50,
         before_message_id: str | None = None,
+        user_id: str | None = None,
     ) -> tuple[list[GroupMessage], int]:
         """Get messages for a group with pagination."""
         query = select(GroupMessage).where(GroupMessage.group_id == group_id)
+        total_query = (
+            select(func.count())
+            .select_from(GroupMessage)
+            .where(GroupMessage.group_id == group_id)
+        )
+        if user_id is not None:
+            visible_to_user = (
+                ~select(GroupMessageDeletion.id)
+                .where(
+                    GroupMessageDeletion.message_id == GroupMessage.id,
+                    GroupMessageDeletion.user_id == user_id,
+                )
+                .exists()
+            )
+            query = query.where(visible_to_user)
+            total_query = total_query.where(visible_to_user)
 
         # If we have a before_message_id, get messages before that point
         if before_message_id:
             before_msg = await self.get_message_by_id(db, before_message_id)
             if before_msg:
                 query = query.where(GroupMessage.created_at < before_msg.created_at)
-
-        # Get total count
-        total_query = (
-            select(func.count())
-            .select_from(GroupMessage)
-            .where(GroupMessage.group_id == group_id)
-        )
-        if before_message_id:
-            before_msg = await self.get_message_by_id(db, before_message_id)
-            if before_msg:
                 total_query = total_query.where(
                     GroupMessage.created_at < before_msg.created_at
                 )
@@ -144,6 +152,12 @@ class GroupMessageRepository:
             select(GroupMessage)
             .where(
                 GroupMessage.mentioned_user_ids.isnot(None),
+                ~select(GroupMessageDeletion.id)
+                .where(
+                    GroupMessageDeletion.message_id == GroupMessage.id,
+                    GroupMessageDeletion.user_id == user_id,
+                )
+                .exists(),
                 # JSONB ``?`` checks for a matching string element in the array
                 text("mentioned_user_ids ? :user_id"),
             )
@@ -162,6 +176,8 @@ class GroupMessageRepository:
         media_type: str | None = None,
         media_urls: list[str] | None = None,
         media_names: list[str] | None = None,
+        sender_id: str | None = None,
+        edited_after: datetime | None = None,
     ) -> GroupMessage | None:
         """Update a group message."""
         message = await self.get_message_by_id(db, message_id)
@@ -189,12 +205,21 @@ class GroupMessageRepository:
         if update_data:
             stmt = (
                 update(GroupMessage)
-                .where(GroupMessage.id == message_id)
+                .where(
+                    GroupMessage.id == message_id,
+                    GroupMessage.deleted_for_everyone_at.is_(None),
+                )
                 .values(**update_data)
-                .returning(GroupMessage)
             )
+            if sender_id is not None:
+                stmt = stmt.where(GroupMessage.sender_id == sender_id)
+            if edited_after is not None:
+                stmt = stmt.where(GroupMessage.created_at >= edited_after)
+            stmt = stmt.returning(GroupMessage)
             result = await db.execute(stmt)
-            updated_message = result.scalar_one()
+            updated_message = result.scalar_one_or_none()
+            if updated_message is None:
+                return None
             # ``get_message_by_id`` above already put this PK in the identity
             # map, so the RETURNING row resolves to that (stale) instance.
             await db.refresh(updated_message)
@@ -202,11 +227,43 @@ class GroupMessageRepository:
 
         return message
 
-    async def delete_message(self, db: AsyncSession, message_id: str) -> bool:
-        """Delete a group message."""
-        message = await self.get_message_by_id(db, message_id)
-        if not message:
-            return False
+    async def delete_for_user(
+        self, db: AsyncSession, message_id: str, user_id: str
+    ) -> None:
+        stmt = (
+            pg_insert(GroupMessageDeletion)
+            .values(message_id=message_id, user_id=user_id)
+            .on_conflict_do_nothing(index_elements=["message_id", "user_id"])
+        )
+        await db.execute(stmt)
 
-        await db.execute(delete(GroupMessage).where(GroupMessage.id == message_id))
-        return True
+    async def delete_for_everyone(
+        self,
+        db: AsyncSession,
+        message_id: str,
+        sender_id: str,
+        delete_after: datetime,
+    ) -> GroupMessage | None:
+        stmt = (
+            update(GroupMessage)
+            .where(
+                GroupMessage.id == message_id,
+                GroupMessage.sender_id == sender_id,
+                GroupMessage.created_at >= delete_after,
+                GroupMessage.deleted_for_everyone_at.is_(None),
+            )
+            .values(
+                body="This message was deleted",
+                media_type=None,
+                media_urls=None,
+                media_names=None,
+                mentioned_user_ids=None,
+                deleted_for_everyone_at=func.now(),
+            )
+            .returning(GroupMessage)
+        )
+        result = await db.execute(stmt)
+        message = result.scalar_one_or_none()
+        if message is not None:
+            await db.refresh(message)
+        return message

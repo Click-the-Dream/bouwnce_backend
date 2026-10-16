@@ -147,6 +147,9 @@ other fields as optional and do not rely on them.
   "reply_to_message_id": null, // uuid | null
   "created_at": "2026-10-11T12:00:00+00:00",
   "updated_at": "2026-10-11T12:00:00+00:00",
+  "edited_at": null, // ISO-8601 | null
+  "is_edited": false,
+  "deleted_for_everyone_at": null, // ISO-8601 | null
   "sender": {/* UserLite */},
   "recipient": {/* UserLite */},
   "reply_to_message": false, // false, or a ChatMessageReplyData object
@@ -164,7 +167,7 @@ other fields as optional and do not rely on them.
 | `ping`              | Liveness                                    | —                                                      |
 | `chat.send`         | Send a text message                         | `recipient_id`, `body`                              |
 | `chat.edit`         | Edit one of your DM messages                | `message_id`, `body`                               |
-| `chat.delete`       | Delete one of your DM messages              | `message_id`                                        |
+| `chat.delete`       | Hide a DM message for you or delete for all | `message_id`, optional `delete_for`                 |
 | `chat.upload_media` | Send media (already uploaded to Cloudinary) | `recipient_id`, `media_urls`, `media_type`        |
 | `chat.read`         | Mark conversation / message read            | `recipient_id` (+ `message_id` unless `mark_all`) |
 | `chat.typing`       | Typing indicator                            | `user_id` (the _other_ user), `is_typing`         |
@@ -194,15 +197,28 @@ other fields as optional and do not rely on them.
 
 ```json
 { "type": "chat.edit", "message_id": "message-uuid", "body": "corrected text" }
-{ "type": "chat.delete", "message_id": "message-uuid" }
+{ "type": "chat.delete", "message_id": "message-uuid", "delete_for": "me" }
+{ "type": "chat.delete", "message_id": "message-uuid", "delete_for": "everyone" }
 ```
 
 The body must contain 1–4000 characters after trimming. Only the original
-sender can edit or permanently delete a message. An edit updates the message's
-`updated_at`. On success, the server sends `chat.message.updated` or
-`chat.message.deleted` to both participants' connected devices, including the
-sender's other signed-in devices. Disconnected clients should reload message
-history after reconnecting.
+sender can edit a message or delete it for everyone. Both actions are allowed
+for 15 minutes after sending by default. Deployments can configure these time
+windows with `MESSAGE_EDIT_TIMEOUT_SECONDS` and
+`MESSAGE_DELETE_EVERYONE_TIMEOUT_SECONDS` (both must be positive integers).
+An expired window returns an `error` frame with `chat.edit.failed` or
+`chat.delete.failed`. `delete_for` is optional and defaults to `everyone` for compatibility.
+`delete_for: "me"` hides the message only for the requesting participant, on all
+of that participant's devices, and has no time limit. `delete_for: "everyone"`
+removes the message content for both participants while retaining a deletion
+marker so replies and conversation history remain consistent.
+
+Successful edits emit `chat.message.updated`. A delete-for-me event is sent only
+to the requesting participant's devices; a delete-for-everyone event is sent to
+both participants' devices. The delete event includes `delete_for`. Message
+history omits messages hidden for the current user; a message deleted for
+everyone remains as a tombstone with `deleted_for_everyone_at` set. Disconnected
+clients should reload message history after reconnecting.
 
 #### `chat.upload_media`
 
@@ -274,7 +290,7 @@ identifies someone other than the signed-in user.
 | `chat.sent`            | after your message is accepted                                  | `{ "conversation_id": uuid, "message": ChatMessageData }` (top-level `client_id`) |
 | `chat.message`         | incoming message from the other user                            | `ChatMessageData`                                                                   |
 | `chat.message.updated` | a DM message was edited by its sender                           | `ChatMessageData`                                                                   |
-| `chat.message.deleted` | a DM message was deleted by its sender                          | `{ conversation_id, message_id, sender_id, recipient_id }`                          |
+| `chat.message.deleted` | a DM message was deleted                          | `{ conversation_id, message_id, sender_id, recipient_id, delete_for, deleted_for_everyone_at }` |
 | `chat.read.ack`        | reply to your `chat.read`                                     | `{ conversation_id, reader_id, read, updated }`                                     |
 | `chat.read.updated`    | when either side marks messages read                            | `{ conversation_id, message_id, reader_id, read, updated }`                         |
 | `chat.typing`          | other user's typing state                                       | `{ conversation_id, user: UserLite, is_typing }`                                    |
@@ -312,10 +328,10 @@ server → { "type": "chat.sent", "client_id": "c1", "data": { "conversation_id"
 client → { "type": "chat.typing", "user_id": "9b2…", "is_typing": true }
 server → (to 9b2…) { "type": "chat.typing", "data": { "conversation_id": "…", "user": { … }, "is_typing": true } }
 
-# edit or delete one of your messages; the message_id comes from its message data
+# edit or delete a message; the message_id comes from its message data
 client → { "type": "chat.edit", "message_id": "m1", "body": "updated text" }
 server → (to both participants and your other devices) { "type": "chat.message.updated", "data": { "id": "m1", "body": "updated text", … } }
-client → { "type": "chat.delete", "message_id": "m1" }
+client → { "type": "chat.delete", "message_id": "m1", "delete_for": "everyone" }
 server → (to both participants and your other devices) { "type": "chat.message.deleted", "data": { "conversation_id": "…", "message_id": "m1", … } }
 
 # other user replies
@@ -338,7 +354,7 @@ send group actions.
 | `group_message` | `group.message` | Send a message (`group_id`)   |
 | `group_typing`  | `group.typing`  | Typing indicator (`group_id`) |
 | `group_message_edit` | — | Edit one of your messages (`group_id`, `message_id`) |
-| `group_message_delete` | — | Delete one of your messages (`group_id`, `message_id`) |
+| `group_message_delete` | — | Hide a message for you or delete for all (`group_id`, `message_id`, optional `delete_for`) |
 
 `type` is matched case-insensitively after trimming. Any other value yields an
 `error` frame (§8).
@@ -403,13 +419,23 @@ group members, including your other signed-in devices.
 {
   "type": "group_message_delete",
   "group_id": "group-uuid",
-  "message_id": "message-uuid"
+  "message_id": "message-uuid",
+  "delete_for": "everyone"
 }
 ```
 
-Only the message sender may delete it. Deletion is permanent and is broadcast
-to connected devices of active group members, including your other signed-in
-devices. Disconnected clients should reload group history after reconnecting.
+Only the message sender may delete it for everyone. `delete_for` is optional
+and defaults to `everyone` for compatibility. Edits and delete-for-everyone
+actions are allowed for 15 minutes after sending by default; deployments can
+configure these time windows. `delete_for: "me"` hides the message only from
+the requesting active member, across that member's devices, and has no time
+limit. `delete_for: "everyone"` removes the content for all active members while
+retaining a tombstone. A delete-for-me event is sent only to the requester; a
+delete-for-everyone event is sent to all active members. The
+`group_message_deleted` event includes `delete_for`. History omits messages
+hidden for the current user and returns everyone-deleted tombstones with
+`deleted_for_everyone_at` set. Disconnected clients should reload group history
+after reconnecting.
 
 ### 5.2 Server → Client
 
@@ -419,7 +445,7 @@ devices. Disconnected clients should reload group history after reconnecting.
 | `group_message`      | a message is broadcast in the group                     | `{ "type": "group_message", "data": GroupMessage, "sender": User }`                            |
 | `group_message_sent` | ack for **your** `group_message`                | `{ "type": "group_message_sent", "client_id": "…", "data": GroupMessage }`                    |
 | `group_message_updated` | a group message was edited                 | `{ "type": "group_message_updated", "group_id": uuid, "data": GroupMessage, "sender": User }` |
-| `group_message_deleted` | a group message was deleted                | `{ "type": "group_message_deleted", "data": { "group_id": uuid, "message_id": uuid, "sender_id": uuid } }` |
+| `group_message_deleted` | a group message was deleted                | `{ "type": "group_message_deleted", "data": { "group_id": uuid, "message_id": uuid, "sender_id": uuid, "delete_for": "me" \| "everyone", "deleted_for": uuid[], "deleted_for_everyone_at": timestamp \| null } }` |
 | `group_typing`       | another member is typing                                | `{ "type": "group_typing", "data": { "group_id": uuid, "user_id": uuid, "username": string \| null, "is_typing": bool } }` |
 | `error`              | invalid JSON / unknown type / empty body / send failure | `{ "type": "error", "message": "…" }`                                                         |
 
@@ -492,8 +518,8 @@ group.
 | `missing_media_urls`       | empty `media_urls`                                                                           |
 | `invalid_media_urls`       | a URL is not a Cloudinary secure URL for this deployment                                       |
 | `chat.send.failed`         | message could not be sent (for example, you are not allowed to message the recipient)          |
-| `chat.edit.failed`         | message edit failed (missing message, invalid body, or you are not its sender)                 |
-| `chat.delete.failed`       | message deletion failed (missing message or you are not its sender)                             |
+| `chat.edit.failed`         | message edit failed (missing message, invalid body, unauthorized user, deleted message, or expired edit window) |
+| `chat.delete.failed`       | message deletion failed (missing message, unauthorized user, invalid `delete_for`, or expired delete-for-everyone window) |
 | `chat.message.delivery_failed` | the change was saved but could not be broadcast; reload the conversation to sync it          |
 | `chat.upload_media.failed` | media message could not be sent                                                                |
 | `chat.read.failed`         | read update failed (conversation not found, bad `message_id`, …)                            |
@@ -541,6 +567,7 @@ The mobile events long-poll endpoint is available as an optional fallback:
 | Sign chat upload                  | `POST /api/v1/uploads/chat/sign`                             |
 | Group send                        | `POST /api/v1/groups/{group_id}/messages`                    |
 | Group history                     | `GET /api/v1/groups/{group_id}/messages`                     |
+| Delete group message              | `DELETE /api/v1/groups/{group_id}/messages/{message_id}?delete_for=me|everyone` |
 | Group members                     | `GET /api/v1/groups/{group_id}/members`                      |
 
 ---
@@ -570,8 +597,9 @@ The mobile events long-poll endpoint is available as an optional fallback:
 5. On send: attach a `client_id`, render an optimistic bubble, reconcile on
    `chat.sent` / `group_message_sent`.
 6. For edits and deletes, send the matching `chat.*` or `group_message_*`
-   action with the message id. Apply the corresponding update/delete event to
-   the local conversation; only the original sender can change a message.
+   action with the message id. Set `delete_for` to `"me"` to hide only from
+   yourself or `"everyone"` to remove the content for all participants. Apply
+   the corresponding update/delete event to the local conversation.
 7. Merge incoming messages with the displayed conversation so repeated
    deliveries do not create duplicate bubbles.
 8. On group reconnect, reload history via REST and then listen for new frames.

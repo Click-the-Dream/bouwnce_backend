@@ -8,6 +8,7 @@ celery_app = Celery(
     include=[
         "app.worker.tasks.email",
         "app.worker.tasks.event_payment_reconciliation",
+        "app.worker.tasks.event_reminder",
         "app.worker.tasks.order_processor",
         "app.worker.tasks.web_push",
     ],
@@ -37,5 +38,9 @@ celery_app.conf.beat_schedule = {
     "reconcile-event-payments": {
         "task": "app.worker.tasks.event_payment_reconciliation.reconcile",
         "schedule": 300.0,
+    },
+    "send-event-reminders": {
+        "task": "app.worker.tasks.event_reminder.send_event_reminders",
+        "schedule": 900.0,
     },
 }

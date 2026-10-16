@@ -14,4 +14,4 @@ def compile_mjml(input_file: str, output_file: str) -> None:
 
 
 if __name__ == "__main__":
-    compile_mjml("./src/newsletter.mjml", "./build/newsletter.html")
+    compile_mjml("./src/event_reminder.mjml", "./build/event_reminder.html")

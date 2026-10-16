@@ -412,9 +412,7 @@ class AttendanceService:
                 status="success",
                 message="Event payment is awaiting verification",
             )
-        # Same-session fulfillment (capacity check + ticket issuance + email).
-        # Raising propagates a non-200 to Paystack so it retries; the
-        # reconciliation beat task is the recovery net either way.
+
         await self.fulfill_event_tickets(
             db,
             redis,

@@ -128,6 +128,19 @@ class Settings(BaseSettings):
     # Cloudinary folder for generated event-ticket QR images.
     EVENT_TICKET_QR_FOLDER: str = "event_tickets"
 
+    # =========================
+    # Event reminders
+    # =========================
+    # Master switch for the scheduled reminder job.
+    EVENT_REMINDER_ENABLED: bool = True
+    # Reminder lead times in days before the event start (comma-separated).
+    # A window W is due once now >= event.date - Wa days; dedup guarantees one
+    # send per (event, attendance, window) regardless of run cadence.
+    EVENT_REMINDER_WINDOWS_DAYS: str = "7,3,2,1"
+    # Upper bound on reminder emails dispatched per run; the remainder waits
+    # for the next run (dedup claims are only committed after dispatch).
+    EVENT_REMINDER_MAX_EMAILS_PER_RUN: int = 500
+
     CELERY_ALWAYS_EAGER: bool = False
 
     # =========================

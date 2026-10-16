@@ -191,9 +191,13 @@ class TestGroupApiE2E(GroupE2EBase):
                     f"{API}/{group['id']}/members", headers=member_h
                 )
                 assert resp.status_code == 200, resp.text
-                member_ids = {m["user_id"] for m in resp.json()}
+                members = resp.json()
+                member_ids = {m["user_id"] for m in members}
                 assert str(owner.id) in member_ids
                 assert str(member.id) in member_ids
+                owner_member = next(m for m in members if m["user_id"] == str(owner.id))
+                assert owner_member["user"]["id"] == str(owner.id)
+                assert owner_member["user"]["username"] == owner.username
 
                 # ----- send message (member) -----
                 resp = await client.post(
@@ -205,6 +209,7 @@ class TestGroupApiE2E(GroupE2EBase):
                 message = resp.json()
                 assert message["body"] == "hello group"
                 assert message["sender_id"] == str(member.id)
+                assert message["sender"]["id"] == str(member.id)
 
                 # ----- non-member cannot send -----
                 resp = await client.post(
@@ -220,6 +225,9 @@ class TestGroupApiE2E(GroupE2EBase):
                 )
                 assert resp.status_code == 200, resp.text
                 assert len(resp.json()) == 1
+                assert resp.json()[0]["id"] == message["id"]
+                assert resp.json()[0]["body"] == "hello group"
+                assert resp.json()[0]["sender"]["id"] == str(member.id)
 
                 # ----- edit own message -----
                 resp = await client.patch(
@@ -419,9 +427,11 @@ class TestGroupEventsSocketE2E(GroupE2EBase):
                     send_lock=send_lock,
                 )
                 await self._wait_until(
-                    lambda: bool(member_ws.messages("group_message"))
-                    and bool(owner_ws.messages("group_message_sent"))
-                    and bool(owner_ws.messages("group_message"))
+                    lambda: (
+                        bool(member_ws.messages("group_message"))
+                        and bool(owner_ws.messages("group_message_sent"))
+                        and bool(owner_ws.messages("group_message"))
+                    )
                 )
                 assert member_ws.messages("group_message")[0]["data"]["body"] == (
                     "shared socket message"
@@ -430,6 +440,18 @@ class TestGroupEventsSocketE2E(GroupE2EBase):
                     "client-1"
                 )
                 assert owner_ws.messages("group_message")
+
+                async with httpx.AsyncClient(
+                    transport=ASGITransport(app=app), base_url=BASE_URL
+                ) as client:
+                    history = await client.get(
+                        f"{API}/{group_id}/messages",
+                        headers=self._auth(owner),
+                    )
+                assert history.status_code == 200, history.text
+                assert len(history.json()) == 1
+                assert history.json()[0]["body"] == "shared socket message"
+                assert history.json()[0]["sender"]["id"] == str(owner.id)
 
                 await process_group_action(
                     websocket=outsider_ws,
@@ -550,8 +572,10 @@ class TestGroupEventsParityE2E(GroupE2EBase):
                     send_lock=asyncio.Lock(),
                 )
                 await self._wait_until(
-                    lambda: bool(first_device_ws.messages("group_message"))
-                    and bool(second_device_ws.messages("group_message"))
+                    lambda: (
+                        bool(first_device_ws.messages("group_message"))
+                        and bool(second_device_ws.messages("group_message"))
+                    )
                 )
                 delivered = first_device_ws.messages("group_message")[-1]
                 assert delivered["data"]["body"] == "from worker A"

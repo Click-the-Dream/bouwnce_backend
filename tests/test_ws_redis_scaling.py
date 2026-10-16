@@ -17,7 +17,8 @@ from uuid import uuid4
 import pytest
 
 from app.service import group_ws_service, mobile_events_service
-from app.service.ws_presence import PubSubDispatcher, pubsub_dispatcher
+from app.service.ws_chat import ChatDelivery
+from app.service.ws_presence import PresenceManager, PubSubDispatcher, pubsub_dispatcher
 
 
 class TestPubSubDispatcher:
@@ -46,9 +47,7 @@ class TestPubSubDispatcher:
         await dispatcher.start(redis)
         try:
             redis.pubsub.assert_called_once()
-            pubsub.psubscribe.assert_awaited_once_with(
-                "chat:user:*", "group:user:*"
-            )
+            pubsub.psubscribe.assert_awaited_once_with("chat:user:*", "group:user:*")
             assert dispatcher._pubsub is pubsub
             assert dispatcher._task is not None
         finally:
@@ -126,6 +125,98 @@ class TestPubSubDispatcher:
         await dispatcher.stop()
 
     @pytest.mark.asyncio
+    async def test_dispatch_skips_originating_socket_for_sender_echo(self):
+        dispatcher = PubSubDispatcher()
+        originating_socket = AsyncMock()
+        sender_other_device = AsyncMock()
+        await dispatcher.register(
+            user_id="alice",
+            connection_id="originating-socket",
+            send_callback=originating_socket,
+        )
+        await dispatcher.register(
+            user_id="alice",
+            connection_id="other-device",
+            send_callback=sender_other_device,
+        )
+        frame = {"type": "chat.message", "data": {"id": "message-1"}}
+
+        await dispatcher._dispatch_message(
+            {
+                "type": "pmessage",
+                "channel": b"chat:user:alice",
+                "data": json.dumps(
+                    {**frame, "_exclude_connection_id": "originating-socket"}
+                ).encode(),
+            }
+        )
+        await asyncio.sleep(0.1)
+
+        originating_socket.assert_not_awaited()
+        sender_other_device.assert_awaited_once_with(frame, None)
+
+    @pytest.mark.asyncio
+    async def test_fanout_marks_only_sender_channel_for_socket_exclusion(self):
+        class Pipeline:
+            def __init__(self):
+                self.published = []
+                self.streamed = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                return None
+
+            def publish(self, channel, payload):
+                self.published.append((channel, json.loads(payload)))
+
+            def xadd(self, key, fields, **kwargs):
+                self.streamed.append((key, fields))
+
+            async def execute(self):
+                return None
+
+        class Redis:
+            def __init__(self):
+                self.pipe = Pipeline()
+
+            def pipeline(self):
+                return self.pipe
+
+        redis = Redis()
+        event = {
+            "type": "chat.message",
+            "data": {
+                "id": "message-1",
+                "sender_id": "alice",
+                "recipient_id": "bob",
+            },
+        }
+        payload = SimpleNamespace(
+            model_dump_json=lambda: json.dumps(event),
+            model_dump=lambda **_: json.loads(json.dumps(event)),
+        )
+
+        await ChatDelivery()._publish_chat_message_fanout(
+            redis=redis,
+            sender_id="alice",
+            sender_connection_id="originating-socket",
+            recipient_id="bob",
+            conversation_id="conversation-1",
+            payload=payload,
+        )
+
+        published = dict(redis.pipe.published)
+        assert published["chat:user:alice"] == {
+            **event,
+            "_exclude_connection_id": "originating-socket",
+        }
+        assert published["chat:user:bob"] == event
+        assert published["chat:conversation:conversation-1"] == event
+        assert json.loads(redis.pipe.streamed[0][1]["data"]) == event
+
+    @pytest.mark.asyncio
     async def test_dispatch_delivers_to_all_of_a_users_connections(self, mock_redis):
         redis, pubsub = mock_redis
         listen_future = asyncio.Future()
@@ -165,9 +256,7 @@ class TestPubSubDispatcher:
         redis, pubsub = mock_redis
         listen_future = asyncio.Future()
         pubsub.listen.return_value = listen_future
-        dispatcher = PubSubDispatcher(
-            patterns=("chat:user:*", "group:user:*")
-        )
+        dispatcher = PubSubDispatcher(patterns=("chat:user:*", "group:user:*"))
         await dispatcher.start(redis)
 
         chat_callback = AsyncMock()
@@ -195,9 +284,7 @@ class TestPubSubDispatcher:
                     {
                         "type": "pmessage",
                         "channel": b"chat:user:alice",
-                        "data": json.dumps(
-                            {"type": "group.message.created"}
-                        ).encode(),
+                        "data": json.dumps({"type": "group.message.created"}).encode(),
                     },
                     {
                         "type": "pmessage",
@@ -213,9 +300,7 @@ class TestPubSubDispatcher:
 
         assert chat_callback.await_count == 2
         group_callback.assert_awaited_once()
-        chat_types = {
-            call.args[0]["type"] for call in chat_callback.await_args_list
-        }
+        chat_types = {call.args[0]["type"] for call in chat_callback.await_args_list}
         assert chat_types == {"chat.message", "group.message.created"}
         assert group_callback.await_args.args[0]["type"] == "group_message"
         await dispatcher.stop()
@@ -249,9 +334,7 @@ class TestPubSubDispatcher:
         assert callback.await_count == 2
 
     @pytest.mark.asyncio
-    async def test_group_action_over_shared_socket_checks_membership(
-        self, monkeypatch
-    ):
+    async def test_group_action_over_shared_socket_checks_membership(self, monkeypatch):
         group_id = str(uuid4())
         websocket = AsyncMock()
         query_result = SimpleNamespace(
@@ -284,9 +367,7 @@ class TestPubSubDispatcher:
 
         db.execute.assert_awaited_once()
         publish_group_frame.assert_awaited_once()
-        assert publish_group_frame.await_args.kwargs["member_ids"] == [
-            "another-member"
-        ]
+        assert publish_group_frame.await_args.kwargs["member_ids"] == ["another-member"]
         assert publish_group_frame.await_args.kwargs["payload"]["data"]["username"] == (
             "alice-name"
         )
@@ -694,6 +775,77 @@ class TestCatchupChatStream:
 
         websocket.send_json.assert_called_once()
         redis.set.assert_not_called()
+
+
+class TestConnectionPresence:
+    @pytest.mark.asyncio
+    async def test_presence_stays_online_until_last_connection_closes(self):
+        class PresenceRedis:
+            def __init__(self):
+                self.connections = {}
+                self.status = {}
+
+            async def eval(
+                self,
+                script,
+                _key_count,
+                connection_key,
+                status_key,
+                now,
+                connection_id,
+                ttl,
+            ):
+                now = int(now)
+                ttl = int(ttl)
+                active = {
+                    connection: expires_at
+                    for connection, expires_at in self.connections.get(
+                        connection_key, {}
+                    ).items()
+                    if expires_at > now
+                }
+
+                if "ZADD" in script:
+                    was_online = bool(active)
+                    active[connection_id] = now + ttl
+                    self.connections[connection_key] = active
+                    self.status[status_key] = "1"
+                    return int(was_online)
+
+                active.pop(connection_id, None)
+                if active:
+                    self.connections[connection_key] = active
+                    self.status[status_key] = "1"
+                else:
+                    self.connections.pop(connection_key, None)
+                    self.status.pop(status_key, None)
+                return len(active)
+
+        redis = PresenceRedis()
+        manager = PresenceManager()
+
+        assert await manager._register_presence_connection(
+            redis=redis,
+            user_id="user-1",
+            connection_id="phone",
+        )
+        assert not await manager._register_presence_connection(
+            redis=redis,
+            user_id="user-1",
+            connection_id="browser",
+        )
+        assert not await manager._remove_presence_connection(
+            redis=redis,
+            user_id="user-1",
+            connection_id="phone",
+        )
+        assert redis.status["presence:user:user-1"] == "1"
+        assert await manager._remove_presence_connection(
+            redis=redis,
+            user_id="user-1",
+            connection_id="browser",
+        )
+        assert "presence:user:user-1" not in redis.status
 
 
 class TestMobileEventPrivacy:

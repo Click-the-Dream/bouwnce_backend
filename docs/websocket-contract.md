@@ -286,9 +286,12 @@ Notes:
 
 - `chat.send.ack` is optimistic — it arrives before the final message result.
   Use it to mark the bubble "sending" and match it to your local `client_id`.
-- `chat.sent` is the server-confirmed copy of **your own** message and echoes your
-  `client_id` at the top level. Render from this.
-- `chat.message` is how you receive **other users'** messages.
+- `chat.sent` is the server-confirmed copy of **your own** message on the
+  connection that sent it; it echoes your `client_id` at the top level. Render
+  from this to confirm the optimistic message.
+- `chat.message` delivers incoming messages to the recipient and synchronizes
+  your other connected devices. The sending connection does not receive its own
+  message as `chat.message`.
 - `chat.read.updated` is published to **both** participants (including the reader),
   so apply it idempotently using `updated`.
 

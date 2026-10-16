@@ -15,6 +15,7 @@ from app.repositories import (
     GroupMessageRepository,
     GroupRepository,
 )
+from app.utils.chat_utils import ChatSerializers
 from app.utils.exception import (
     BadRequestException,
     ConflictException,
@@ -411,7 +412,7 @@ class GroupService:
                         member_data.append(
                             {
                                 "member": member.to_dict(),
-                                "user": user.to_dict(),
+                                "user": ChatSerializers._serialize_user(user),
                             }
                         )
 
@@ -552,7 +553,9 @@ class GroupService:
                 message="Message sent successfully",
                 data={
                     "message": message.to_dict(),
-                    "sender": sender.to_dict() if sender else None,
+                    "sender": (
+                        ChatSerializers._serialize_user(sender) if sender else None
+                    ),
                 },
             )
         except Exception as e:
@@ -598,7 +601,9 @@ class GroupService:
                 message_data.append(
                     {
                         "message": message.to_dict(),
-                        "sender": sender.to_dict() if sender else None,
+                        "sender": (
+                            ChatSerializers._serialize_user(sender) if sender else None
+                        ),
                     }
                 )
 

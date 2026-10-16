@@ -46,7 +46,6 @@ from app.models.user import User
 from app.service.group_ws_service import process_group_action
 from app.service.ws_chat import ACTIVE_CHAT_CONNECTIONS, ChatDelivery  # noqa: F401
 from app.service.ws_presence import (
-    PRESENCE_KEY_PREFIX,
     PresenceManager,
     pubsub_dispatcher,
 )
@@ -104,6 +103,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 websocket=websocket,
                 redis=redis,
                 user_id=str(user_id),
+                connection_id=connection_id,
                 send_lock=send_lock,
             )
         )
@@ -116,10 +116,6 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 send_lock=send_lock,
             )
         )
-        presence_task = asyncio.create_task(
-            self._presence_heartbeat(redis=redis, user_id=str(user_id))
-        )
-
         # One-time stream catch-up: deliver any missed messages from Redis
         catchup_task = asyncio.create_task(
             self._catchup_chat_stream(
@@ -134,6 +130,13 @@ class MobileEventsService(ChatDelivery, PresenceManager):
         # Wait for bootstrap + catchup before sending chat.ready
         with contextlib.suppress(Exception):
             await bootstrap_task
+        presence_task = asyncio.create_task(
+            self._presence_heartbeat(
+                redis=redis,
+                user_id=str(user_id),
+                connection_id=connection_id,
+            )
+        )
         with contextlib.suppress(Exception):
             await catchup_task
 
@@ -176,7 +179,12 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     # ---- chat.send ----
                     if msg_type == "chat.send":
                         if not await self._handle_chat_send(
-                            websocket, send_lock, redis, user_id, incoming
+                            websocket,
+                            send_lock,
+                            redis,
+                            user_id,
+                            incoming,
+                            connection_id=connection_id,
                         ):
                             break
                         continue
@@ -191,7 +199,12 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                     # ---- chat.upload_media ----
                     if msg_type == "chat.upload_media":
                         if not await self._handle_chat_upload_media(
-                            websocket, send_lock, redis, user_id, incoming
+                            websocket,
+                            send_lock,
+                            redis,
+                            user_id,
+                            incoming,
+                            connection_id=connection_id,
                         ):
                             break
                         continue
@@ -260,10 +273,15 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 return_exceptions=True,
             )
             try:
-                await redis.delete(f"{PRESENCE_KEY_PREFIX}{user_id}")
-                await self._publish_presence(
-                    redis=redis, user_id=str(user_id), online=False
+                last_connection = await self._remove_presence_connection(
+                    redis=redis,
+                    user_id=str(user_id),
+                    connection_id=connection_id,
                 )
+                if last_connection:
+                    await self._publish_presence(
+                        redis=redis, user_id=str(user_id), online=False
+                    )
             except Exception:
                 logger.warning(
                     "Failed to clean up presence for user %s", user_id, exc_info=True
@@ -273,7 +291,14 @@ class MobileEventsService(ChatDelivery, PresenceManager):
     # Event handlers (extracted from the main loop for readability)
     # ------------------------------------------------------------------
     async def _handle_chat_send(
-        self, websocket: WebSocket, send_lock, redis, user_id: str, incoming: dict
+        self,
+        websocket: WebSocket,
+        send_lock,
+        redis,
+        user_id: str,
+        incoming: dict,
+        *,
+        connection_id: str,
     ) -> bool:
         """Handle chat.send. Returns False if the connection should close."""
         try:
@@ -308,6 +333,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 send_lock=send_lock,
                 redis=redis,
                 sender_id=str(user_id),
+                sender_connection_id=connection_id,
                 recipient_id=str(payload.recipient_id),
                 body=payload.body,
                 reply_to_message_id=(
@@ -392,7 +418,14 @@ class MobileEventsService(ChatDelivery, PresenceManager):
         return True
 
     async def _handle_chat_upload_media(
-        self, websocket: WebSocket, send_lock, redis, user_id: str, incoming: dict
+        self,
+        websocket: WebSocket,
+        send_lock,
+        redis,
+        user_id: str,
+        incoming: dict,
+        *,
+        connection_id: str,
     ) -> bool:
         """Handle chat.upload_media. Returns False if the connection should close."""
         try:
@@ -457,6 +490,7 @@ class MobileEventsService(ChatDelivery, PresenceManager):
                 send_lock=send_lock,
                 redis=redis,
                 sender_id=str(user_id),
+                sender_connection_id=connection_id,
                 recipient_id=str(payload.recipient_id),
                 body=payload.body,
                 media_urls=urls,

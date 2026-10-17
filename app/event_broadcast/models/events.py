@@ -65,6 +65,14 @@ class OutingEvent(BaseModel):
         JSONB, nullable=True
     )
     interests: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    # Denormalized event-group link so event reads can expose group availability
+    # without joining the event_groups table.
+    group_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("groups.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
 
     creator_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False

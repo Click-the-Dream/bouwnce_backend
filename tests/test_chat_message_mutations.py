@@ -16,6 +16,32 @@ from app.utils.exception import (
 )
 
 
+def test_edited_message_serialization_exposes_true_flag_for_dm_and_group():
+    from app.models.chat import GroupMessage, Message
+
+    now = datetime.now(UTC)
+    dm = Message(
+        conversation_id=uuid4(),
+        sender_id=uuid4(),
+        recipient_id=uuid4(),
+        body="updated",
+        edited_at=now,
+        is_edited=False,
+    )
+    group_message = GroupMessage(
+        group_id=uuid4(),
+        sender_id=uuid4(),
+        body="updated",
+        edited_at=now,
+        is_edited=False,
+    )
+
+    assert dm.to_dict()["is_edited"] is True
+    assert dm.to_dict()["is_edit"] is True
+    assert group_message.to_dict()["is_edited"] is True
+    assert group_message.to_dict()["is_edit"] is True
+
+
 def _chat_service():
     from app.matching_ground.service.chat_service import ChatService
 
